@@ -31,5 +31,4 @@ kubectl -n bank-usac rollout status deployment/account-service --timeout=180s
 kubectl -n bank-usac rollout status deployment/payment-service --timeout=180s
 kubectl -n bank-usac rollout status deployment/frontend --timeout=180s
 kubectl -n bank-usac get pods,services
-
-echo "Frontend: $(minikube service -p "$PERFIL_MINIKUBE" -n bank-usac frontend --url)"
+"$RAIZ_PROYECTO/infrastructure/kubernetes/expose.sh"

@@ -35,11 +35,10 @@ El script inicia Minikube, construye y carga las imágenes locales, crea el Secr
 Para exponer temporalmente los componentes en la máquina anfitriona:
 
 ```bash
-kubectl -n bank-usac port-forward service/frontend 3000:80
-kubectl -n bank-usac port-forward service/account-service 8082:8082
-kubectl -n bank-usac port-forward service/payment-service 8084:8084
-kubectl -n bank-usac port-forward service/rabbitmq 15672:15672
+./infrastructure/kubernetes/expose.sh
 ```
+
+El script de despliegue ya ejecuta este paso automáticamente. En la laptop quedan disponibles los puertos `3000`, `8082`, `8084` y `15672`; desde otra computadora de la misma red se usa la IP de la laptop.
 
 El frontend reserva el nombre interno `api-gateway:8080`. Cuando el integrante responsable despliegue el Gateway debe reemplazar el Service `ExternalName` por el Deployment y Service reales del Gateway.
 
