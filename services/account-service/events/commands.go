@@ -9,6 +9,7 @@ const (
 	ComandoSolicitarCompensacion = "cuenta.compensacion.solicitada"
 	ComandoConsultarCuenta       = "cuenta.consulta.solicitada"
 	ComandoListarMovimientos     = "cuenta.movimientos.solicitados"
+	ComandoListarCuentas         = "cuenta.historial.solicitado"
 )
 
 type SolicitudCrearCuenta struct {
@@ -25,6 +26,9 @@ type SolicitudListarMovimientos struct {
 	IDCuenta       uuid.UUID `json:"idCuenta"`
 	Limite         int       `json:"limite"`
 	Desplazamiento int       `json:"desplazamiento"`
+}
+type SolicitudListarCuentas struct {
+	IDCliente uuid.UUID `json:"idCliente"`
 }
 
 type SolicitudMovimiento struct {

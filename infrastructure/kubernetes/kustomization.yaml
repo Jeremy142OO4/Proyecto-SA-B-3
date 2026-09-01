@@ -4,6 +4,8 @@ resources:
   - namespace.yaml
   - configmap.yaml
   - rabbitmq.yaml
+  - api-gateway.yaml
   - account-service.yaml
   - payment-service.yaml
+  - transaction-service.yaml
   - frontend.yaml

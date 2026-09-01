@@ -11,6 +11,7 @@ import (
 type ServicioCuentas interface {
 	CrearCuenta(ctx context.Context, solicitud events.SolicitudCrearCuenta) (*models.Cuenta, error)
 	ConsultarCuenta(ctx context.Context, idCuenta uuid.UUID) (*models.Cuenta, error)
+	ListarCuentas(ctx context.Context, idCliente uuid.UUID) ([]models.Cuenta, error)
 	ProcesarDebito(ctx context.Context, mensaje events.SobreMensaje, solicitud events.SolicitudMovimiento) error
 	ProcesarCredito(ctx context.Context, mensaje events.SobreMensaje, solicitud events.SolicitudMovimiento) error
 	ProcesarCompensacion(ctx context.Context, mensaje events.SobreMensaje, solicitud events.SolicitudMovimiento) error
