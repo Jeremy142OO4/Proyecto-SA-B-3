@@ -11,8 +11,10 @@ iniciar_tunel() {
     return
   fi
 
-  nohup kubectl -n bank-usac port-forward --address=0.0.0.0 \
-    "service/${nombre}" "${puerto_local}:${puerto_servicio}" \
+  nohup sh -c 'while :; do
+    kubectl -n bank-usac port-forward --address=0.0.0.0 "service/$1" "$2:$3"
+    sleep 2
+  done' sh "$nombre" "$puerto_local" "$puerto_servicio" \
     >"/tmp/bank-usac-${nombre}.log" 2>&1 </dev/null &
   echo $! > "$archivo_pid"
 }
