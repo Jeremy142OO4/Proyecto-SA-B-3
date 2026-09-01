@@ -1,0 +1,2 @@
+import{clienteApi}from'../../../services/clienteApi';import type{EstadoOperacion,NuevaTransferencia,OperacionAceptada,Transferencia}from'../types/transferencia';
+export const servicioTransferencias={listar:()=>clienteApi.obtener<Transferencia[]>('/transferencias'),crear:(datos:NuevaTransferencia)=>clienteApi.publicar<OperacionAceptada>('/transferencias',datos),buscar:(id:string)=>clienteApi.obtener<Transferencia>(`/transferencias/${id}`),estadoOperacion:(id:string)=>clienteApi.obtener<EstadoOperacion>(`/operaciones/${id}`)};

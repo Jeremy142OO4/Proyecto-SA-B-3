@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: transaction-service
+  namespace: bank-usac
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: transaction-service }
+  template:
+    metadata:
+      labels: { app: transaction-service }
+    spec:
+      initContainers:
+        - name: esperar-dependencias
+          image: alpine:3.22
+          command: [sh, -c, "until nc -z rabbitmq 5672 && nc -z host.minikube.internal 5435; do sleep 2; done"]
+      containers:
+        - name: transaction-service
+          image: bank-usac/transaction-service:local
+          imagePullPolicy: Never
+          ports:
+            - { name: http, containerPort: 8083 }
+          envFrom:
+            - configMapRef: { name: bank-usac-config }
+          env:
+            - { name: PUERTO_HTTP, value: "8083" }
+            - name: URL_BASE_DATOS
+              valueFrom: { secretKeyRef: { name: bank-usac-secrets, key: URL_BASE_DATOS_TRANSACCIONES } }
+            - name: URL_RABBITMQ
+              valueFrom: { secretKeyRef: { name: bank-usac-secrets, key: URL_RABBITMQ } }
+          readinessProbe:
+            httpGet: { path: /salud, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /salud, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 300m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+      terminationGracePeriodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: transaction-service
+  namespace: bank-usac
+spec:
+  selector: { app: transaction-service }
+  ports:
+    - { name: http, port: 8083, targetPort: http }
