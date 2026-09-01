@@ -101,7 +101,37 @@ services:
       - -database=postgres://${TRANSACCIONES_USUARIO:-transacciones_usuario}:${TRANSACCIONES_CLAVE:-transacciones_local}@postgres-transacciones:5432/${TRANSACCIONES_BD:-transacciones_db}?sslmode=disable
       - up
 
+  postgres-customer:
+    image: postgres:15-alpine
+    container_name: bank_postgres_customer
+    environment:
+      POSTGRES_DB: customer_db
+      POSTGRES_USER: customer_user
+      POSTGRES_PASSWORD: customer_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_customer_data:/var/lib/postgresql/data
+    restart: always
+
+
+  postgres-audit:
+    image: postgres:15-alpine
+    container_name: bank_postgres_audit
+    environment:
+      POSTGRES_DB: audit_db
+      POSTGRES_USER: audit_user
+      POSTGRES_PASSWORD: audit_password
+    ports:
+      - "5435:5432"
+    volumes:
+      - pg_audit_data:/var/lib/postgresql/data
+    restart: always
+
+
 volumes:
   datos_postgres_cuentas:
   datos_postgres_pagos:
   datos_postgres_transacciones:
+  pg_customer_data:
+  pg_audit_data:
