@@ -1,0 +1,3 @@
+import { Link } from 'react-router-dom';import type{Cuenta}from'../types/cuenta';
+const dinero=(centavos:number)=>new Intl.NumberFormat('es-GT',{style:'currency',currency:'GTQ'}).format(centavos/100);
+export function TarjetaCuenta({cuenta}:{cuenta:Cuenta}){return <Link className="tarjeta cuenta" to={`/cuentas/${cuenta.idCuenta}`}><div className="fila"><span className="etiqueta">{cuenta.tipoCuenta}</span><span className={`estado ${cuenta.estado.toLowerCase()}`}>{cuenta.estado}</span></div><small>•••• {cuenta.numeroCuenta.slice(-4)}</small><strong className="saldo">{dinero(cuenta.saldoCentavos)}</strong><span>Saldo disponible</span></Link>}

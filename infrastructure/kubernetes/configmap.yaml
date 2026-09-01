@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bank-usac-config
+  namespace: bank-usac
+data:
+  ENTORNO: kubernetes
+  TIEMPO_ESPERA_APAGADO_SEGUNDOS: "10"
+  INTERVALO_OUTBOX_SEGUNDOS: "2"
+  INTERVALO_INACTIVIDAD_SEGUNDOS: "86400"
+  MAXIMO_REINTENTOS: "3"

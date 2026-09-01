@@ -1,0 +1,73 @@
+name: bank-usac-databases
+
+# Las bases de datos permanecen fuera de Kubernetes por requisito del proyecto.
+services:
+  postgres-cuentas:
+    image: postgres:17-alpine
+    container_name: bank-usac-postgres-cuentas
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${CUENTAS_BD:-cuentas_db}
+      POSTGRES_USER: ${CUENTAS_USUARIO:-cuentas_usuario}
+      POSTGRES_PASSWORD: ${CUENTAS_CLAVE:-cuentas_local}
+    ports:
+      - "${CUENTAS_PUERTO_BD:-5433}:5432"
+    volumes:
+      - datos_postgres_cuentas:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  migraciones-cuentas:
+    image: migrate/migrate:v4.18.3
+    container_name: bank-usac-migraciones-cuentas
+    restart: "no"
+    depends_on:
+      postgres-cuentas:
+        condition: service_healthy
+    volumes:
+      - ./services/account-service/database/migrations:/migrations:ro,Z
+    command:
+      - -path=/migrations
+      - -database=postgres://${CUENTAS_USUARIO:-cuentas_usuario}:${CUENTAS_CLAVE:-cuentas_local}@postgres-cuentas:5432/${CUENTAS_BD:-cuentas_db}?sslmode=disable
+      - up
+
+  postgres-pagos:
+    image: postgres:17-alpine
+    container_name: bank-usac-postgres-pagos
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PAGOS_BD:-pagos_db}
+      POSTGRES_USER: ${PAGOS_USUARIO:-pagos_usuario}
+      POSTGRES_PASSWORD: ${PAGOS_CLAVE:-pagos_local}
+    ports:
+      - "${PAGOS_PUERTO_BD:-5434}:5432"
+    volumes:
+      - datos_postgres_pagos:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  migraciones-pagos:
+    image: migrate/migrate:v4.18.3
+    container_name: bank-usac-migraciones-pagos
+    restart: "no"
+    depends_on:
+      postgres-pagos:
+        condition: service_healthy
+    volumes:
+      - ./services/payment-service/database/migrations:/migrations:ro,Z
+    command:
+      - -path=/migrations
+      - -database=postgres://${PAGOS_USUARIO:-pagos_usuario}:${PAGOS_CLAVE:-pagos_local}@postgres-pagos:5432/${PAGOS_BD:-pagos_db}?sslmode=disable
+      - up
+
+volumes:
+  datos_postgres_cuentas:
+  datos_postgres_pagos:
