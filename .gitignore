@@ -1,0 +1,10 @@
+.env
+.env.docker
+*.log
+.idea/
+.vscode/
+bin/
+tmp/
+coverage.out
+node_modules/
+dist/
