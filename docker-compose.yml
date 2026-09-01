@@ -1,27 +1,7 @@
-name: bank-usac
+name: bank-usac-databases
 
+# Las bases de datos permanecen fuera de Kubernetes por requisito del proyecto.
 services:
-  rabbitmq:
-    image: rabbitmq:4.1-management-alpine
-    container_name: bank-usac-rabbitmq
-    restart: unless-stopped
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USUARIO:-bank_usac}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_CLAVE:-bank_usac_local}
-    ports:
-      - "${RABBITMQ_PUERTO_AMQP:-5672}:5672"
-      - "${RABBITMQ_PUERTO_PANEL:-15672}:15672"
-    volumes:
-      - datos_rabbitmq:/var/lib/rabbitmq
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
-    networks:
-      - red_bank_usac
-
   postgres-cuentas:
     image: postgres:17-alpine
     container_name: bank-usac-postgres-cuentas
@@ -35,17 +15,11 @@ services:
     volumes:
       - datos_postgres_cuentas:/var/lib/postgresql/data
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}",
-        ]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
       start_period: 10s
-    networks:
-      - red_bank_usac
 
   migraciones-cuentas:
     image: migrate/migrate:v4.18.3
@@ -60,42 +34,6 @@ services:
       - -path=/migrations
       - -database=postgres://${CUENTAS_USUARIO:-cuentas_usuario}:${CUENTAS_CLAVE:-cuentas_local}@postgres-cuentas:5432/${CUENTAS_BD:-cuentas_db}?sslmode=disable
       - up
-    networks:
-      - red_bank_usac
-
-  account-service:
-    build:
-      context: ./services/account-service
-      dockerfile: Dockerfile
-    container_name: bank-usac-account-service
-    restart: unless-stopped
-    stop_grace_period: 20s
-    environment:
-      ENTORNO: docker
-      PUERTO_HTTP: "8082"
-      URL_BASE_DATOS: postgres://${CUENTAS_USUARIO:-cuentas_usuario}:${CUENTAS_CLAVE:-cuentas_local}@postgres-cuentas:5432/${CUENTAS_BD:-cuentas_db}?sslmode=disable
-      URL_RABBITMQ: amqp://${RABBITMQ_USUARIO:-bank_usac}:${RABBITMQ_CLAVE:-bank_usac_local}@rabbitmq:5672/
-      TIEMPO_ESPERA_APAGADO_SEGUNDOS: ${TIEMPO_ESPERA_APAGADO_SEGUNDOS:-10}
-      INTERVALO_OUTBOX_SEGUNDOS: ${INTERVALO_OUTBOX_SEGUNDOS:-2}
-      INTERVALO_INACTIVIDAD_SEGUNDOS: ${INTERVALO_INACTIVIDAD_SEGUNDOS:-86400}
-      MAXIMO_REINTENTOS: ${MAXIMO_REINTENTOS:-3}
-    ports:
-      - "${CUENTAS_PUERTO_HTTP:-8082}:8082"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-      postgres-cuentas:
-        condition: service_healthy
-      migraciones-cuentas:
-        condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8082/salud"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 10s
-    networks:
-      - red_bank_usac
 
   postgres-pagos:
     image: postgres:17-alpine
@@ -110,17 +48,11 @@ services:
     volumes:
       - datos_postgres_pagos:/var/lib/postgresql/data
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}",
-        ]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
       start_period: 10s
-    networks:
-      - red_bank_usac
 
   migraciones-pagos:
     image: migrate/migrate:v4.18.3
@@ -135,69 +67,7 @@ services:
       - -path=/migrations
       - -database=postgres://${PAGOS_USUARIO:-pagos_usuario}:${PAGOS_CLAVE:-pagos_local}@postgres-pagos:5432/${PAGOS_BD:-pagos_db}?sslmode=disable
       - up
-    networks:
-      - red_bank_usac
-
-  payment-service:
-    build:
-      context: ./services/payment-service
-      dockerfile: Dockerfile
-    container_name: bank-usac-payment-service
-    restart: unless-stopped
-    stop_grace_period: 20s
-    environment:
-      ENTORNO: docker
-      PUERTO_HTTP: "8084"
-      URL_BASE_DATOS: postgres://${PAGOS_USUARIO:-pagos_usuario}:${PAGOS_CLAVE:-pagos_local}@postgres-pagos:5432/${PAGOS_BD:-pagos_db}?sslmode=disable
-      URL_RABBITMQ: amqp://${RABBITMQ_USUARIO:-bank_usac}:${RABBITMQ_CLAVE:-bank_usac_local}@rabbitmq:5672/
-      INTERVALO_OUTBOX_SEGUNDOS: ${INTERVALO_OUTBOX_SEGUNDOS:-2}
-      MAXIMO_REINTENTOS: ${MAXIMO_REINTENTOS:-3}
-    ports:
-      - "${PAGOS_PUERTO_HTTP:-8084}:8084"
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-      postgres-pagos:
-        condition: service_healthy
-      migraciones-pagos:
-        condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8084/salud"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 10s
-    networks:
-      - red_bank_usac
-
-  frontend:
-    build:
-      context: ./frontend/bank-usac-web
-      dockerfile: Dockerfile
-    container_name: bank-usac-frontend
-    restart: unless-stopped
-    ports:
-      - "${FRONTEND_PUERTO:-3000}:80"
-    depends_on:
-      account-service:
-        condition: service_healthy
-      payment-service:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
-    networks:
-      - red_bank_usac
-
-networks:
-  red_bank_usac:
-    name: bank-usac-red
-    driver: bridge
 
 volumes:
-  datos_rabbitmq:
   datos_postgres_cuentas:
   datos_postgres_pagos:

@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: bank-usac
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: frontend }
+  template:
+    metadata:
+      labels: { app: frontend }
+    spec:
+      containers:
+        - name: frontend
+          image: bank-usac/frontend:local
+          imagePullPolicy: Never
+          ports:
+            - { name: http, containerPort: 80 }
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 25m, memory: 32Mi }
+            limits: { cpu: 200m, memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: bank-usac
+spec:
+  type: NodePort
+  selector: { app: frontend }
+  ports:
+    - { name: http, port: 80, targetPort: http, nodePort: 30080 }
+---
+# Reserva el nombre del Gateway hasta que el integrante responsable lo despliegue.
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: bank-usac
+spec:
+  type: ExternalName
+  externalName: host.minikube.internal
+  ports:
+    - { name: http, port: 8080 }

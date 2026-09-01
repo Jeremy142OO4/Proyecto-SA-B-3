@@ -5,7 +5,7 @@
 - **Account Service** en Go y Fiber, con PostgreSQL independiente y RabbitMQ.
 - **Payment Service** en Go y Fiber, con PostgreSQL independiente y RabbitMQ.
 - Frontend React organizado por funcionalidades para cuentas, movimientos y pagos.
-- Dockerfiles, migraciones y servicios incorporados al `docker-compose.yml` principal.
+- Dockerfiles, bases externas en Compose y componentes ejecutables desplegados en Kubernetes.
 - Idempotencia de consumidores, patrón Outbox, reintentos limitados, DLQ y propagación de `correlationId`.
 - Compensación de pagos externos fallidos y desactivación automática de cuentas inactivas.
 
@@ -58,18 +58,22 @@ Debe enlazarse a los eventos de dominio de cuentas y pagos para guardar auditor�
 
 ## Ejecución local
 
-Desde la raíz:
+Las bases externas se levantan desde la raíz:
 
 ```bash
-docker compose up --build
+docker compose up -d
+```
+
+Los componentes se despliegan en Minikube con:
+
+```bash
+./infrastructure/kubernetes/deploy.sh
 ```
 
 Servicios de Persona 2:
 
-- Account Service: `http://localhost:8082/salud`
-- Payment Service: `http://localhost:8084/salud`
-- Frontend: `http://localhost:3000`
-- RabbitMQ: `http://localhost:15672`
+- Kubernetes: RabbitMQ, Account Service, Payment Service y frontend.
+- Docker/Podman: PostgreSQL de cuentas en `5433` y PostgreSQL de pagos en `5434`.
 
 El frontend mostrará errores de negocio mientras no exista el API Gateway; esto es esperado y no implica que React esté caído.
 
