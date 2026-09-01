@@ -38,7 +38,7 @@ Para exponer temporalmente los componentes en la máquina anfitriona:
 ./infrastructure/kubernetes/expose.sh
 ```
 
-El script de despliegue ya ejecuta este paso automáticamente. En la laptop quedan disponibles los puertos `3000`, `8082`, `8084` y `15672`; desde otra computadora de la misma red se usa la IP de la laptop.
+El script de despliegue ya ejecuta este paso automáticamente. Los componentes quedan disponibles únicamente en `localhost`, mediante los puertos `3000`, `8082`, `8084` y `15672`.
 
 El frontend reserva el nombre interno `api-gateway:8080`. Cuando el integrante responsable despliegue el Gateway debe reemplazar el Service `ExternalName` por el Deployment y Service reales del Gateway.
 
