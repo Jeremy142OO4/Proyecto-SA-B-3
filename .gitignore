@@ -8,3 +8,7 @@ tmp/
 coverage.out
 node_modules/
 dist/
+.env
+*.tsbuildinfo
+frontend/bank-usac-web/vite.config.js
+frontend/bank-usac-web/vite.config.d.ts

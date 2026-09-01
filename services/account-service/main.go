@@ -106,7 +106,7 @@ func main() {
 			cancelar()
 		}
 	}()
-	go services.EjecutarProcesoInactividad(ctx, servicioCuentas, 24*time.Hour)
+	go services.EjecutarProcesoInactividad(ctx, servicioCuentas, configuracion.IntervaloInactividad)
 
 	aplicacion := fiber.New(fiber.Config{
 		AppName:               "account-service",

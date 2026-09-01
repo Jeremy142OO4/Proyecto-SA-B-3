@@ -45,6 +45,10 @@ func (r *RepositorioPagosPostgres) Iniciar(ctx context.Context, m events.SobreMe
 	if err != nil {
 		return nil, false, fmt.Errorf("guardar pago: %w", err)
 	}
+	_, err = tx.Exec(ctx, `INSERT INTO intentos_pago(id_pago,numero_intento,estado,fecha_inicio) VALUES($1,1,'PROCESANDO',$2)`, p.IDPago, ahora)
+	if err != nil {
+		return nil, false, fmt.Errorf("guardar intento de pago: %w", err)
+	}
 	contenido, _ := json.Marshal(events.SolicitudMovimiento{IDCuenta: p.IDCuentaOrigen, IDOperacion: p.IDPago, MontoCentavos: p.MontoCentavos})
 	if err = insertarSalida(ctx, tx, events.ComandoSolicitarDebito, contenido, m.IDCorrelacion); err != nil {
 		return nil, false, err
@@ -82,6 +86,9 @@ func (r *RepositorioPagosPostgres) ProcesarResultadoCuenta(ctx context.Context, 
 		if err = actualizarPago(ctx, tx, pago); err != nil {
 			return false, err
 		}
+		if err = finalizarIntento(ctx, tx, pago.IDPago, "RECHAZADO", respuesta.Codigo, pago.MotivoRechazo); err != nil {
+			return false, err
+		}
 		contenido, _ := json.Marshal(pago)
 		err = insertarSalida(ctx, tx, events.EventoPagoRechazado, contenido, pago.IDCorrelacion)
 	case events.EventoCuentaDebitada:
@@ -89,6 +96,9 @@ func (r *RepositorioPagosPostgres) ProcesarResultadoCuenta(ctx context.Context, 
 			pago.Estado = models.EstadoPagoCompensando
 			pago.MotivoRechazo = "fallo simulado del proveedor externo"
 			if err = actualizarPago(ctx, tx, pago); err != nil {
+				return false, err
+			}
+			if err = finalizarIntento(ctx, tx, pago.IDPago, "FALLIDO", "PROVEEDOR_EXTERNO", pago.MotivoRechazo); err != nil {
 				return false, err
 			}
 			contenido, _ := json.Marshal(events.SolicitudMovimiento{IDCuenta: pago.IDCuentaOrigen, IDOperacion: pago.IDPago, MontoCentavos: pago.MontoCentavos})
@@ -99,6 +109,9 @@ func (r *RepositorioPagosPostgres) ProcesarResultadoCuenta(ctx context.Context, 
 				pago.ReferenciaExterna = "EXT-" + pago.IDPago.String()[:8]
 			}
 			if err = actualizarPago(ctx, tx, pago); err != nil {
+				return false, err
+			}
+			if err = finalizarIntento(ctx, tx, pago.IDPago, "COMPLETADO", "OK", ""); err != nil {
 				return false, err
 			}
 			contenido, _ := json.Marshal(pago)
@@ -121,6 +134,13 @@ func (r *RepositorioPagosPostgres) ProcesarResultadoCuenta(ctx context.Context, 
 		return false, err
 	}
 	return true, nil
+}
+
+func finalizarIntento(ctx context.Context, tx pgx.Tx, idPago uuid.UUID, estado, codigo, detalle string) error {
+	_, err := tx.Exec(ctx, `UPDATE intentos_pago
+		SET estado=$1,codigo_respuesta=NULLIF($2,''),detalle_error=NULLIF($3,''),fecha_finalizacion=NOW()
+		WHERE id_pago=$4 AND numero_intento=1 AND fecha_finalizacion IS NULL`, estado, codigo, detalle, idPago)
+	return err
 }
 
 const columnasPago = `id_pago,id_cliente,id_cuenta_origen,beneficiario,concepto,monto_centavos,moneda,tipo_pago,estado,COALESCE(referencia_externa,''),id_correlacion,COALESCE(motivo_rechazo,''),fecha_creacion,fecha_actualizacion`

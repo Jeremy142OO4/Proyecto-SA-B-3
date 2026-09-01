@@ -13,9 +13,12 @@ import (
 )
 
 type repositorioCuentasFalso struct {
-	cuentaCreada       *models.Cuenta
-	movimientoRecibido repositories.SolicitudMovimientoCuenta
-	errorMovimiento    error
+	cuentaCreada           *models.Cuenta
+	movimientoRecibido     repositories.SolicitudMovimientoCuenta
+	errorMovimiento        error
+	fechaLimiteInactividad time.Time
+	saldoMaximoInactividad int64
+	cantidadDesactivadas   int64
 }
 
 func (r *repositorioCuentasFalso) Crear(_ context.Context, cuenta *models.Cuenta) error {
@@ -38,8 +41,29 @@ func (r *repositorioCuentasFalso) ProcesarMovimiento(_ context.Context, solicitu
 func (r *repositorioCuentasFalso) ListarMovimientos(_ context.Context, _ uuid.UUID, _, _ int) ([]models.MovimientoCuenta, error) {
 	return []models.MovimientoCuenta{}, nil
 }
-func (r *repositorioCuentasFalso) DesactivarCuentasInactivas(_ context.Context, _ time.Time, _ int64) (int64, error) {
-	return 0, nil
+func (r *repositorioCuentasFalso) DesactivarCuentasInactivas(_ context.Context, fechaLimite time.Time, saldoMaximo int64) (int64, error) {
+	r.fechaLimiteInactividad = fechaLimite
+	r.saldoMaximoInactividad = saldoMaximo
+	return r.cantidadDesactivadas, nil
+}
+
+func TestDesactivarCuentasAplicaReglaDeSeisMesesYCincuentaQuetzales(t *testing.T) {
+	repositorio := &repositorioCuentasFalso{cantidadDesactivadas: 2}
+	servicio := NuevoServicioCuentas(repositorio)
+	antes := time.Now().UTC().AddDate(0, -6, 0).Add(-time.Second)
+
+	cantidad, err := servicio.DesactivarCuentasInactivas(context.Background())
+	despues := time.Now().UTC().AddDate(0, -6, 0).Add(time.Second)
+
+	if err != nil || cantidad != 2 {
+		t.Fatalf("resultado inesperado: cantidad=%d error=%v", cantidad, err)
+	}
+	if repositorio.saldoMaximoInactividad != 5000 {
+		t.Fatalf("se esperaba limite de Q50.00, se obtuvo %d centavos", repositorio.saldoMaximoInactividad)
+	}
+	if repositorio.fechaLimiteInactividad.Before(antes) || repositorio.fechaLimiteInactividad.After(despues) {
+		t.Fatalf("la fecha limite no corresponde a seis meses: %v", repositorio.fechaLimiteInactividad)
+	}
 }
 
 func TestCrearCuentaMonetaria(t *testing.T) {
