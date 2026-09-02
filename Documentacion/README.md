@@ -297,6 +297,8 @@ La recuperación de contraseña, las búsquedas avanzadas de auditoría, la admi
 
 ## Diagramas
 
+Los diagramas Mermaid de contexto C4, componentes y secuencias end-to-end se encuentran en [DIAGRAMAS_SECUENCIA_C4.md](DIAGRAMAS_SECUENCIA_C4.md).
+
 Los diagramas se dividirán entre vistas generales del sistema y vistas particulares de cada microservicio. Todos deberán utilizar los mismos nombres de componentes, actores, eventos, entidades y relaciones definidos en esta documentación.
 
 ### Diagramas generales del sistema
