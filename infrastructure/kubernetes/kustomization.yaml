@@ -9,4 +9,5 @@ resources:
   - account-service.yaml
   - payment-service.yaml
   - transaction-service.yaml
+  - notification-audit-service.yaml
   - frontend.yaml

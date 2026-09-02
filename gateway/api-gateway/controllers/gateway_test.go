@@ -78,7 +78,7 @@ func TestConsultaPropagaCorrelationID(t *testing.T) {
 	p := &publicadorFalso{respuestas: gestor}
 	g := NuevoGateway(p, operations.NuevoStore(), gestor, time.Second)
 	app := fiber.New()
-	app.Get("/:id", middleware.Correlacion, func(c *fiber.Ctx) error {
+	app.Get("/:idCuenta", middleware.Correlacion, func(c *fiber.Ctx) error {
 		c.Locals("customerId", "11111111-1111-4111-8111-111111111111")
 		return g.ConsultarCuenta(c)
 	})

@@ -1,33 +1,8 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: notification-audit-service-config
-  labels:
-    app: notification-audit-service
-data:
-  PORT: "8085"
-  DB_HOST: "host.minikube.internal"
-  DB_PORT: "5435"
-  DB_NAME: "audit_db"
-  DB_USER: "audit_user"
-  DB_SSLMODE: "disable"
-  RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
-  RABBITMQ_EXCHANGE_EVENTS: "bank.events"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: notification-audit-service-secret
-  labels:
-    app: notification-audit-service
-type: Opaque
-stringData:
-  DB_PASSWORD: "audit_password"
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: notification-audit-service
+  namespace: bank-usac
   labels:
     app: notification-audit-service
 spec:
@@ -40,47 +15,66 @@ spec:
       labels:
         app: notification-audit-service
     spec:
+      initContainers:
+        - name: esperar-dependencias
+          image: alpine:3.22
+          command: ["sh", "-c", "until nc -z rabbitmq 5672 && nc -z host.minikube.internal 5436; do sleep 2; done"]
       containers:
         - name: notification-audit-service
-          image: notification-audit-service:latest
+          image: bank-usac/notification-audit-service:local
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 8085
-          envFrom:
-            - configMapRef:
-                name: notification-audit-service-config
-            - secretRef:
-                name: notification-audit-service-secret
+            - name: http
+              containerPort: 8085
+          env:
+            - name: PORT
+              value: "8085"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: bank-usac-secrets
+                  key: URL_BASE_DATOS_AUDITORIA
+            - name: RABBITMQ_URL
+              valueFrom:
+                secretKeyRef:
+                  name: bank-usac-secrets
+                  key: URL_RABBITMQ
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: bank-usac-secrets
+                  key: JWT_SECRET
           resources:
             requests:
               memory: "64Mi"
               cpu: "50m"
             limits:
-              memory: "128Mi"
-              cpu: "200m"
+              memory: "256Mi"
+              cpu: "300m"
           readinessProbe:
             httpGet:
-              path: /health
-              port: 8085
+              path: /health/ready
+              port: http
             initialDelaySeconds: 5
-            periodSeconds: 10
+            periodSeconds: 5
           livenessProbe:
             httpGet:
-              path: /health
-              port: 8085
-            initialDelaySeconds: 10
-            periodSeconds: 15
+              path: /health/live
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: notification-audit-service
+  namespace: bank-usac
   labels:
     app: notification-audit-service
 spec:
-  type: ClusterIP
   selector:
     app: notification-audit-service
   ports:
-    - port: 8085
-      targetPort: 8085
+    - name: http
+      port: 8085
+      targetPort: http

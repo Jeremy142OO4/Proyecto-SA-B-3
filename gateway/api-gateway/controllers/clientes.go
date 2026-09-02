@@ -59,12 +59,20 @@ func (cc *ControladorClientes) Activar(c *fiber.Ctx) error {
 func (cc *ControladorClientes) Login(c *fiber.Ctx) error {
 	var entrada struct {
 		Usuario  string `json:"usuario"`
+		Username string `json:"username"`
 		Password string `json:"password"`
 	}
 	if err := c.BodyParser(&entrada); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "JSON invalido")
 	}
-	cuerpo, _ := json.Marshal(map[string]string{"username": entrada.Usuario, "password": entrada.Password})
+	usuario := entrada.Usuario
+	if usuario == "" {
+		usuario = entrada.Username
+	}
+	if usuario == "" || entrada.Password == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "usuario y password son requeridos")
+	}
+	cuerpo, _ := json.Marshal(map[string]string{"username": usuario, "password": entrada.Password})
 	respuesta, err := cc.solicitar(c, http.MethodPost, "/api/v1/customers/login", cuerpo, false)
 	if err != nil {
 		return err

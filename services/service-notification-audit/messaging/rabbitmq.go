@@ -53,7 +53,7 @@ func NewRabbitMQConsumer(url string, auditSvc services.AuditService) (*RabbitMQC
 		"cuenta.*",
 		"transferencia.*",
 		"pago.*",
-		"notificacion.*",
+		"notificacion.#",
 	}
 	for _, rk := range routingKeys {
 		if err := ch.QueueBind(q.Name, rk, "banco.eventos", false, nil); err != nil {

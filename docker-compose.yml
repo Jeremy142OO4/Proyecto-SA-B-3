@@ -148,6 +148,20 @@ services:
       - pg_audit_data:/var/lib/postgresql/data
     restart: always
 
+  migraciones-auditoria:
+    image: migrate/migrate:v4.18.3
+    container_name: bank-usac-migraciones-auditoria
+    restart: "no"
+    depends_on:
+      postgres-audit:
+        condition: service_started
+    volumes:
+      - ./services/service-notification-audit/database/migrations:/migrations:ro,Z
+    command:
+      - -path=/migrations
+      - -database=postgres://${AUDITORIA_USUARIO:-audit_user}:${AUDITORIA_CLAVE:-audit_password}@postgres-audit:5432/${AUDITORIA_BD:-audit_db}?sslmode=disable
+      - up
+
 
 volumes:
   datos_postgres_cuentas:

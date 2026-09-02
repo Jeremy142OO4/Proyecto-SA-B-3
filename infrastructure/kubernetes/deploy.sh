@@ -26,6 +26,7 @@ minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/customer-service:local s
 minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/payment-service:local services/payment-service
 minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/transaction-service:local services/transaction-service
 minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/api-gateway:local gateway/api-gateway
+minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/notification-audit-service:local services/service-notification-audit
 minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/frontend:local frontend/bank-usac-web
 
 kubectl apply -f infrastructure/kubernetes/namespace.yaml
@@ -38,10 +39,11 @@ kubectl -n bank-usac create secret generic bank-usac-secrets \
   --from-literal=URL_BASE_DATOS_PAGOS="postgres://${PAGOS_USUARIO:-pagos_usuario}:${PAGOS_CLAVE:-pagos_local}@host.minikube.internal:${PAGOS_PUERTO_BD:-5434}/${PAGOS_BD:-pagos_db}?sslmode=disable" \
   --from-literal=URL_BASE_DATOS_TRANSACCIONES="postgres://${TRANSACCIONES_USUARIO:-transacciones_usuario}:${TRANSACCIONES_CLAVE:-transacciones_local}@host.minikube.internal:${TRANSACCIONES_PUERTO_BD:-5435}/${TRANSACCIONES_BD:-transacciones_db}?sslmode=disable" \
   --from-literal=URL_BASE_DATOS_CLIENTES="postgres://${CLIENTES_USUARIO:-customer_user}:${CLIENTES_CLAVE:-customer_password}@host.minikube.internal:${CLIENTES_PUERTO_BD:-5432}/${CLIENTES_BD:-customer_db}?sslmode=disable" \
+  --from-literal=URL_BASE_DATOS_AUDITORIA="postgres://${AUDITORIA_USUARIO:-audit_user}:${AUDITORIA_CLAVE:-audit_password}@host.minikube.internal:${AUDITORIA_PUERTO_BD:-5436}/${AUDITORIA_BD:-audit_db}?sslmode=disable" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 kubectl apply -k infrastructure/kubernetes
-for despliegue in rabbitmq api-gateway customer-service account-service payment-service transaction-service frontend; do
+for despliegue in rabbitmq api-gateway customer-service account-service payment-service transaction-service notification-audit-service frontend; do
   kubectl -n bank-usac rollout status "deployment/$despliegue" --timeout=180s
 done
 kubectl -n bank-usac get pods,services
