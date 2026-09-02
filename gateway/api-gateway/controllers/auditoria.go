@@ -1,19 +1,17 @@
 package controllers
 
 import (
-	"net/http"
-	"net/url"
-	"strconv"
-
+	"github.com/Proyecto-SA-B-3/api-gateway/events"
+	"github.com/Proyecto-SA-B-3/api-gateway/messaging"
 	"github.com/Proyecto-SA-B-3/api-gateway/middleware"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
 
-type ControladorAuditoria struct{ cliente ClienteCustomer }
+type ControladorAuditoria struct{ solicitante SolicitanteRPC }
 
-func NuevoControladorAuditoria(cliente ClienteCustomer) *ControladorAuditoria {
-	return &ControladorAuditoria{cliente: cliente}
+func NuevoControladorAuditoria(solicitante SolicitanteRPC) *ControladorAuditoria {
+	return &ControladorAuditoria{solicitante: solicitante}
 }
 
 func (ca *ControladorAuditoria) Registros(c *fiber.Ctx) error {
@@ -21,7 +19,7 @@ func (ca *ControladorAuditoria) Registros(c *fiber.Ctx) error {
 	if limite < 1 || limite > 100 {
 		limite = 50
 	}
-	return ca.enviar(c, "/api/v1/audit/logs?limit="+url.QueryEscape(strconv.Itoa(limite)))
+	return ca.enviar(c, events.ComandoAuditoriaRegistros, map[string]int{"limite": limite})
 }
 
 func (ca *ControladorAuditoria) Traza(c *fiber.Ctx) error {
@@ -29,7 +27,7 @@ func (ca *ControladorAuditoria) Traza(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "idCorrelacion invalido")
 	}
-	return ca.enviar(c, "/api/v1/audit/trace/"+id.String())
+	return ca.enviar(c, events.ComandoAuditoriaTraza, map[string]any{"idCorrelacion": id})
 }
 
 func (ca *ControladorAuditoria) Notificaciones(c *fiber.Ctx) error {
@@ -37,14 +35,17 @@ func (ca *ControladorAuditoria) Notificaciones(c *fiber.Ctx) error {
 	if limite < 1 || limite > 100 {
 		limite = 50
 	}
-	return ca.enviar(c, "/api/v1/audit/notifications?limit="+url.QueryEscape(strconv.Itoa(limite)))
+	return ca.enviar(c, events.ComandoAuditoriaNotificaciones, map[string]int{"limite": limite})
 }
 
-func (ca *ControladorAuditoria) enviar(c *fiber.Ctx, ruta string) error {
+func (ca *ControladorAuditoria) enviar(c *fiber.Ctx, tipo string, contenido any) error {
 	correlacion := c.Locals(middleware.CorrelationLocal).(uuid.UUID)
-	respuesta, err := ca.cliente.Solicitar(c.UserContext(), http.MethodGet, ruta, c.Get("Authorization"), correlacion.String(), nil)
+	respuesta, err := ca.solicitante.Solicitar(c.UserContext(), tipo, correlacion, contenido)
 	if err != nil {
 		return fiber.NewError(fiber.StatusServiceUnavailable, "notification-audit-service no disponible")
+	}
+	if respuesta.Estado == 0 {
+		respuesta = messaging.RespuestaRPC{Estado: fiber.StatusBadGateway, Cuerpo: []byte(`{"error":"respuesta invalida"}`)}
 	}
 	c.Type("json")
 	return c.Status(respuesta.Estado).Send(respuesta.Cuerpo)

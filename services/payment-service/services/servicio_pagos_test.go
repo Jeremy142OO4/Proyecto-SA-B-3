@@ -10,14 +10,25 @@ import (
 	"testing"
 )
 
-type repoFalso struct{ iniciado bool }
+type repoFalso struct {
+	iniciado       bool
+	errorResultado error
+}
 
 func (r *repoFalso) Iniciar(context.Context, events.SobreMensaje, events.SolicitudPago) (*models.Pago, bool, error) {
 	r.iniciado = true
 	return &models.Pago{}, true, nil
 }
 func (r *repoFalso) ProcesarResultadoCuenta(context.Context, events.SobreMensaje, events.ResultadoMovimiento) (bool, error) {
-	return true, nil
+	return true, r.errorResultado
+}
+
+func TestIgnoraResultadoDeCuentaDeOtraOperacion(t *testing.T) {
+	s := NuevoServicioPagos(&repoFalso{errorResultado: repositories.ErrPagoNoEncontrado})
+	err := s.ProcesarResultadoCuenta(context.Background(), events.SobreMensaje{IDMensaje: uuid.New(), IDCorrelacion: uuid.New()}, events.ResultadoMovimiento{IDOperacion: uuid.New()})
+	if err != nil {
+		t.Fatalf("resultado ajeno no debio fallar: %v", err)
+	}
 }
 func (r *repoFalso) BuscarPorID(context.Context, uuid.UUID) (*models.Pago, error) {
 	return &models.Pago{}, nil

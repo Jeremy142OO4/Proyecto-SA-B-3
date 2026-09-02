@@ -12,8 +12,6 @@ type Configuracion struct {
 	URLRabbitMQ       string
 	SecretoJWT        string
 	OrigenesCORS      string
-	URLCustomer       string
-	URLAuditoria      string
 	TiempoPublicacion time.Duration
 }
 
@@ -25,8 +23,6 @@ func Cargar() (Configuracion, error) {
 	c := Configuracion{
 		PuertoHTTP: obtener("PUERTO_HTTP", "8080"), URLRabbitMQ: os.Getenv("URL_RABBITMQ"),
 		SecretoJWT: os.Getenv("JWT_SECRET"), OrigenesCORS: obtener("CORS_ORIGINS", "http://localhost:5173"),
-		URLCustomer: obtener("URL_CUSTOMER_SERVICE", "http://customer-service:8081"),
-		URLAuditoria: obtener("URL_NOTIFICATION_AUDIT_SERVICE", "http://notification-audit-service:8085"),
 		TiempoPublicacion: time.Duration(segundos) * time.Second,
 	}
 	if c.URLRabbitMQ == "" || c.SecretoJWT == "" {

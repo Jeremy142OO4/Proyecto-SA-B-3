@@ -3,7 +3,7 @@ name: bank-usac-databases
 # Las bases de datos permanecen fuera de Kubernetes por requisito del proyecto.
 services:
   postgres-cuentas:
-    image: postgres:17-alpine
+    image: docker.io/library/postgres:17-alpine
     container_name: bank-usac-postgres-cuentas
     restart: unless-stopped
     environment:
@@ -22,7 +22,7 @@ services:
       start_period: 10s
 
   migraciones-cuentas:
-    image: migrate/migrate:v4.18.3
+    image: docker.io/migrate/migrate:v4.18.3
     container_name: bank-usac-migraciones-cuentas
     restart: "no"
     depends_on:
@@ -36,7 +36,7 @@ services:
       - up
 
   postgres-pagos:
-    image: postgres:17-alpine
+    image: docker.io/library/postgres:17-alpine
     container_name: bank-usac-postgres-pagos
     restart: unless-stopped
     environment:
@@ -55,7 +55,7 @@ services:
       start_period: 10s
 
   migraciones-pagos:
-    image: migrate/migrate:v4.18.3
+    image: docker.io/migrate/migrate:v4.18.3
     container_name: bank-usac-migraciones-pagos
     restart: "no"
     depends_on:
@@ -69,7 +69,7 @@ services:
       - up
 
   postgres-transacciones:
-    image: postgres:17-alpine
+    image: docker.io/library/postgres:17-alpine
     container_name: bank-usac-postgres-transacciones
     restart: unless-stopped
     environment:
@@ -88,7 +88,7 @@ services:
       start_period: 10s
 
   migraciones-transacciones:
-    image: migrate/migrate:v4.18.3
+    image: docker.io/migrate/migrate:v4.18.3
     container_name: bank-usac-migraciones-transacciones
     restart: "no"
     depends_on:
@@ -102,7 +102,7 @@ services:
       - up
 
   postgres-customer:
-    image: postgres:17-alpine
+    image: docker.io/library/postgres:17-alpine
     container_name: bank-usac-postgres-clientes
     restart: unless-stopped
     environment:
@@ -121,7 +121,7 @@ services:
       start_period: 10s
 
   migraciones-clientes:
-    image: migrate/migrate:v4.18.3
+    image: docker.io/migrate/migrate:v4.18.3
     container_name: bank-usac-migraciones-clientes
     restart: "no"
     depends_on:
@@ -136,7 +136,7 @@ services:
 
 
   postgres-audit:
-    image: postgres:15-alpine
+    image: docker.io/library/postgres:15-alpine
     container_name: bank_postgres_audit
     environment:
       POSTGRES_DB: audit_db
@@ -147,14 +147,20 @@ services:
     volumes:
       - pg_audit_data:/var/lib/postgresql/data
     restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   migraciones-auditoria:
-    image: migrate/migrate:v4.18.3
+    image: docker.io/migrate/migrate:v4.18.3
     container_name: bank-usac-migraciones-auditoria
     restart: "no"
     depends_on:
       postgres-audit:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - ./services/service-notification-audit/database/migrations:/migrations:ro,Z
     command:
@@ -165,7 +171,9 @@ services:
 
 volumes:
   datos_postgres_cuentas:
+    name: bank-usac_datos_postgres_cuentas
   datos_postgres_pagos:
+    name: bank-usac_datos_postgres_pagos
   datos_postgres_transacciones:
   pg_customer_data:
   pg_audit_data:

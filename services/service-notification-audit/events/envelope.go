@@ -25,3 +25,9 @@ type ActivationEmailPayload struct {
 	ActivationLink string    `json:"enlaceActivacion"`
 	ExpiresAt      time.Time `json:"expiraEn"`
 }
+
+const (
+	ComandoRegistros      = "auditoria.registros.solicitados"
+	ComandoTraza          = "auditoria.traza.solicitada"
+	ComandoNotificaciones = "auditoria.notificaciones.solicitadas"
+)

@@ -14,10 +14,11 @@ import (
 )
 
 const (
-	IntercambioComandos = "banco.comandos"
-	IntercambioEventos  = "banco.eventos"
-	IntercambioFallidos = "banco.fallidos"
-	ColaRespuestas      = "gateway.respuestas"
+	IntercambioComandos   = "banco.comandos"
+	IntercambioEventos    = "banco.eventos"
+	IntercambioRespuestas = "banco.respuestas"
+	IntercambioFallidos   = "banco.fallidos"
+	ColaRespuestas        = "gateway.respuestas"
 )
 
 type Publicador struct{ canal *amqp.Channel }
@@ -30,7 +31,7 @@ func Conectar(url string) (*amqp.Connection, error) {
 	return c, nil
 }
 func DeclararTopologia(ch *amqp.Channel) error {
-	for _, x := range []string{IntercambioComandos, IntercambioEventos, IntercambioFallidos} {
+	for _, x := range []string{IntercambioComandos, IntercambioEventos, IntercambioRespuestas, IntercambioFallidos} {
 		if e := ch.ExchangeDeclare(x, "topic", true, false, false, false, nil); e != nil {
 			return e
 		}
@@ -39,8 +40,13 @@ func DeclararTopologia(ch *amqp.Channel) error {
 	if _, e := ch.QueueDeclare(ColaRespuestas, true, false, false, false, args); e != nil {
 		return e
 	}
-	for _, k := range []string{"cuenta.*", "pago.*", "transferencia.*", "cliente.*"} {
+	for _, k := range []string{"cuenta.#", "pago.#", "transferencia.#"} {
 		if e := ch.QueueBind(ColaRespuestas, k, IntercambioEventos, false, nil); e != nil {
+			return e
+		}
+	}
+	for _, k := range []string{"cliente.#", "auditoria.#"} {
+		if e := ch.QueueBind(ColaRespuestas, k, IntercambioRespuestas, false, nil); e != nil {
 			return e
 		}
 	}

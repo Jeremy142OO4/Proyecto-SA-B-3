@@ -88,10 +88,24 @@ func (c *Consumidor) procesar(ctx context.Context, d amqp.Delivery) error {
 	if e == nil {
 		return d.Ack(false)
 	}
+	// Los resultados de cuenta tambien son consumidos por payment-service. Una
+	// operacion ajena no es una transferencia fallida y solo debe ignorarse.
+	if esEventoCuenta(d.RoutingKey) && errors.Is(e, repositories.ErrNoEncontrada) {
+		return d.Ack(false)
+	}
 	if errors.Is(e, services.ErrSolicitudInvalida) || errors.Is(e, repositories.ErrNoEncontrada) {
 		return c.fallido(ctx, d, e)
 	}
 	return c.reintentar(ctx, d, e)
+}
+
+func esEventoCuenta(tipo string) bool {
+	switch tipo {
+	case events.EventoDebitada, events.EventoDebitoRechazado, events.EventoAcreditada, events.EventoCreditoRechazado, events.EventoCuentaCompensada, events.EventoCompensacionRechazada:
+		return true
+	default:
+		return false
+	}
 }
 func (c *Consumidor) reintentar(ctx context.Context, d amqp.Delivery, causa error) error {
 	n := intentos(d.Headers)

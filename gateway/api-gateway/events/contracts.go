@@ -20,6 +20,16 @@ const (
 	EventoHistorialPagos           = "pago.historial.consultado"
 	EventoTransferenciaConsultada  = "transferencia.consultada"
 	EventoHistorialTransferencias  = "transferencia.historial.consultado"
+	ComandoRegistrarCliente        = "cliente.registro.solicitado"
+	ComandoActivarCliente          = "cliente.activacion.solicitada"
+	ComandoLoginCliente            = "cliente.login.solicitado"
+	ComandoPerfilCliente           = "cliente.perfil.solicitado"
+	ComandoActualizarCliente       = "cliente.actualizacion.solicitada"
+	ComandoListarClientes          = "cliente.listado.solicitado"
+	ComandoEstadoCliente           = "cliente.estado.solicitado"
+	ComandoAuditoriaRegistros      = "auditoria.registros.solicitados"
+	ComandoAuditoriaTraza          = "auditoria.traza.solicitada"
+	ComandoAuditoriaNotificaciones = "auditoria.notificaciones.solicitadas"
 )
 
 type SolicitudCrearCuenta struct {

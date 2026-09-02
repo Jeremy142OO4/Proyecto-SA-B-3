@@ -246,6 +246,9 @@ func (s *customerService) ActivateCustomer(ctx context.Context, plainToken strin
 
 func (s *customerService) Login(ctx context.Context, username, password string) (*LoginResponse, error) {
 	customer, err := s.repo.GetByUsername(ctx, username)
+	if (err != nil || customer == nil) && strings.Contains(username, "@") {
+		customer, err = s.repo.GetByEmail(ctx, strings.ToLower(strings.TrimSpace(username)))
+	}
 	if err != nil || customer == nil {
 		return nil, errors.New("credenciales inválidas")
 	}

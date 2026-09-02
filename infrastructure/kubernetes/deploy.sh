@@ -44,6 +44,9 @@ kubectl -n bank-usac create secret generic bank-usac-secrets \
 
 kubectl apply -k infrastructure/kubernetes
 for despliegue in rabbitmq api-gateway customer-service account-service payment-service transaction-service notification-audit-service frontend; do
+  kubectl -n bank-usac rollout restart "deployment/$despliegue"
+done
+for despliegue in rabbitmq api-gateway customer-service account-service payment-service transaction-service notification-audit-service frontend; do
   kubectl -n bank-usac rollout status "deployment/$despliegue" --timeout=180s
 done
 kubectl -n bank-usac get pods,services
