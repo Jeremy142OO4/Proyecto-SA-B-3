@@ -3,5 +3,5 @@ import { RegistroAuditoria } from '../types/auditoria';
 
 export const servicioAuditoria = {
   listar: (limite = 50) =>
-    clienteApi.obtener<RegistroAuditoria[]>(`/audit/logs?limit=${limite}`),
+    clienteApi.obtener<RegistroAuditoria[]>(`/auditoria/registros?limite=${limite}`),
 };

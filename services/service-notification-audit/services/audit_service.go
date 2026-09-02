@@ -77,7 +77,7 @@ func (s *auditService) ProcessEvent(ctx context.Context, envelope *events.EventE
 
 func (s *auditService) handleNotificationDispatch(ctx context.Context, envelope *events.EventEnvelope) {
 	switch envelope.Type {
-	case "notification.activation-email.requested":
+	case "notificacion.correo-activacion.solicitado":
 		var p events.ActivationEmailPayload
 		if err := json.Unmarshal(envelope.Payload, &p); err == nil {
 			log.Printf("=========================================================")
@@ -100,7 +100,7 @@ func (s *auditService) handleNotificationDispatch(ctx context.Context, envelope 
 			})
 		}
 
-	case "transfer.completed":
+	case "transferencia.completada":
 		_ = s.notificationRepo.SaveNotificationLog(ctx, &models.NotificationLog{
 			ID:               uuid.New(),
 			CorrelationID:    envelope.CorrelationID,

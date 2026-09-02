@@ -64,9 +64,35 @@ func validarJWT(token string, secreto []byte) (Claims, bool) {
 		return Claims{}, false
 	}
 	var claims Claims
-	if json.Unmarshal(cuerpo, &claims) != nil || claims.Subject == "" || claims.Role == "" || claims.Expires <= time.Now().Unix() {
+	if json.Unmarshal(cuerpo, &claims) != nil || claims.Subject == "" || !rolValido(claims.Role) || claims.Expires <= time.Now().Unix() {
 		return Claims{}, false
 	}
 	if _, err := uuid.Parse(claims.Subject); err != nil { return Claims{}, false }
 	return claims, true
+}
+
+func AutorizarRoles(roles ...string) fiber.Handler {
+	permitidos := make(map[string]struct{}, len(roles))
+	for _, rol := range roles {
+		permitidos[rol] = struct{}{}
+	}
+	return func(c *fiber.Ctx) error {
+		rol, ok := c.Locals("role").(string)
+		if !ok {
+			return fiber.NewError(fiber.StatusUnauthorized, "usuario no autenticado")
+		}
+		if _, permitido := permitidos[rol]; !permitido {
+			return fiber.NewError(fiber.StatusForbidden, "rol sin permiso para esta operacion")
+		}
+		return c.Next()
+	}
+}
+
+func rolValido(rol string) bool {
+	switch rol {
+	case "ADMIN", "TELLER", "CLIENTE":
+		return true
+	default:
+		return false
+	}
 }

@@ -102,17 +102,37 @@ services:
       - up
 
   postgres-customer:
-    image: postgres:15-alpine
-    container_name: bank_postgres_customer
+    image: postgres:17-alpine
+    container_name: bank-usac-postgres-clientes
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: customer_db
-      POSTGRES_USER: customer_user
-      POSTGRES_PASSWORD: customer_password
+      POSTGRES_DB: ${CLIENTES_BD:-customer_db}
+      POSTGRES_USER: ${CLIENTES_USUARIO:-customer_user}
+      POSTGRES_PASSWORD: ${CLIENTES_CLAVE:-customer_password}
     ports:
-      - "5432:5432"
+      - "${CLIENTES_PUERTO_BD:-5432}:5432"
     volumes:
       - pg_customer_data:/var/lib/postgresql/data
-    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  migraciones-clientes:
+    image: migrate/migrate:v4.18.3
+    container_name: bank-usac-migraciones-clientes
+    restart: "no"
+    depends_on:
+      postgres-customer:
+        condition: service_healthy
+    volumes:
+      - ./services/service-customer/database/migrations:/migrations:ro,Z
+    command:
+      - -path=/migrations
+      - -database=postgres://${CLIENTES_USUARIO:-customer_user}:${CLIENTES_CLAVE:-customer_password}@postgres-customer:5432/${CLIENTES_BD:-customer_db}?sslmode=disable
+      - up
 
 
   postgres-audit:
@@ -123,7 +143,7 @@ services:
       POSTGRES_USER: audit_user
       POSTGRES_PASSWORD: audit_password
     ports:
-      - "5435:5432"
+      - "${AUDITORIA_PUERTO_BD:-5436}:5432"
     volumes:
       - pg_audit_data:/var/lib/postgresql/data
     restart: always

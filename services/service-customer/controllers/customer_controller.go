@@ -6,10 +6,37 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"strconv"
 )
 
 type CustomerController struct {
 	svc services.CustomerService
+}
+
+func (cc *CustomerController) ListCustomers(c *fiber.Ctx) error {
+	limit, _ := strconv.Atoi(c.Query("limit", "50"))
+	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+	customers, err := cc.svc.ListCustomers(c.Context(), limit, offset)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "No fue posible consultar los clientes"})
+	}
+	return c.JSON(customers)
+}
+
+func (cc *CustomerController) UpdateCustomerStatus(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Identificador de cliente invalido"})
+	}
+	var input struct{ Status string `json:"status"` }
+	if c.BodyParser(&input) != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Cuerpo de solicitud invalido"})
+	}
+	customer, err := cc.svc.UpdateCustomerStatus(c.Context(), id, input.Status)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(customer)
 }
 
 func NewCustomerController(svc services.CustomerService) *CustomerController {

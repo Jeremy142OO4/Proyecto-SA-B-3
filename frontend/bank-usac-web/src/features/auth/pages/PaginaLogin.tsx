@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { servicioAuth } from '../services/servicioAuth';
 import { useAutenticacion } from '../context/ContextoAutenticacion';
 import { ErrorApi } from '../../../services/clienteApi';
@@ -20,7 +20,7 @@ export function PaginaLogin() {
     try {
       const respuesta = await servicioAuth.login(usuario, password);
       iniciarSesion(respuesta.token, respuesta.cliente);
-      navegar('/cuentas');
+      navegar('/');
     } catch (err) {
       setError(err instanceof ErrorApi ? err.message : 'Error al iniciar sesión');
     } finally {
@@ -56,9 +56,7 @@ export function PaginaLogin() {
             {cargando ? 'Ingresando...' : 'Ingresar'}
           </button>
         </form>
-        <p className="text-slate-400 text-sm mt-4 text-center">
-          ¿No tienes cuenta? <Link to="/registro" className="text-blue-400">Regístrate</Link>
-        </p>
+        <p className="text-slate-400 text-sm mt-4 text-center">El registro de clientes lo realiza un cajero autorizado.</p>
       </div>
     </div>
   );

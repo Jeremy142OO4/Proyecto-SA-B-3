@@ -6,7 +6,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func Registrar(app *fiber.App, g *controllers.Gateway, secreto string, listo func() bool) {
+func Registrar(app *fiber.App, g *controllers.Gateway, clientes *controllers.ControladorClientes, auditoria *controllers.ControladorAuditoria, secreto string, listo func() bool) {
 	app.Get("/salud", func(c *fiber.Ctx) error {
 		if !listo() {
 			return c.Status(503).JSON(fiber.Map{"estado": "NO_DISPONIBLE"})
@@ -20,16 +20,33 @@ func Registrar(app *fiber.App, g *controllers.Gateway, secreto string, listo fun
 		}
 		return c.JSON(fiber.Map{"estado": "OK"})
 	})
-	api := app.Group("/api", middleware.Correlacion, middleware.Autenticacion(secreto))
-	api.Get("/cuentas", g.ListarCuentas)
-	api.Post("/cuentas", g.CrearCuenta)
-	api.Get("/cuentas/:idCuenta", g.ConsultarCuenta)
-	api.Get("/cuentas/:idCuenta/movimientos", g.ListarMovimientos)
-	api.Get("/pagos", g.ListarPagos)
-	api.Post("/pagos", g.CrearPago)
-	api.Get("/pagos/:idPago", g.ConsultarPago)
-	api.Get("/transferencias", g.ListarTransferencias)
-	api.Post("/transferencias", g.Transferir)
-	api.Get("/transferencias/:idTransferencia", g.ConsultarTransferencia)
-	api.Get("/operaciones/:id", g.ConsultarOperacion)
+	publico := app.Group("/api/clientes", middleware.Correlacion)
+	publico.Get("/activacion", clientes.Activar)
+	publico.Post("/login", clientes.Login)
+	operaciones := app.Group("/api", middleware.Correlacion, middleware.Autenticacion(secreto))
+	operaciones.Get("/operaciones/:id", middleware.AutorizarRoles("CLIENTE", "TELLER"), g.ConsultarOperacion)
+
+	teller := app.Group("/api", middleware.Correlacion, middleware.Autenticacion(secreto), middleware.AutorizarRoles("TELLER"))
+	teller.Post("/clientes/registro", clientes.Registrar)
+	teller.Post("/cuentas", g.CrearCuenta)
+
+	cliente := app.Group("/api", middleware.Correlacion, middleware.Autenticacion(secreto), middleware.AutorizarRoles("CLIENTE"))
+	cliente.Get("/clientes/perfil", clientes.Perfil)
+	cliente.Put("/clientes/perfil", clientes.ActualizarPerfil)
+	cliente.Get("/cuentas", g.ListarCuentas)
+	cliente.Get("/cuentas/:idCuenta", g.ConsultarCuenta)
+	cliente.Get("/cuentas/:idCuenta/movimientos", g.ListarMovimientos)
+	cliente.Get("/pagos", g.ListarPagos)
+	cliente.Post("/pagos", g.CrearPago)
+	cliente.Get("/pagos/:idPago", g.ConsultarPago)
+	cliente.Get("/transferencias", g.ListarTransferencias)
+	cliente.Post("/transferencias", g.Transferir)
+	cliente.Get("/transferencias/:idTransferencia", g.ConsultarTransferencia)
+
+	admin := app.Group("/api", middleware.Correlacion, middleware.Autenticacion(secreto), middleware.AutorizarRoles("ADMIN"))
+	admin.Get("/auditoria/registros", auditoria.Registros)
+	admin.Get("/auditoria/traza/:idCorrelacion", auditoria.Traza)
+	admin.Get("/auditoria/notificaciones", auditoria.Notificaciones)
+	admin.Get("/administracion/clientes", clientes.Listar)
+	admin.Patch("/administracion/clientes/:idCliente/estado", clientes.CambiarEstado)
 }

@@ -5,6 +5,7 @@ resources:
   - configmap.yaml
   - rabbitmq.yaml
   - api-gateway.yaml
+  - customer-service.yaml
   - account-service.yaml
   - payment-service.yaml
   - transaction-service.yaml

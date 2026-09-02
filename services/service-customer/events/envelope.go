@@ -8,14 +8,14 @@ import (
 )
 
 type EventEnvelope struct {
-	MessageID     uuid.UUID       `json:"messageId"`
-	CorrelationID uuid.UUID       `json:"correlationId"`
-	CausationID   *uuid.UUID      `json:"causationId"`
-	Type          string          `json:"type"`
+	MessageID     uuid.UUID       `json:"idMensaje"`
+	CorrelationID uuid.UUID       `json:"idCorrelacion"`
+	CausationID   *uuid.UUID      `json:"idCausa,omitempty"`
+	Type          string          `json:"tipo"`
 	Version       int             `json:"version"`
-	OccurredAt    time.Time       `json:"occurredAt"`
-	Producer      string          `json:"producer"`
-	Payload       json.RawMessage `json:"payload"`
+	OccurredAt    time.Time       `json:"ocurridoEn"`
+	Producer      string          `json:"productor"`
+	Payload       json.RawMessage `json:"contenido"`
 }
 
 func NewEnvelope(eventType string, correlationID uuid.UUID, causationID *uuid.UUID, payload interface{}) (*EventEnvelope, error) {
@@ -35,31 +35,52 @@ func NewEnvelope(eventType string, correlationID uuid.UUID, causationID *uuid.UU
 	}, nil
 }
 
+const (
+	ComandoValidarCliente       = "cliente.validacion.solicitada"
+	EventoClienteValidado       = "cliente.validado"
+	EventoClienteRechazado      = "cliente.rechazado"
+	EventoClienteCreado         = "cliente.creado"
+	EventoClienteActivado       = "cliente.activado"
+	EventoCorreoActivacion      = "notificacion.correo-activacion.solicitado"
+)
+
+type SolicitudValidacionCliente struct {
+	IDSolicitud uuid.UUID `json:"idSolicitud"`
+	IDCliente   uuid.UUID `json:"idCliente"`
+}
+
+type ResultadoValidacionCliente struct {
+	IDSolicitud uuid.UUID `json:"idSolicitud"`
+	IDCliente   uuid.UUID `json:"idCliente"`
+	Activo      bool      `json:"activo"`
+	Motivo      string    `json:"motivo,omitempty"`
+}
+
 type CustomerCreatedPayload struct {
-	CustomerID uuid.UUID `json:"customerId"`
-	FullName   string    `json:"fullName"`
-	Email      string    `json:"email"`
-	Username   string    `json:"username"`
-	DocumentID string    `json:"documentId"`
-	Role       string    `json:"role"`
-	Status     string    `json:"status"`
+	CustomerID uuid.UUID `json:"idCliente"`
+	FullName   string    `json:"nombreCompleto"`
+	Email      string    `json:"correo"`
+	Username   string    `json:"usuario"`
+	DocumentID string    `json:"documento"`
+	Role       string    `json:"rol"`
+	Status     string    `json:"estado"`
 }
 
 type ActivationEmailRequestedPayload struct {
-	CustomerID     uuid.UUID `json:"customerId"`
-	Email          string    `json:"email"`
-	FullName       string    `json:"fullName"`
-	ActivationLink string    `json:"activationLink"`
-	ExpiresAt      time.Time `json:"expiresAt"`
+	CustomerID     uuid.UUID `json:"idCliente"`
+	Email          string    `json:"correo"`
+	FullName       string    `json:"nombreCompleto"`
+	ActivationLink string    `json:"enlaceActivacion"`
+	ExpiresAt      time.Time `json:"expiraEn"`
 }
 
 type CustomerActivatedPayload struct {
-	CustomerID  uuid.UUID `json:"customerId"`
-	ActivatedAt time.Time `json:"activatedAt"`
+	CustomerID  uuid.UUID `json:"idCliente"`
+	ActivatedAt time.Time `json:"activadoEn"`
 }
 
 type CustomerUpdatedPayload struct {
-	CustomerID uuid.UUID `json:"customerId"`
-	Address    string    `json:"address"`
-	Email      string    `json:"email"`
+	CustomerID uuid.UUID `json:"idCliente"`
+	Address    string    `json:"direccion"`
+	Email      string    `json:"correo"`
 }

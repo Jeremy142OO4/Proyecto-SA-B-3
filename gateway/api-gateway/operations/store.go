@@ -8,6 +8,7 @@ import (
 type Operacion struct {
 	OperationID   string    `json:"operationId"`
 	CorrelationID string    `json:"correlationId"`
+	CustomerID    string    `json:"-"`
 	Type          string    `json:"type"`
 	Status        string    `json:"status"`
 	UpdatedAt     time.Time `json:"updatedAt"`

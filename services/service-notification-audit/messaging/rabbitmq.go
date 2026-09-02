@@ -29,17 +29,17 @@ func NewRabbitMQConsumer(url string, auditSvc services.AuditService) (*RabbitMQC
 	}
 
 	// 1. Declarar Exchanges
-	if err := ch.ExchangeDeclare("bank.events", "topic", true, false, false, false, nil); err != nil {
+	if err := ch.ExchangeDeclare("banco.eventos", "topic", true, false, false, false, nil); err != nil {
 		return nil, err
 	}
-	if err := ch.ExchangeDeclare("bank.dlx", "topic", true, false, false, false, nil); err != nil {
+	if err := ch.ExchangeDeclare("banco.fallidos", "topic", true, false, false, false, nil); err != nil {
 		return nil, err
 	}
 
 	// 2. Declarar Cola propia y durable para Notification & Audit
 	queueName := "notification-audit.events.q"
 	args := amqp.Table{
-		"x-dead-letter-exchange":    "bank.dlx",
+		"x-dead-letter-exchange":    "banco.fallidos",
 		"x-dead-letter-routing-key": "notification-audit.dlq",
 	}
 	q, err := ch.QueueDeclare(queueName, true, false, false, false, args)
@@ -49,14 +49,14 @@ func NewRabbitMQConsumer(url string, auditSvc services.AuditService) (*RabbitMQC
 
 	// 3. Bindings para capturar todos los eventos del sistema
 	routingKeys := []string{
-		"customer.*",
-		"account.*",
-		"transfer.*",
-		"payment.*",
-		"notification.*",
+		"cliente.*",
+		"cuenta.*",
+		"transferencia.*",
+		"pago.*",
+		"notificacion.*",
 	}
 	for _, rk := range routingKeys {
-		if err := ch.QueueBind(q.Name, rk, "bank.events", false, nil); err != nil {
+		if err := ch.QueueBind(q.Name, rk, "banco.eventos", false, nil); err != nil {
 			return nil, err
 		}
 	}

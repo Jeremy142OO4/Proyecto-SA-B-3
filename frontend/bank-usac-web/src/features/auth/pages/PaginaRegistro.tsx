@@ -1,68 +1,28 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { servicioAuth } from '../services/servicioAuth';
+import { FormEvent, useState } from 'react';
 import { ErrorApi } from '../../../services/clienteApi';
+import { servicioAuth } from '../services/servicioAuth';
 
 export function PaginaRegistro() {
-  const [form, setForm] = useState({
-    nombres: '', apellidos: '', documento: '', fotoDocumentoUrl: '',
-    correo: '', fechaNacimiento: '', direccion: '', password: '',
-  });
-  const [error, setError] = useState<string | null>(null);
-  const [exito, setExito] = useState(false);
-  const [cargando, setCargando] = useState(false);
-
-  const cambiar = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-    setForm({ ...form, [e.target.name]: e.target.value });
-
-  const enviar = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setCargando(true);
-    try {
-      await servicioAuth.registrar(form);
-      setExito(true);
-    } catch (err) {
-      setError(err instanceof ErrorApi ? err.message : 'Error al registrar');
-    } finally {
-      setCargando(false);
-    }
-  };
-
-  if (exito) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
-        <div className="max-w-sm text-center bg-slate-900 border border-slate-800 rounded-xl p-6">
-          <h2 className="text-white text-lg font-bold">¡Registro completado!</h2>
-          <p className="text-slate-400 text-sm mt-2">Revisa tu correo ({form.correo}) para activar tu cuenta.</p>
-          <Link to="/login" className="block mt-4 text-blue-400 text-sm">Ir a iniciar sesión</Link>
-        </div>
-      </div>
-    );
+  const [form, setForm] = useState({nombres: '', apellidos: '', documento: '', fotoDocumentoUrl: '', correo: '', fechaNacimiento: '', direccion: '', password: ''});
+  const [error, setError] = useState(''); const [mensaje, setMensaje] = useState(''); const [cargando, setCargando] = useState(false);
+  async function enviar(evento: FormEvent<HTMLFormElement>) {
+    evento.preventDefault(); if (cargando) return; setError(''); setMensaje(''); setCargando(true);
+    try { await servicioAuth.registrar(form); setMensaje(`Cliente registrado. Se envió la activación a ${form.correo}.`); setForm({nombres:'',apellidos:'',documento:'',fotoDocumentoUrl:'',correo:'',fechaNacimiento:'',direccion:'',password:''}); }
+    catch (e) { setError(e instanceof ErrorApi ? e.message : 'No fue posible registrar al cliente'); }
+    finally { setCargando(false); }
   }
-
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 py-10">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl p-6">
-        <h1 className="text-xl font-bold text-white mb-4">Crear cuenta</h1>
-        {error && <p className="text-rose-400 text-sm mb-3">{error}</p>}
-        <form onSubmit={enviar} className="space-y-3">
-          <input name="nombres" required placeholder="Nombres" value={form.nombres} onChange={cambiar} className="w-full bg-slate-800 text-white text-sm p-2 rounded" />
-          <input name="apellidos" required placeholder="Apellidos" value={form.apellidos} onChange={cambiar} className="w-full bg-slate-800 text-white text-sm p-2 rounded" />
-          <input name="documento" required placeholder="DPI" value={form.documento} onChange={cambiar} className="w-full bg-slate-800 text-white text-sm p-2 rounded" />
-          <input type="date" name="fechaNacimiento" required value={form.fechaNacimiento} onChange={cambiar} className="w-full bg-slate-800 text-white text-sm p-2 rounded" />
-          <input type="email" name="correo" required placeholder="Correo" value={form.correo} onChange={cambiar} className="w-full bg-slate-800 text-white text-sm p-2 rounded" />
-          <input name="fotoDocumentoUrl" placeholder="URL foto documento" value={form.fotoDocumentoUrl} onChange={cambiar} className="w-full bg-slate-800 text-white text-sm p-2 rounded" />
-          <textarea name="direccion" required placeholder="Dirección" value={form.direccion} onChange={cambiar} className="w-full bg-slate-800 text-white text-sm p-2 rounded" />
-          <input type="password" name="password" required placeholder="Contraseña" value={form.password} onChange={cambiar} className="w-full bg-slate-800 text-white text-sm p-2 rounded" />
-          <button disabled={cargando} className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm py-2 rounded disabled:opacity-50">
-            {cargando ? 'Procesando...' : 'Registrarme'}
-          </button>
-        </form>
-        <p className="text-slate-400 text-sm mt-4 text-center">
-          ¿Ya tienes cuenta? <Link to="/login" className="text-blue-400">Iniciar sesión</Link>
-        </p>
-      </div>
-    </div>
-  );
+  const cambiar = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm({...form, [e.target.name]: e.target.value});
+  return <div className="panel-formulario formulario-ancho"><p>Operación de cajero</p><h2>Registrar cliente</h2>
+    {mensaje && <div className="alerta">{mensaje}</div>}{error && <div className="alerta error">{error}</div>}
+    <form onSubmit={enviar}>
+      <div className="dos-columnas"><label>Nombres<input name="nombres" required value={form.nombres} onChange={cambiar}/></label><label>Apellidos<input name="apellidos" required value={form.apellidos} onChange={cambiar}/></label></div>
+      <label>DPI<input name="documento" required value={form.documento} onChange={cambiar}/></label>
+      <label>Fecha de nacimiento<input type="date" name="fechaNacimiento" required value={form.fechaNacimiento} onChange={cambiar}/></label>
+      <label>Correo<input type="email" name="correo" required value={form.correo} onChange={cambiar}/></label>
+      <label>URL de fotografía del documento<input name="fotoDocumentoUrl" value={form.fotoDocumentoUrl} onChange={cambiar}/></label>
+      <label>Dirección<input name="direccion" required value={form.direccion} onChange={cambiar}/></label>
+      <label>Contraseña temporal<input type="password" name="password" required minLength={8} value={form.password} onChange={cambiar}/></label>
+      <button disabled={cargando}>{cargando ? 'Registrando…' : 'Registrar cliente'}</button>
+    </form>
+  </div>;
 }

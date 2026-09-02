@@ -3,7 +3,7 @@ import { RespuestaLogin } from '../types/auth';
 
 export const servicioAuth = {
   login: (usuario: string, password: string) =>
-    clienteApi.publicar<RespuestaLogin>('/customers/login', { usuario, password }),
+    clienteApi.publicar<RespuestaLogin>('/clientes/login', { usuario, password }),
 
   registrar: (datos: {
     nombres: string;
@@ -14,8 +14,8 @@ export const servicioAuth = {
     fechaNacimiento: string;
     direccion: string;
     password: string;
-  }) => clienteApi.publicar<{ mensaje: string }>('/customers/register', datos),
+  }) => clienteApi.publicar<{ mensaje: string }>('/clientes/registro', datos),
 
   activar: (token: string) =>
-    clienteApi.obtener<{ mensaje: string }>(`/customers/activate?token=${token}`),
+    clienteApi.obtener<{ mensaje: string }>(`/clientes/activacion?token=${token}`),
 };

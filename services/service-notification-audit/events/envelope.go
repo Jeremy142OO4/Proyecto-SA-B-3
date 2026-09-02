@@ -8,20 +8,20 @@ import (
 )
 
 type EventEnvelope struct {
-	MessageID     uuid.UUID       `json:"messageId"`
-	CorrelationID uuid.UUID       `json:"correlationId"`
-	CausationID   *uuid.UUID      `json:"causationId"`
-	Type          string          `json:"type"`
+	MessageID     uuid.UUID       `json:"idMensaje"`
+	CorrelationID uuid.UUID       `json:"idCorrelacion"`
+	CausationID   *uuid.UUID      `json:"idCausa"`
+	Type          string          `json:"tipo"`
 	Version       int             `json:"version"`
-	OccurredAt    time.Time       `json:"occurredAt"`
-	Producer      string          `json:"producer"`
-	Payload       json.RawMessage `json:"payload"`
+	OccurredAt    time.Time       `json:"ocurridoEn"`
+	Producer      string          `json:"productor"`
+	Payload       json.RawMessage `json:"contenido"`
 }
 
 type ActivationEmailPayload struct {
-	CustomerID     uuid.UUID `json:"customerId"`
-	Email          string    `json:"email"`
-	FullName       string    `json:"fullName"`
-	ActivationLink string    `json:"activationLink"`
-	ExpiresAt      time.Time `json:"expiresAt"`
+	CustomerID     uuid.UUID `json:"idCliente"`
+	Email          string    `json:"correo"`
+	FullName       string    `json:"nombreCompleto"`
+	ActivationLink string    `json:"enlaceActivacion"`
+	ExpiresAt      time.Time `json:"expiraEn"`
 }

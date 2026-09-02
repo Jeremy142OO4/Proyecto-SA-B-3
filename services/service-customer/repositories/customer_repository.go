@@ -3,10 +3,12 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"time"
 
 	"bank-usac/service-customer/models"
+	"bank-usac/service-customer/events"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -129,7 +131,7 @@ func (r *customerRepo) ActivateCustomer(ctx context.Context, customerID uuid.UUI
 		return err
 	}
 
-	if _, err := tx.ExecContext(ctx, "UPDATE customers SET status = 'ACTIVE', updated_at = $1 WHERE customer_id = $2", now, customerID); err != nil {
+	if _, err := tx.ExecContext(ctx, "UPDATE customers SET status = 'ACTIVO', updated_at = $1 WHERE customer_id = $2", now, customerID); err != nil {
 		return err
 	}
 
@@ -178,4 +180,70 @@ func (r *customerRepo) MarkOutboxPublished(ctx context.Context, id uuid.UUID) er
 func (r *customerRepo) IncrementOutboxAttempt(ctx context.Context, id uuid.UUID, errStr string) error {
 	_, err := r.db.ExecContext(ctx, "UPDATE outbox_messages SET attempts = attempts + 1, last_error = $1 WHERE id = $2", errStr, id)
 	return err
+}
+
+func (r *customerRepo) List(ctx context.Context, limit, offset int) ([]*models.Customer, error) {
+	customers := make([]*models.Customer, 0)
+	err := r.db.SelectContext(ctx, &customers, `SELECT * FROM customers ORDER BY created_at DESC LIMIT $1 OFFSET $2`, limit, offset)
+	return customers, err
+}
+
+func (r *customerRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status models.CustomerStatus) (*models.Customer, error) {
+	var customer models.Customer
+	err := r.db.GetContext(ctx, &customer, `UPDATE customers SET status=$1,updated_at=NOW() WHERE customer_id=$2 RETURNING *`, status, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return &customer, err
+}
+
+func (r *customerRepo) RegistrarValidacionCliente(ctx context.Context, mensajeID, correlacionID uuid.UUID, solicitudID, clienteID uuid.UUID) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var procesado bool
+	if err = tx.GetContext(ctx, &procesado, "SELECT EXISTS(SELECT 1 FROM processed_messages WHERE message_id=$1)", mensajeID); err != nil {
+		return err
+	}
+	if procesado {
+		return tx.Commit()
+	}
+
+	var estado string
+	err = tx.GetContext(ctx, &estado, "SELECT status FROM customers WHERE customer_id=$1", clienteID)
+	activo := err == nil && estado == string(models.StatusActive)
+	motivo := ""
+	if errors.Is(err, sql.ErrNoRows) {
+		motivo = "cliente no encontrado"
+	} else if err != nil {
+		return err
+	} else if !activo {
+		motivo = "cliente no activo"
+	}
+	tipo := events.EventoClienteValidado
+	if !activo {
+		tipo = events.EventoClienteRechazado
+	}
+	resultado := events.ResultadoValidacionCliente{IDSolicitud: solicitudID, IDCliente: clienteID, Activo: activo, Motivo: motivo}
+	sobre, err := events.NewEnvelope(tipo, correlacionID, &mensajeID, resultado)
+	if err != nil {
+		return err
+	}
+	contenido, err := json.Marshal(sobre)
+	if err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO outbox_messages
+		(id,event_type,payload,correlation_id,causation_id,created_at)
+		VALUES($1,$2,$3,$4,$5,$6)`, uuid.New(), tipo, contenido, correlacionID, mensajeID, time.Now().UTC()); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO processed_messages
+		(message_id,consumer_name,result_reference) VALUES($1,$2,$3)`, mensajeID, "customer-service.validacion-cliente", solicitudID.String()); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

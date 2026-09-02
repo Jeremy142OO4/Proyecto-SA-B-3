@@ -11,15 +11,15 @@ type Role string
 const (
 	RoleAdmin    Role = "ADMIN"
 	RoleTeller   Role = "TELLER"
-	RoleCustomer Role = "CUSTOMER"
+	RoleCustomer Role = "CLIENTE"
 )
 
 type CustomerStatus string
 
 const (
-	StatusPendingActivation CustomerStatus = "PENDING_ACTIVATION"
-	StatusActive            CustomerStatus = "ACTIVE"
-	StatusBlocked           CustomerStatus = "BLOCKED"
+	StatusPendingActivation CustomerStatus = "PENDIENTE_ACTIVACION"
+	StatusActive            CustomerStatus = "ACTIVO"
+	StatusBlocked           CustomerStatus = "BLOQUEADO"
 )
 
 type Customer struct {

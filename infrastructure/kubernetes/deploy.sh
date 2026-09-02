@@ -3,16 +3,26 @@ set -eu
 
 RAIZ_PROYECTO=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 PERFIL_MINIKUBE=${PERFIL_MINIKUBE:-minikube}
+if [ -z "${DRIVER_MINIKUBE:-}" ]; then
+  if command -v podman >/dev/null 2>&1; then
+    DRIVER_MINIKUBE=podman
+  else
+    DRIVER_MINIKUBE=docker
+  fi
+fi
 
 cd "$RAIZ_PROYECTO"
-podman rm -f bank-usac-rabbitmq bank-usac-api-gateway bank-usac-account-service bank-usac-payment-service bank-usac-transaction-service bank-usac-frontend 2>/dev/null || true
+if command -v podman >/dev/null 2>&1; then
+  podman rm -f bank-usac-rabbitmq bank-usac-api-gateway bank-usac-customer-service bank-usac-account-service bank-usac-payment-service bank-usac-transaction-service bank-usac-frontend 2>/dev/null || true
+fi
 docker compose up -d
 
 if ! minikube status -p "$PERFIL_MINIKUBE" >/dev/null 2>&1; then
-  minikube start -p "$PERFIL_MINIKUBE" --driver=podman
+  minikube start -p "$PERFIL_MINIKUBE" --driver="$DRIVER_MINIKUBE"
 fi
 
 minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/account-service:local services/account-service
+minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/customer-service:local services/service-customer
 minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/payment-service:local services/payment-service
 minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/transaction-service:local services/transaction-service
 minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/api-gateway:local gateway/api-gateway
@@ -27,10 +37,11 @@ kubectl -n bank-usac create secret generic bank-usac-secrets \
   --from-literal=URL_BASE_DATOS_CUENTAS="postgres://${CUENTAS_USUARIO:-cuentas_usuario}:${CUENTAS_CLAVE:-cuentas_local}@host.minikube.internal:${CUENTAS_PUERTO_BD:-5433}/${CUENTAS_BD:-cuentas_db}?sslmode=disable" \
   --from-literal=URL_BASE_DATOS_PAGOS="postgres://${PAGOS_USUARIO:-pagos_usuario}:${PAGOS_CLAVE:-pagos_local}@host.minikube.internal:${PAGOS_PUERTO_BD:-5434}/${PAGOS_BD:-pagos_db}?sslmode=disable" \
   --from-literal=URL_BASE_DATOS_TRANSACCIONES="postgres://${TRANSACCIONES_USUARIO:-transacciones_usuario}:${TRANSACCIONES_CLAVE:-transacciones_local}@host.minikube.internal:${TRANSACCIONES_PUERTO_BD:-5435}/${TRANSACCIONES_BD:-transacciones_db}?sslmode=disable" \
+  --from-literal=URL_BASE_DATOS_CLIENTES="postgres://${CLIENTES_USUARIO:-customer_user}:${CLIENTES_CLAVE:-customer_password}@host.minikube.internal:${CLIENTES_PUERTO_BD:-5432}/${CLIENTES_BD:-customer_db}?sslmode=disable" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 kubectl apply -k infrastructure/kubernetes
-for despliegue in rabbitmq api-gateway account-service payment-service transaction-service frontend; do
+for despliegue in rabbitmq api-gateway customer-service account-service payment-service transaction-service frontend; do
   kubectl -n bank-usac rollout status "deployment/$despliegue" --timeout=180s
 done
 kubectl -n bank-usac get pods,services

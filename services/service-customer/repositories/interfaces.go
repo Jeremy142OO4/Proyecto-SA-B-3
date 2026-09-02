@@ -15,6 +15,8 @@ type CustomerRepository interface {
 	GetByUsername(ctx context.Context, username string) (*models.Customer, error)
 	GetByEmail(ctx context.Context, email string) (*models.Customer, error)
 	GetByDocumentID(ctx context.Context, docID string) (*models.Customer, error)
+	List(ctx context.Context, limit, offset int) ([]*models.Customer, error)
+	UpdateStatus(ctx context.Context, id uuid.UUID, status models.CustomerStatus) (*models.Customer, error)
 	Update(ctx context.Context, customer *models.Customer) error
 	ActivateCustomer(ctx context.Context, customerID uuid.UUID, tokenID uuid.UUID, outboxEvent *models.OutboxMessage) error
 	FindActivationToken(ctx context.Context, tokenHash string) (*models.ActivationToken, error)
@@ -25,4 +27,5 @@ type CustomerRepository interface {
 	GetPendingOutbox(ctx context.Context, limit int) ([]*models.OutboxMessage, error)
 	MarkOutboxPublished(ctx context.Context, id uuid.UUID) error
 	IncrementOutboxAttempt(ctx context.Context, id uuid.UUID, errStr string) error
+	RegistrarValidacionCliente(ctx context.Context, mensajeID, correlacionID uuid.UUID, solicitudID, clienteID uuid.UUID) error
 }

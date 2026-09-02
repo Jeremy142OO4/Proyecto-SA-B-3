@@ -28,7 +28,8 @@ func NuevoGateway(p Publicador, o *operations.Store, r *responses.Gestor, t time
 }
 
 type entradaCuenta struct {
-	TipoCuenta string `json:"tipoCuenta"`
+	TipoCuenta string    `json:"tipoCuenta"`
+	IDCliente uuid.UUID `json:"idCliente"`
 }
 type entradaPago struct {
 	IDCuentaOrigen uuid.UUID `json:"idCuentaOrigen"`
@@ -53,8 +54,11 @@ func (g *Gateway) CrearCuenta(c *fiber.Ctx) error {
 	if tipo != "MONETARIA" && tipo != "AHORRO" {
 		return fiber.NewError(422, "tipoCuenta debe ser MONETARIA o AHORRO")
 	}
+	if e.IDCliente == uuid.Nil {
+		return fiber.NewError(422, "idCliente es obligatorio")
+	}
 	id := uuid.New()
-	return g.aceptar(c, events.ComandoCrearCuenta, id, events.SolicitudCrearCuenta{IDSolicitud: id, IDCliente: idCliente(c), TipoCuenta: tipo})
+	return g.aceptar(c, events.ComandoCrearCuenta, id, events.SolicitudCrearCuenta{IDSolicitud: id, IDCliente: e.IDCliente, TipoCuenta: tipo})
 }
 func (g *Gateway) CrearPago(c *fiber.Ctx) error {
 	var e entradaPago
@@ -64,6 +68,9 @@ func (g *Gateway) CrearPago(c *fiber.Ctx) error {
 	tipo := strings.ToUpper(e.TipoPago)
 	if e.IDCuentaOrigen == uuid.Nil || e.MontoCentavos <= 0 || strings.TrimSpace(e.Beneficiario) == "" || (tipo != "INTERNO" && tipo != "EXTERNO") {
 		return fiber.NewError(422, "datos del pago invalidos")
+	}
+	if err := g.validarPropiedadCuenta(c, e.IDCuentaOrigen); err != nil {
+		return err
 	}
 	id := uuid.New()
 	return g.aceptar(c, events.ComandoProcesarPago, id, events.SolicitudPago{IDPago: id, IDCliente: idCliente(c), IDCuentaOrigen: e.IDCuentaOrigen, Beneficiario: strings.TrimSpace(e.Beneficiario), Concepto: strings.TrimSpace(e.Concepto), MontoCentavos: e.MontoCentavos, TipoPago: tipo})
@@ -75,6 +82,9 @@ func (g *Gateway) Transferir(c *fiber.Ctx) error {
 	}
 	if e.IDCuentaOrigen == uuid.Nil || e.IDCuentaDestino == uuid.Nil || e.IDCuentaOrigen == e.IDCuentaDestino || e.MontoCentavos <= 0 {
 		return fiber.NewError(422, "cuentas distintas y montoCentavos mayor que cero son obligatorios")
+	}
+	if err := g.validarPropiedadCuenta(c, e.IDCuentaOrigen); err != nil {
+		return err
 	}
 	id := uuid.New()
 	return g.aceptar(c, events.ComandoTransferir, id, events.SolicitudTransferencia{IDTransferencia: id, IDCliente: idCliente(c), IDCuentaOrigen: e.IDCuentaOrigen, IDCuentaDestino: e.IDCuentaDestino, MontoCentavos: e.MontoCentavos, Descripcion: strings.TrimSpace(e.Descripcion)})
@@ -209,7 +219,10 @@ func (g *Gateway) consultar(c *fiber.Ctx, cmd, esperado string, p any, adaptar f
 	return c.JSON(v)
 }
 func (g *Gateway) solicitar(c *fiber.Ctx, cmd, esperado string, p any, adaptar func(json.RawMessage) (any, error)) (any, error) {
-	corr := uuid.New()
+	corr, ok := c.Locals(middleware.CorrelationLocal).(uuid.UUID)
+	if !ok || corr == uuid.Nil {
+		corr = uuid.New()
+	}
 	ch, cancel := g.respuestas.Registrar(corr)
 	defer cancel()
 	m, e := events.Nuevo(cmd, corr, p)
@@ -242,7 +255,7 @@ func (g *Gateway) aceptar(c *fiber.Ctx, tipo string, id uuid.UUID, p any) error 
 	if e = g.publicador.Publicar(ctx, m); e != nil {
 		return fiber.NewError(503, "mensajeria no disponible")
 	}
-	o := operations.Operacion{OperationID: id.String(), CorrelationID: corr.String(), Type: tipo, Status: "PENDIENTE", UpdatedAt: time.Now().UTC()}
+	o := operations.Operacion{OperationID: id.String(), CorrelationID: corr.String(), CustomerID: idCliente(c).String(), Type: tipo, Status: "PENDIENTE", UpdatedAt: time.Now().UTC()}
 	g.operaciones.Crear(o)
 	return c.Status(202).JSON(fiber.Map{"operationId": o.OperationID, "correlationId": o.CorrelationID, "status": o.Status, "statusUrl": "/api/operaciones/" + o.OperationID})
 }
@@ -250,6 +263,9 @@ func (g *Gateway) ConsultarOperacion(c *fiber.Ctx) error {
 	o, ok := g.operaciones.Obtener(c.Params("id"))
 	if !ok {
 		return fiber.NewError(404, "operacion no encontrada")
+	}
+	if o.CustomerID != idCliente(c).String() {
+		return fiber.ErrForbidden
 	}
 	return c.JSON(o)
 }

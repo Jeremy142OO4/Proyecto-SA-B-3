@@ -8,6 +8,7 @@ import (
 
 	"github.com/Proyecto-SA-B-3/api-gateway/config"
 	"github.com/Proyecto-SA-B-3/api-gateway/controllers"
+	"github.com/Proyecto-SA-B-3/api-gateway/customers"
 	"github.com/Proyecto-SA-B-3/api-gateway/messaging"
 	"github.com/Proyecto-SA-B-3/api-gateway/operations"
 	"github.com/Proyecto-SA-B-3/api-gateway/responses"
@@ -56,7 +57,11 @@ func main() {
 		log.Fatal(err)
 	}
 	gateway := controllers.NuevoGateway(publicador, store, gestorRespuestas, cfg.TiempoPublicacion)
-	routes.Registrar(app, gateway, cfg.SecretoJWT, func() bool { return !conexion.IsClosed() })
+	clienteCustomer := customers.Nuevo(cfg.URLCustomer, cfg.TiempoPublicacion)
+	controladorClientes := controllers.NuevoControladorClientes(clienteCustomer)
+	clienteAuditoria := customers.Nuevo(cfg.URLAuditoria, cfg.TiempoPublicacion)
+	controladorAuditoria := controllers.NuevoControladorAuditoria(clienteAuditoria)
+	routes.Registrar(app, gateway, controladorClientes, controladorAuditoria, cfg.SecretoJWT, func() bool { return !conexion.IsClosed() })
 	go func() {
 		if err := app.Listen(":" + cfg.PuertoHTTP); err != nil {
 			log.Printf("servidor detenido: %v", err)

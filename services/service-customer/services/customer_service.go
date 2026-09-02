@@ -28,6 +28,33 @@ type CustomerService interface {
 	Login(ctx context.Context, username, password string) (*LoginResponse, error)
 	GetProfile(ctx context.Context, customerID uuid.UUID) (*models.Customer, error)
 	UpdateCustomer(ctx context.Context, customerID uuid.UUID, req UpdateRequest, correlationID uuid.UUID) (*models.Customer, error)
+	ListCustomers(ctx context.Context, limit, offset int) ([]*models.Customer, error)
+	UpdateCustomerStatus(ctx context.Context, customerID uuid.UUID, status string) (*models.Customer, error)
+}
+
+func (s *customerService) ListCustomers(ctx context.Context, limit, offset int) ([]*models.Customer, error) {
+	if limit < 1 || limit > 100 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	return s.repo.List(ctx, limit, offset)
+}
+
+func (s *customerService) UpdateCustomerStatus(ctx context.Context, customerID uuid.UUID, status string) (*models.Customer, error) {
+	estado := models.CustomerStatus(strings.ToUpper(status))
+	if estado != models.StatusPendingActivation && estado != models.StatusActive && estado != models.StatusBlocked {
+		return nil, errors.New("estado de cliente invalido")
+	}
+	cliente, err := s.repo.UpdateStatus(ctx, customerID, estado)
+	if err != nil {
+		return nil, err
+	}
+	if cliente == nil {
+		return nil, errors.New("cliente no encontrado")
+	}
+	return cliente, nil
 }
 
 type RegisterRequest struct {
@@ -146,7 +173,7 @@ func (s *customerService) RegisterCustomer(ctx context.Context, req RegisterRequ
 		Role:       string(customer.Role),
 		Status:     string(customer.Status),
 	}
-	envCust, _ := events.NewEnvelope("customer.created", correlationID, nil, custPayload)
+	envCust, _ := events.NewEnvelope(events.EventoClienteCreado, correlationID, nil, custPayload)
 	envCustBytes, _ := json.Marshal(envCust)
 
 	emailPayload := events.ActivationEmailRequestedPayload{
@@ -156,20 +183,20 @@ func (s *customerService) RegisterCustomer(ctx context.Context, req RegisterRequ
 		ActivationLink: fmt.Sprintf("%s?token=%s", s.cfg.ActivationLinkBase, plainToken),
 		ExpiresAt:      activationToken.ExpiresAt,
 	}
-	envEmail, _ := events.NewEnvelope("notification.activation-email.requested", correlationID, nil, emailPayload)
+	envEmail, _ := events.NewEnvelope(events.EventoCorreoActivacion, correlationID, nil, emailPayload)
 	envEmailBytes, _ := json.Marshal(envEmail)
 
 	outbox := []*models.OutboxMessage{
 		{
 			ID:            uuid.New(),
-			EventType:     "customer.created",
+			EventType:     events.EventoClienteCreado,
 			Payload:       envCustBytes,
 			CorrelationID: correlationID,
 			CreatedAt:     now,
 		},
 		{
 			ID:            uuid.New(),
-			EventType:     "notification.activation-email.requested",
+			EventType:     events.EventoCorreoActivacion,
 			Payload:       envEmailBytes,
 			CorrelationID: correlationID,
 			CreatedAt:     now,
@@ -203,12 +230,12 @@ func (s *customerService) ActivateCustomer(ctx context.Context, plainToken strin
 		CustomerID:  tokenRecord.CustomerID,
 		ActivatedAt: time.Now().UTC(),
 	}
-	env, _ := events.NewEnvelope("customer.activated", correlationID, nil, actPayload)
+	env, _ := events.NewEnvelope(events.EventoClienteActivado, correlationID, nil, actPayload)
 	envBytes, _ := json.Marshal(env)
 
 	outboxEvent := &models.OutboxMessage{
 		ID:            uuid.New(),
-		EventType:     "customer.activated",
+		EventType:     events.EventoClienteActivado,
 		Payload:       envBytes,
 		CorrelationID: correlationID,
 		CreatedAt:     time.Now().UTC(),

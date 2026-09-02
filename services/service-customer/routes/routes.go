@@ -25,4 +25,7 @@ func SetupRoutes(app *fiber.App, cc *controllers.CustomerController, cfg *config
 	// Rutas Protegidas (JWT)
 	api.Get("/me", middleware.AuthMiddleware(cfg.JWTSecret), cc.GetProfile)
 	api.Put("/me", middleware.AuthMiddleware(cfg.JWTSecret), cc.UpdateProfile)
+	adminOnly := middleware.AuthMiddleware(cfg.JWTSecret, "ADMIN")
+	api.Get("/", adminOnly, cc.ListCustomers)
+	api.Patch("/:id/status", adminOnly, cc.UpdateCustomerStatus)
 }
