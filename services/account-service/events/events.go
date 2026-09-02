@@ -16,6 +16,7 @@ const (
 	EventoCuentaDesactivada       = "cuenta.desactivada"
 	EventoCuentaConsultada        = "cuenta.consultada"
 	EventoMovimientosConsultados  = "cuenta.movimientos.consultados"
+	EventoCuentasConsultadas      = "cuenta.historial.consultado"
 )
 
 type ResultadoValidacionCliente struct {

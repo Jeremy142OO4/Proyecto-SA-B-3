@@ -56,6 +56,7 @@ func DeclararTopologia(canal *amqp.Channel) error {
 		events.ComandoSolicitarCompensacion,
 		events.ComandoConsultarCuenta,
 		events.ComandoListarMovimientos,
+		events.ComandoListarCuentas,
 	}
 	for _, evento := range []string{events.EventoClienteValidado, events.EventoClienteRechazado} {
 		if err := canal.QueueBind(ColaEventosCliente, evento, IntercambioEventos, false, nil); err != nil {

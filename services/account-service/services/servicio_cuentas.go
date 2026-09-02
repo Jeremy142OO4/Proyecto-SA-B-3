@@ -62,6 +62,12 @@ func (s *servicioCuentas) ConsultarCuenta(ctx context.Context, idCuenta uuid.UUI
 	}
 	return s.repositorio.BuscarPorID(ctx, idCuenta)
 }
+func (s *servicioCuentas) ListarCuentas(ctx context.Context, idCliente uuid.UUID) ([]models.Cuenta, error) {
+	if idCliente == uuid.Nil {
+		return nil, ErrClienteInvalido
+	}
+	return s.repositorio.ListarPorCliente(ctx, idCliente)
+}
 
 func (s *servicioCuentas) ListarMovimientos(ctx context.Context, idCuenta uuid.UUID, limite, desplazamiento int) ([]models.MovimientoCuenta, error) {
 	if limite <= 0 || limite > 100 {
