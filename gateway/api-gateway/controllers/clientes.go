@@ -3,24 +3,22 @@ package controllers
 import (
 	"context"
 	"encoding/json"
-	"net/http"
-	"net/url"
-	"strconv"
 
-	"github.com/Proyecto-SA-B-3/api-gateway/customers"
+	"github.com/Proyecto-SA-B-3/api-gateway/events"
+	"github.com/Proyecto-SA-B-3/api-gateway/messaging"
 	"github.com/Proyecto-SA-B-3/api-gateway/middleware"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
 
-type ClienteCustomer interface {
-	Solicitar(ctx context.Context, metodo, ruta, autorizacion, correlacion string, cuerpo []byte) (customers.Respuesta, error)
+type SolicitanteRPC interface {
+	Solicitar(context.Context, string, uuid.UUID, any) (messaging.RespuestaRPC, error)
 }
 
-type ControladorClientes struct{ cliente ClienteCustomer }
+type ControladorClientes struct{ solicitante SolicitanteRPC }
 
-func NuevoControladorClientes(cliente ClienteCustomer) *ControladorClientes {
-	return &ControladorClientes{cliente: cliente}
+func NuevoControladorClientes(solicitante SolicitanteRPC) *ControladorClientes {
+	return &ControladorClientes{solicitante: solicitante}
 }
 
 type registroCliente struct {
@@ -31,7 +29,7 @@ type registroCliente struct {
 	Correo           string `json:"correo"`
 	FechaNacimiento  string `json:"fechaNacimiento"`
 	Direccion        string `json:"direccion"`
-	Password          string `json:"password"`
+	Password         string `json:"password"`
 }
 
 func (cc *ControladorClientes) Registrar(c *fiber.Ctx) error {
@@ -39,13 +37,13 @@ func (cc *ControladorClientes) Registrar(c *fiber.Ctx) error {
 	if err := c.BodyParser(&entrada); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "JSON invalido")
 	}
-	cuerpo, _ := json.Marshal(map[string]any{
+	contenido := map[string]any{
 		"firstName": entrada.Nombres, "lastName": entrada.Apellidos,
 		"documentId": entrada.Documento, "documentPhotoUrl": entrada.FotoDocumentoURL,
 		"email": entrada.Correo, "birthDate": entrada.FechaNacimiento,
 		"address": entrada.Direccion, "password": entrada.Password,
-	})
-	return cc.enviar(c, http.MethodPost, "/api/v1/customers/register", cuerpo, false)
+	}
+	return cc.enviar(c, events.ComandoRegistrarCliente, contenido)
 }
 
 func (cc *ControladorClientes) Activar(c *fiber.Ctx) error {
@@ -53,7 +51,7 @@ func (cc *ControladorClientes) Activar(c *fiber.Ctx) error {
 	if token == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "token requerido")
 	}
-	return cc.enviar(c, http.MethodGet, "/api/v1/customers/activate?token="+url.QueryEscape(token), nil, false)
+	return cc.enviar(c, events.ComandoActivarCliente, map[string]string{"token": token})
 }
 
 func (cc *ControladorClientes) Login(c *fiber.Ctx) error {
@@ -72,8 +70,7 @@ func (cc *ControladorClientes) Login(c *fiber.Ctx) error {
 	if usuario == "" || entrada.Password == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "usuario y password son requeridos")
 	}
-	cuerpo, _ := json.Marshal(map[string]string{"username": usuario, "password": entrada.Password})
-	respuesta, err := cc.solicitar(c, http.MethodPost, "/api/v1/customers/login", cuerpo, false)
+	respuesta, err := cc.solicitar(c, events.ComandoLoginCliente, map[string]string{"username": usuario, "password": entrada.Password})
 	if err != nil {
 		return err
 	}
@@ -96,7 +93,7 @@ func (cc *ControladorClientes) Login(c *fiber.Ctx) error {
 }
 
 func (cc *ControladorClientes) Perfil(c *fiber.Ctx) error {
-	respuesta, err := cc.solicitar(c, http.MethodGet, "/api/v1/customers/me", nil, true)
+	respuesta, err := cc.solicitar(c, events.ComandoPerfilCliente, map[string]any{"idCliente": idCliente(c)})
 	if err != nil {
 		return err
 	}
@@ -119,11 +116,12 @@ func (cc *ControladorClientes) ActualizarPerfil(c *fiber.Ctx) error {
 	if err := c.BodyParser(&entrada); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "JSON invalido")
 	}
-	cuerpo, _ := json.Marshal(map[string]string{
-		"address": entrada.Direccion, "email": entrada.Correo,
+	contenido := map[string]any{
+		"idCliente": idCliente(c),
+		"address":   entrada.Direccion, "email": entrada.Correo,
 		"documentPhotoUrl": entrada.FotoDocumentoURL,
-	})
-	respuesta, err := cc.solicitar(c, http.MethodPut, "/api/v1/customers/me", cuerpo, true)
+	}
+	respuesta, err := cc.solicitar(c, events.ComandoActualizarCliente, contenido)
 	if err != nil {
 		return err
 	}
@@ -153,8 +151,7 @@ func (cc *ControladorClientes) Listar(c *fiber.Ctx) error {
 	if desplazamiento < 0 {
 		desplazamiento = 0
 	}
-	ruta := "/api/v1/customers/?limit=" + strconv.Itoa(limite) + "&offset=" + strconv.Itoa(desplazamiento)
-	return cc.reenviar(c, http.MethodGet, ruta, nil)
+	return cc.reenviar(c, events.ComandoListarClientes, map[string]int{"limite": limite, "desplazamiento": desplazamiento})
 }
 
 func (cc *ControladorClientes) CambiarEstado(c *fiber.Ctx) error {
@@ -162,16 +159,17 @@ func (cc *ControladorClientes) CambiarEstado(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "idCliente invalido")
 	}
-	var entrada struct{ Estado string `json:"estado"` }
+	var entrada struct {
+		Estado string `json:"estado"`
+	}
 	if c.BodyParser(&entrada) != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "JSON invalido")
 	}
-	cuerpo, _ := json.Marshal(map[string]string{"status": entrada.Estado})
-	return cc.reenviar(c, http.MethodPatch, "/api/v1/customers/"+id.String()+"/status", cuerpo)
+	return cc.reenviar(c, events.ComandoEstadoCliente, map[string]any{"idCliente": id, "estado": entrada.Estado})
 }
 
-func (cc *ControladorClientes) reenviar(c *fiber.Ctx, metodo, ruta string, cuerpo []byte) error {
-	respuesta, err := cc.solicitar(c, metodo, ruta, cuerpo, true)
+func (cc *ControladorClientes) reenviar(c *fiber.Ctx, tipo string, contenido any) error {
+	respuesta, err := cc.solicitar(c, tipo, contenido)
 	if err != nil {
 		return err
 	}
@@ -179,8 +177,8 @@ func (cc *ControladorClientes) reenviar(c *fiber.Ctx, metodo, ruta string, cuerp
 	return c.Status(respuesta.Estado).Send(respuesta.Cuerpo)
 }
 
-func (cc *ControladorClientes) enviar(c *fiber.Ctx, metodo, ruta string, cuerpo []byte, autenticar bool) error {
-	respuesta, err := cc.solicitar(c, metodo, ruta, cuerpo, autenticar)
+func (cc *ControladorClientes) enviar(c *fiber.Ctx, tipo string, contenido any) error {
+	respuesta, err := cc.solicitar(c, tipo, contenido)
 	if err != nil {
 		return err
 	}
@@ -198,24 +196,22 @@ func (cc *ControladorClientes) enviar(c *fiber.Ctx, metodo, ruta string, cuerpo 
 	return c.Status(respuesta.Estado).JSON(datos)
 }
 
-func (cc *ControladorClientes) solicitar(c *fiber.Ctx, metodo, ruta string, cuerpo []byte, autenticar bool) (customers.Respuesta, error) {
+func (cc *ControladorClientes) solicitar(c *fiber.Ctx, tipo string, contenido any) (messaging.RespuestaRPC, error) {
 	correlacion, ok := c.Locals(middleware.CorrelationLocal).(uuid.UUID)
 	if !ok || correlacion == uuid.Nil {
 		correlacion = uuid.New()
 	}
-	autorizacion := ""
-	if autenticar {
-		autorizacion = c.Get("Authorization")
-	}
-	respuesta, err := cc.cliente.Solicitar(c.UserContext(), metodo, ruta, autorizacion, correlacion.String(), cuerpo)
+	respuesta, err := cc.solicitante.Solicitar(c.UserContext(), tipo, correlacion, contenido)
 	if err != nil {
-		return customers.Respuesta{}, fiber.NewError(fiber.StatusServiceUnavailable, "customer-service no disponible")
+		return messaging.RespuestaRPC{}, fiber.NewError(fiber.StatusServiceUnavailable, "customer-service no disponible")
 	}
 	return respuesta, nil
 }
 
-func responderErrorCustomer(c *fiber.Ctx, respuesta customers.Respuesta) error {
-	var origen struct{ Error string `json:"error"` }
+func responderErrorCustomer(c *fiber.Ctx, respuesta messaging.RespuestaRPC) error {
+	var origen struct {
+		Error string `json:"error"`
+	}
 	_ = json.Unmarshal(respuesta.Cuerpo, &origen)
 	if origen.Error == "" {
 		origen.Error = "customer-service rechazo la solicitud"

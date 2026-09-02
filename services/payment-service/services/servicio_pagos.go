@@ -41,6 +41,11 @@ func (s *servicioPagos) ProcesarResultadoCuenta(ctx context.Context, m events.So
 		return ErrSolicitudInvalida
 	}
 	_, err := s.repositorio.ProcesarResultadoCuenta(ctx, m, r)
+	// La cola de eventos de cuenta es compartida con transferencias. Si la
+	// operacion no es un pago de este servicio, el evento no requiere accion.
+	if errors.Is(err, repositories.ErrPagoNoEncontrado) {
+		return nil
+	}
 	return err
 }
 func (s *servicioPagos) Consultar(ctx context.Context, id uuid.UUID) (*models.Pago, error) {

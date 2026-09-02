@@ -28,7 +28,9 @@ func (cc *CustomerController) UpdateCustomerStatus(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Identificador de cliente invalido"})
 	}
-	var input struct{ Status string `json:"status"` }
+	var input struct {
+		Status string `json:"status"`
+	}
 	if c.BodyParser(&input) != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Cuerpo de solicitud invalido"})
 	}

@@ -36,12 +36,19 @@ func NewEnvelope(eventType string, correlationID uuid.UUID, causationID *uuid.UU
 }
 
 const (
-	ComandoValidarCliente       = "cliente.validacion.solicitada"
-	EventoClienteValidado       = "cliente.validado"
-	EventoClienteRechazado      = "cliente.rechazado"
-	EventoClienteCreado         = "cliente.creado"
-	EventoClienteActivado       = "cliente.activado"
-	EventoCorreoActivacion      = "notificacion.correo-activacion.solicitado"
+	ComandoValidarCliente    = "cliente.validacion.solicitada"
+	EventoClienteValidado    = "cliente.validado"
+	EventoClienteRechazado   = "cliente.rechazado"
+	EventoClienteCreado      = "cliente.creado"
+	EventoClienteActivado    = "cliente.activado"
+	EventoCorreoActivacion   = "notificacion.correo-activacion.solicitado"
+	ComandoRegistrarCliente  = "cliente.registro.solicitado"
+	ComandoActivarCliente    = "cliente.activacion.solicitada"
+	ComandoLoginCliente      = "cliente.login.solicitado"
+	ComandoPerfilCliente     = "cliente.perfil.solicitado"
+	ComandoActualizarCliente = "cliente.actualizacion.solicitada"
+	ComandoListarClientes    = "cliente.listado.solicitado"
+	ComandoEstadoCliente     = "cliente.estado.solicitado"
 )
 
 type SolicitudValidacionCliente struct {

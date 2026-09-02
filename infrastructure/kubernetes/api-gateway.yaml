@@ -30,8 +30,6 @@ spec:
             - configMapRef: { name: bank-usac-config }
           env:
             - { name: PUERTO_HTTP, value: "8080" }
-            - { name: URL_CUSTOMER_SERVICE, value: "http://customer-service:8081" }
-            - { name: URL_NOTIFICATION_AUDIT_SERVICE, value: "http://notification-audit-service:8085" }
             - name: URL_RABBITMQ
               valueFrom: { secretKeyRef: { name: bank-usac-secrets, key: URL_RABBITMQ } }
             - name: JWT_SECRET

@@ -7,8 +7,8 @@ import (
 	"errors"
 	"time"
 
-	"bank-usac/service-customer/models"
 	"bank-usac/service-customer/events"
+	"bank-usac/service-customer/models"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"

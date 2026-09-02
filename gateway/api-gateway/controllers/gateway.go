@@ -29,7 +29,7 @@ func NuevoGateway(p Publicador, o *operations.Store, r *responses.Gestor, t time
 
 type entradaCuenta struct {
 	TipoCuenta string    `json:"tipoCuenta"`
-	IDCliente uuid.UUID `json:"idCliente"`
+	IDCliente  uuid.UUID `json:"idCliente"`
 }
 type entradaPago struct {
 	IDCuentaOrigen uuid.UUID `json:"idCuentaOrigen"`

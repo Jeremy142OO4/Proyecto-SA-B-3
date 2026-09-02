@@ -37,7 +37,7 @@ func main() {
 	controller := controllers.NewCustomerController(svc)
 
 	// 3. Conexión RabbitMQ y Outbox Worker
-	rabbit, err := messaging.NewRabbitMQClient(cfg.RabbitMQURL, repo)
+	rabbit, err := messaging.NewRabbitMQClient(cfg.RabbitMQURL, repo, svc)
 	if err != nil {
 		log.Fatalf("Fallo al conectar a RabbitMQ: %v", err)
 	}

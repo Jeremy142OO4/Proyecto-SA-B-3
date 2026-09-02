@@ -67,7 +67,9 @@ func validarJWT(token string, secreto []byte) (Claims, bool) {
 	if json.Unmarshal(cuerpo, &claims) != nil || claims.Subject == "" || !rolValido(claims.Role) || claims.Expires <= time.Now().Unix() {
 		return Claims{}, false
 	}
-	if _, err := uuid.Parse(claims.Subject); err != nil { return Claims{}, false }
+	if _, err := uuid.Parse(claims.Subject); err != nil {
+		return Claims{}, false
+	}
 	return claims, true
 }
 

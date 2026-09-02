@@ -3,7 +3,7 @@ import { RespuestaLogin } from '../types/auth';
 
 export const servicioAuth = {
   login: (usuario: string, password: string) =>
-    clienteApi.publicar<RespuestaLogin>('/clientes/login', { usuario, password }),
+    clienteApi.publicar<RespuestaLogin>('/clientes/login', { username: usuario, password }),
 
   registrar: (datos: {
     nombres: string;

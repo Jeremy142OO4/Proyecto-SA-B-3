@@ -16,7 +16,7 @@ import (
 )
 
 type publicadorFalso struct {
-	mensaje   events.SobreMensaje
+	mensaje    events.SobreMensaje
 	respuestas *responses.Gestor
 }
 
