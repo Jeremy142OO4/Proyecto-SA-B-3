@@ -32,7 +32,28 @@
 ![Caso Expandido CUS-01](../Imagenes/Diagrama%20-%20CUS01.png)
 
 ---
+### Caso de Uso: Actualizar datos del cliente
 
+#### Diagrama de caso de uso
+
+![Caso Expandido CUS-02](../Imagenes/Diagrama%20-%20CDUCSU02.png)
+
+| Campo | Descripción |
+|---|---|
+| **ID Caso de Uso** | CDU-CUS-02 |
+| **Nombre** | Actualizar datos del cliente |
+| **Módulo al que pertenece** | Customer Service |
+| **Actor Principal** | Cliente / Cajero Receptor |
+| **RF cubiertos** | RF-03 |
+| **Precondiciones** | - El actor debe haber iniciado sesión.<br>- El cliente debe estar registrado.<br>- El Cliente solo puede modificar sus propios datos.<br>- El Cajero Receptor debe poseer permisos para actualizar los datos solicitados. |
+| **Postcondiciones** | - Los datos válidos quedan actualizados en Customer Service.<br>- Los datos no incluidos en la solicitud conservan su valor anterior.<br>- Se conserva el identificador único del cliente. |
+| **Escenario Principal** | 1. El actor selecciona **Actualizar datos del cliente**.<br>2. El sistema identifica al cliente correspondiente.<br>3. Customer Service muestra los datos que pueden modificarse.<br>4. El actor ingresa la información actualizada.<br>5. El sistema verifica los permisos del actor.<br>6. El sistema valida el formato y la coherencia de los datos.<br>7. Customer Service almacena los cambios.<br>8. El sistema confirma que la actualización fue realizada. |
+| **Escenario Alternativo** | **1. Cliente inexistente:** El sistema informa que el cliente no fue encontrado.<br><br>**2. Datos inválidos:** El sistema indica qué campos deben corregirse.<br><br>**3. Sin autorización:** La operación es rechazada porque el actor no puede modificar al cliente indicado.<br><br>**4. Datos duplicados:** Si un dato sujeto a unicidad ya pertenece a otro cliente, la actualización es rechazada.<br><br>**5. Error de persistencia:** Se conservan los datos anteriores y se informa el fallo. |
+| **Requerimientos** | - Permitir la actualización controlada de datos personales.<br>- Validar los campos modificados.<br>- Comprobar que el actor tenga permiso sobre el cliente.<br>- Evitar actualizaciones parciales cuando ocurra un error.<br>- Conservar el `customerId` original. |
+
+#### Diagrama de flujo — CDU-CUS-02
+
+![Caso Expandido CUS-01](../Imagenes/Diagrama%20-%20CUS02.png)
 ### Caso de Uso: Activar Usuario
 
 ![Caso Expandido CUS-03](../Imagenes/Diagrama%20-%20CDUCSU03.png)
@@ -54,7 +75,30 @@
 ![Caso Expandido CUS-03](../Imagenes/Diagrama%20-%20CUS03.png)
 
 ---
+### Caso de Uso: Iniciar sesión
 
+#### Diagrama de caso de uso
+
+![Caso Expandido CUS-02](../Imagenes/Diagrama%20-%20CDUCSU04.png)
+
+| Campo | Descripción |
+|---|---|
+| **ID Caso de Uso** | CDU-CUS-04 |
+| **Nombre** | Iniciar sesión |
+| **Módulo al que pertenece** | Customer Service |
+| **Actor Principal** | Administrador / Cajero Receptor / Cliente |
+| **RF cubiertos** | RF-05, RF-25 y RF-26 |
+| **Precondiciones** | - El usuario debe estar registrado.<br>- El usuario debe poseer credenciales.<br>- El sistema debe tener disponible la configuración utilizada para firmar el JWT. |
+| **Postcondiciones** | - Si las credenciales y el estado son válidos, se genera un JWT.<br>- El token contiene la identidad y el rol del usuario.<br>- El actor queda habilitado únicamente para las funciones permitidas por su rol. |
+| **Escenario Principal** | 1. El usuario selecciona **Iniciar sesión**.<br>2. El sistema solicita sus credenciales.<br>3. El usuario ingresa username o correo y contraseña.<br>4. Customer Service busca al usuario.<br>5. El servicio valida la contraseña.<br>6. El sistema comprueba que el usuario esté activo.<br>7. El servicio identifica el rol del usuario.<br>8. Customer Service genera un JWT firmado.<br>9. El sistema entrega el token y permite el acceso según el rol. |
+| **Escenario Alternativo** | **1. Credenciales inválidas:** El sistema rechaza el inicio de sesión sin indicar cuál dato falló.<br><br>**2. Usuario pendiente:** Se informa que debe completar la activación.<br><br>**3. Usuario bloqueado:** El acceso es rechazado.<br><br>**4. Error al generar el token:** No se inicia la sesión y se informa el error.<br><br>**5. Token expirado en solicitudes posteriores:** El sistema solicita iniciar sesión nuevamente. |
+| **Requerimientos** | - Autenticar usuarios mediante credenciales válidas.<br>- Generar un JWT firmado y con expiración.<br>- Incluir identidad y rol en el token.<br>- Validar el estado del usuario antes de conceder acceso.<br>- Aplicar los permisos de Administrador, Cajero Receptor y Cliente. |
+
+#### Diagrama de flujo — CDU-CUS-04
+
+![Caso Expandido CUS-03](../Imagenes/Diagrama%20-%20CUS04.png)
+
+## Casos de Uso de Account Service
 ### Caso de Uso: Gestionar Estado del Usuario
 
 ![Caso Expandido CUS-05](../Imagenes/Diagrama%20-%20CDUCSU05.png)
@@ -99,6 +143,74 @@
 ![Caso Expandido ACC-01](../Imagenes/Diagrama%20-%20ACC01.png)
 
 ---
+### Caso de Uso: Consultar saldo
+
+#### Diagrama de caso de uso — CDU-ACC-02
+
+![Caso Expandido ACC-01](../Imagenes/Diagrama%20-%20CDUACC02.png)
+
+| Campo | Descripción |
+|---|---|
+| **ID Caso de Uso** | CDU-ACC-02 |
+| **Nombre** | Consultar saldo |
+| **Módulo al que pertenece** | Account Service |
+| **Actor Principal** | Cliente / Cajero Receptor |
+| **RF cubiertos** | RF-10 |
+| **Precondiciones** | - El actor debe haber iniciado sesión.<br>- La cuenta debe estar registrada.<br>- El Cliente solo puede consultar cuentas de su propiedad.<br>- El Cajero Receptor debe poseer autorización para realizar la consulta. |
+| **Postcondiciones** | - El sistema muestra el saldo actual y la moneda de la cuenta.<br>- La información financiera no es modificada.<br>- Si la cuenta no puede consultarse, no se expone información sensible. |
+| **Escenario Principal** | 1. El actor selecciona **Consultar saldo**.<br>2. El sistema solicita o recibe el identificador de la cuenta.<br>3. Account Service busca la cuenta.<br>4. El sistema valida que el actor pueda consultarla.<br>5. El servicio obtiene el saldo y la moneda.<br>6. El sistema muestra el saldo actual al actor. |
+| **Escenario Alternativo** | **1. Cuenta inexistente:** Se informa que la cuenta no fue encontrada.<br><br>**2. Sin autorización:** Se rechaza la consulta.<br><br>**3. Cuenta cerrada o bloqueada:** Se muestra el estado correspondiente junto con la información permitida.<br><br>**4. Error de consulta:** Se informa que no fue posible obtener el saldo. |
+| **Requerimientos** | - Consultar el saldo sin modificarlo.<br>- Validar la identidad y autorización del actor.<br>- Mostrar la moneda asociada.<br>- No permitir que un Cliente consulte cuentas ajenas. |
+
+#### Diagrama de flujo — CDU-ACC-02
+
+![Caso Expandido ACC-01](../Imagenes/Diagrama%20-%20ACC02.png)
+
+### Caso de Uso: Actualizar balance
+
+#### Diagrama de caso de uso — CDU-ACC-03
+
+![Caso Expandido ACC-01](../Imagenes/Diagrama%20-%20CDUACC03.png)
+
+| Campo | Descripción |
+|---|---|
+| **ID Caso de Uso** | CDU-ACC-03 |
+| **Nombre** | Actualizar balance |
+| **Módulo al que pertenece** | Account Service |
+| **Actor Principal** | Sistema |
+| **RF cubiertos** | RF-11 y RF-36 |
+| **Precondiciones** | - Debe existir una operación financiera válida.<br>- Debe existir la cuenta afectada.<br>- El mensaje debe incluir identificadores de operación y correlación.<br>- El monto debe ser mayor que cero. |
+| **Postcondiciones** | - El saldo se actualiza de forma atómica.<br>- Se registra el movimiento y los saldos anterior y nuevo.<br>- Se actualiza la última actividad de la cuenta.<br>- Se publica el resultado de la operación.<br>- El saldo nunca queda negativo. |
+| **Escenario Principal** | 1. Account Service recibe un comando financiero mediante RabbitMQ.<br>2. El servicio valida que el mensaje no haya sido procesado.<br>3. Busca la cuenta indicada.<br>4. Valida el estado de la cuenta y el monto.<br>5. Si es débito, verifica fondos suficientes.<br>6. Calcula el nuevo saldo.<br>7. Actualiza el balance de forma atómica.<br>8. Registra el movimiento de cuenta.<br>9. Actualiza la fecha de última actividad.<br>10. Publica el evento de operación completada. |
+| **Escenario Alternativo** | **1. Cuenta inexistente:** Se publica el rechazo correspondiente.<br><br>**2. Cuenta no activa:** Se rechaza el débito.<br><br>**3. Fondos insuficientes:** No se modifica el saldo y se publica el rechazo.<br><br>**4. Operación duplicada:** Se devuelve el resultado previo sin aplicar nuevamente el movimiento.<br><br>**5. Conflicto de concurrencia:** La actualización se reintenta o se rechaza sin perder consistencia.<br><br>**6. Error de persistencia:** La transacción se revierte. |
+| **Requerimientos** | - Actualizar balances únicamente por operaciones válidas.<br>- Impedir balances negativos.<br>- Garantizar atomicidad e idempotencia.<br>- Registrar cada movimiento financiero.<br>- Mantener la trazabilidad mediante `id_operacion` e `id_correlacion`. |
+
+#### Diagrama de flujo — CDU-ACC-03
+
+![Caso Expandido ACC-01](../Imagenes/Diagrama%20-%20ACC03.png)
+
+### Caso de Uso: Desactivar cuenta inactiva
+
+#### Diagrama de caso de uso — CDU-ACC-04
+
+![Caso Expandido ACC-01](../Imagenes/Diagrama%20-%20CDUACC04.png)
+
+| Campo | Descripción |
+|---|---|
+| **ID Caso de Uso** | CDU-ACC-04 |
+| **Nombre** | Desactivar cuenta inactiva |
+| **Módulo al que pertenece** | Account Service |
+| **Actor Principal** | Sistema |
+| **RF cubiertos** | RF-12 y RF-35 |
+| **Precondiciones** | - Debe ejecutarse el proceso programado de inactividad.<br>- La cuenta debe encontrarse activa.<br>- La cuenta debe tener registrada su última actividad financiera. |
+| **Postcondiciones** | - Las cuentas que cumplen todas las condiciones cambian a estado inactivo.<br>- Las cuentas que no cumplen las condiciones conservan su estado.<br>- Se registra o publica el cambio para mantener trazabilidad. |
+| **Escenario Principal** | 1. El sistema inicia el proceso programado.<br>2. Account Service busca cuentas activas candidatas.<br>3. Para cada cuenta, consulta el saldo y la última actividad.<br>4. Verifica que el saldo sea menor a Q50.00.<br>5. Verifica que hayan transcurrido al menos seis meses sin actividad.<br>6. Cambia el estado de la cuenta a inactiva.<br>7. Guarda la actualización.<br>8. Registra o publica el cambio de estado.<br>9. Continúa con la siguiente cuenta. |
+| **Escenario Alternativo** | **1. Saldo igual o mayor a Q50.00:** La cuenta permanece activa.<br><br>**2. Inactividad menor a seis meses:** La cuenta permanece activa.<br><br>**3. Cuenta bloqueada o cerrada:** No se modifica mediante este proceso.<br><br>**4. Sin fecha de actividad aplicable:** Se aplica la fecha de creación según la regla implementada o se omite la cuenta.<br><br>**5. Error en una cuenta:** Se registra el error y el proceso continúa con las demás. |
+| **Requerimientos** | - Ejecutar periódicamente la evaluación de inactividad.<br>- Exigir simultáneamente saldo menor a Q50.00 y seis meses de inactividad.<br>- Manejar los estados activa, inactiva, bloqueada y cerrada.<br>- No detener todo el proceso por el fallo de una cuenta. |
+
+#### Diagrama de flujo — CDU-ACC-04
+
+![Caso Expandido ACC-01](../Imagenes/Diagrama%20-%20ACC04.png)
 
 ## Casos de Uso de Transaction Service
 ### Caso de Uso: Realizar Transferencia
@@ -148,3 +260,26 @@
 | **Requerimientos** | - Notification & Audit Service debe permitir generar notificaciones a partir de eventos.<br>- La comunicación debe realizarse mediante mecanismos asíncronos.<br>- El servicio debe permanecer desacoplado de los demás microservicios.<br>- El procesamiento debe contemplar idempotencia.<br>- El fallo en el envío de una notificación no debe afectar directamente la operación de negocio que originó el evento.<br>- El registro formal de auditoría corresponde al `CDU-NOT-02 - Registrar evento de auditoría`. |
 
 ![Caso Expandido TRX-01](../Imagenes/Diagrama%20-%20NOT01.png)
+
+### Caso de Uso: Registrar evento de auditoría
+
+#### Diagrama de caso de uso — CDU-NOT-02
+
+![Caso Expandido NOT-01](../Imagenes/Diagrama%20-%20CDUNOT02.png)
+
+| Campo | Descripción |
+|---|---|
+| **ID Caso de Uso** | CDU-NOT-02 |
+| **Nombre** | Registrar evento de auditoría |
+| **Módulo al que pertenece** | Notification & Audit Service |
+| **Actor Principal** | Sistema |
+| **RF cubiertos** | RF-22, RF-23 y RF-24 |
+| **Precondiciones** | - Un microservicio debe haber publicado un evento en RabbitMQ.<br>- El evento debe contener un identificador, tipo, fecha y payload.<br>- Debe incluir un `correlationId` que permita relacionarlo con la operación distribuida. |
+| **Postcondiciones** | - El evento queda almacenado para fines de auditoría.<br>- Se conserva su información original relevante.<br>- El registro puede relacionarse con otros eventos mediante `correlationId`.<br>- El mismo mensaje no se registra dos veces. |
+| **Escenario Principal** | 1. Un microservicio publica un evento de dominio.<br>2. RabbitMQ entrega el evento a Notification & Audit Service.<br>3. El servicio valida el contrato del mensaje.<br>4. Comprueba que el evento no haya sido procesado.<br>5. Extrae el identificador, tipo, fecha, payload y `correlationId`.<br>6. Guarda el registro de auditoría.<br>7. Marca el mensaje como procesado.<br>8. Confirma el procesamiento al broker. |
+| **Escenario Alternativo** | **1. Evento inválido:** El mensaje se rechaza o se dirige al mecanismo de fallos.<br><br>**2. Evento duplicado:** Se reconoce sin crear otro registro.<br><br>**3. Falta `correlationId`:** El evento se registra como inválido o se rechaza según el contrato.<br><br>**4. Error de base de datos:** No se confirma el mensaje para permitir su reintento.<br><br>**5. Máximo de reintentos alcanzado:** El mensaje se envía a la cola de mensajes muertos. |
+| **Requerimientos** | - Consumir eventos de forma asíncrona.<br>- Conservar identificador, tipo, fecha, payload y `correlationId`.<br>- Garantizar idempotencia.<br>- Permitir la trazabilidad de operaciones distribuidas.<br>- Aplicar reintentos y cola de mensajes muertos cuando corresponda. |
+
+#### Diagrama de flujo — CDU-NOT-02
+
+![Caso Expandido TRX-01](../Imagenes/Diagrama%20-%20NOT02.png)
