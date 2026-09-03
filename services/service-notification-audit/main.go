@@ -36,7 +36,15 @@ func main() {
 	notifRepo := repositories.NewNotificationRepository(db)
 	idempotencyRepo := repositories.NewIdempotencyRepository(db)
 
-	auditSvc := services.NewAuditService(auditRepo, notifRepo, idempotencyRepo)
+	emailSender := services.NewSMTPEmailSender(
+		cfg.SMTPHost,
+		cfg.SMTPPort,
+		cfg.SMTPUsername,
+		cfg.SMTPAppPassword,
+		cfg.SMTPFrom,
+	)
+
+	auditSvc := services.NewAuditService(auditRepo, notifRepo, idempotencyRepo, emailSender)
 	controller := controllers.NewAuditController(auditSvc)
 
 	// 3. Conexión y Consumidor de RabbitMQ
