@@ -213,6 +213,31 @@
 ![Caso Expandido ACC-01](../Imagenes/Diagrama%20-%20ACC04.png)
 
 ## Casos de Uso de Transaction Service
+
+
+#### Diagrama de caso de uso — CDU-ACC-05
+
+![Caso Expandido ACC-05](../Imagenes/CDU-ACC-05%20-%20Caso%20de%20Uso.drawio.png)
+## CDU-ACC-05 — Consultar estado de cuenta
+
+| Campo | Descripción |
+|---|---|
+| **ID Caso de Uso** | CDU-ACC-05 |
+| **Nombre** | Consultar estado de cuenta |
+| **Módulo al que pertenece** | Account Service |
+| **Actor Principal** | Cliente / Cajero Receptor / Administrador |
+| **RF cubiertos** | RF-35 |
+| **Precondiciones** | - El usuario debe estar autenticado mediante JWT válido.<br>- La cuenta bancaria debe existir en la base de datos de Account Service.<br>- El actor debe poseer autorización (ser el titular, Cajero Receptor o Administrador). |
+| **Postcondiciones** | - Se presenta al usuario la información detallada de la cuenta: estado actual (ACTIVE, INACTIVE, BLOCKED, CLOSED), tipo de cuenta, balance actual y fecha/hora de la última actividad financiera.<br>- No se produce ninguna mutación de estado en la base de datos. |
+| **Escenario Principal** | 1. El usuario selecciona la opción **Consultar estado de cuenta** e indica la cuenta.<br>2. El API Gateway intercepta la solicitud, valida la firma y expiración del JWT y corrobora los permisos según el rol.<br>3. Account Service consulta la cuenta en su base de datos (`account_db`).<br>4. El servicio extrae el balance, estado y fecha de última actividad registrada.<br>5. El sistema entrega la información al frontend para su visualización clara. |
+| **Escenario Alternativo** | **1. Token inválido o expirado:** El sistema rechaza la petición con código 401 Unauthorized.<br><br>**2. Cuenta no perteneciente al cliente:** Si un cliente intenta ver la cuenta de otro usuario sin permisos de cajero/admin, el sistema responde 403 Forbidden.<br><br>**3. Cuenta inexistente:** El sistema informa que el identificador de cuenta no fue localizado.<br><br>**4. Cuenta inactiva o bloqueada:** El sistema muestra los datos y añade una advertencia explícita sobre las restricciones operativas vigentes. |
+| **Requerimientos** | - Gestionar y reflejar con exactitud los 4 estados de cuenta: `ACTIVE`, `INACTIVE`, `BLOCKED`, `CLOSED`.<br>- Mantener y reportar la fecha de última actividad financiera.<br>- Garantizar el aislamiento de persistencia consultando únicamente `account_db`. |
+
+
+#### Diagrama de flujo — CDU-ACC-04
+
+![Caso flujo ACC-05](../Imagenes/CDU-ACC-05%20-%20Flujo.drawio.png)
+
 ### Caso de Uso: Realizar Transferencia
 
 ![Caso Expandido TRX-01](../Imagenes/Diagrama%20-%20CDUTRX01.png)
@@ -233,11 +258,128 @@
 
 ![Caso Expandido TRX-01](../Imagenes/Diagrama%20-%20TRX01.png)
 
+
+
+## CDU-TRX-02 — Ejecutar Saga de transferencia
+![Caso Expandido TRX-02](../Imagenes/CDU-TRX-02%20-%20Caso%20de%20Uso.drawio.png)
+
+| Campo | Descripción |
+|---|---|
+| **ID Caso de Uso** | CDU-TRX-02 |
+| **Nombre** | Ejecutar Saga de transferencia |
+| **Módulo al que pertenece** | Transaction Service |
+| **Actor Principal** | Sistema |
+| **RF cubiertos** | RF-16 y RF-38 |
+| **Precondiciones** | - Debe recibirse el evento o comando `transfer.requested` en RabbitMQ con `correlationId`, cuentas origen/destino y monto en centavos GTQ.<br>- Las cuentas origen y destino deben existir en el sistema. |
+| **Postcondiciones** | - Si el flujo es exitoso: el débito y crédito son confirmados, la transacción pasa a estado `COMPLETED` y se publica `transfer.completed`.<br>- Si el débito falla: la transacción pasa a `REJECTED` y se publica `transfer.rejected`.<br>- Si el crédito falla tras un débito exitoso: se orquesta la compensación, se reembolsa el monto a la cuenta origen, el estado final pasa a `COMPENSATED` y se emite `transfer.compensated`. |
+| **Escenario Principal** | 1. Transaction Service consume el comando `transfer.requested` desde su cola en RabbitMQ.<br>2. El servicio registra la transferencia en su base de datos con estado `PENDING`.<br>3. Transaction Service publica el comando `account.debit.requested` con el mismo `correlationId`.<br>4. Account Service ejecuta el débito y publica `account.debited`.<br>5. Transaction Service actualiza el estado a `PROCESSING` y publica el comando `account.credit.requested`.<br>6. Account Service aplica el crédito en la cuenta destino y emite `account.credited`.<br>7. Transaction Service actualiza la transacción a estado `COMPLETED` y publica el evento final `transfer.completed`.<br>8. Notification & Audit Service consume el evento para auditoría y notificación. |
+| **Escenario Alternativo** | **1. Débito rechazado (fondos insuficientes o cuenta bloqueada):** Account Service emite `account.debit.rejected`. Transaction Service marca la transferencia como `REJECTED`, emite `transfer.rejected` y finaliza sin compensar.<br><br>**2. Falla en el crédito tras débito exitoso:** Account Service emite `account.credit.rejected`. Transaction Service transiciona a `COMPENSATING` y publica `account.compensation.requested`. Account Service acredita el monto de vuelta en la cuenta origen y publica `account.compensated`. Transaction Service actualiza a `COMPENSATED`.<br><br>**3. Mensaje duplicado:** El servicio comprueba el `messageId` en su registro de idempotencia y descarta la ejecución redundante. |
+| **Requerimientos** | - Implementar Saga basada en coreografía mediante RabbitMQ.<br>- Manejar la máquina de estados completa: `PENDING`, `PROCESSING`, `COMPLETED`, `REJECTED`, `COMPENSATING`, `COMPENSATED`, `COMPENSATION_FAILED`.<br>- Propagar estrictamente el `correlationId` en cada comando y evento.<br>- Asegurar idempotencia y persistencia mediante Transactional Outbox. |
+
 ---
+
+#### Diagrama de flujo — CDU-TRX-02
+
+![Caso Flujo 02](../Imagenes/CDU-TRX-02%20-%20Flujo.drawio.png)
+
+---
+
+## CDU-TRX-03 — Consultar estado de transferencia
+![Caso Expandido TRX-03](../Imagenes/CDU-TRX-03%20-%20Caso%20de%20Uso.drawio.png)
+
+| Campo | Descripción |
+|---|---|
+| **ID Caso de Uso** | CDU-TRX-03 |
+| **Nombre** | Consultar estado de transferencia |
+| **Módulo al que pertenece** | Transaction Service |
+| **Actor Principal** | Cliente / Cajero Receptor |
+| **RF cubiertos** | RF-29 y RF-38 |
+| **Precondiciones** | - El usuario debe disponer de una sesión válida con JWT.<br>- Debe contarse con el identificador de la operación (`operationId` o `idTransferencia`). |
+| **Postcondiciones** | - El sistema retorna el estado actual de la transferencia (`PENDING`, `PROCESSING`, `COMPLETED`, `REJECTED`, `COMPENSATED`).<br>- No se altera la información financiera ni de auditoría. |
+| **Escenario Principal** | 1. El cliente o cajero solicita consultar el estado de una transferencia a través del frontend.<br>2. El API Gateway valida el token JWT y los permisos del usuario.<br>3. El API Gateway consulta a Transaction Service por el estado asociado al `operationId`.<br>4. Transaction Service verifica la existencia y pertenencia de la transferencia en su base de datos (`transaction_db`).<br>5. El servicio retorna los datos: identificador, monto, cuentas involucradas, fecha y estado actual.<br>6. El frontend renderiza el resultado permitiendo al usuario conocer el progreso de la operación asíncrona. |
+| **Escenario Alternativo** | **1. Operación no encontrada:** Se responde con error 404 indicando que el identificador no corresponde a ninguna transferencia registrada.<br><br>**2. Usuario no autorizado:** Si el cliente autenticado no es el emisor de la transferencia, el sistema deniega el acceso con 403 Forbidden.<br><br>**3. Operación en curso:** Si el estado es `PENDING` o `PROCESSING`, el frontend mantiene una consulta periódica (polling) hasta alcanzar un estado final. |
+| **Requerimientos** | - Permitir el monitoreo del ciclo de vida asíncrono originado por respuestas `202 Accepted`.<br>- Validar estrictamente la pertenencia del recurso según la identidad contenida en el JWT.<br>- Consultar exclusivamente la persistencia de Transaction Service. |
+
+
+---
+
+#### Diagrama de flujo — CDU-TRX-03
+
+![Caso Flujo 03](../Imagenes/CDU-TRX-03%20-%20Flujo.drawio.png)
+
+
+## CDU-TRX-04 — Consultar historial de transacciones
+![Caso Expandido TRX-04](../Imagenes/CDU-TRX-04%20-%20Caso%20de%20Uso.drawio.png)
+
+| Campo | Descripción |
+|---|---|
+| **ID Caso de Uso** | CDU-TRX-04 |
+| **Nombre** | Consultar historial de transacciones |
+| **Módulo al que pertenece** | Transaction Service |
+| **Actor Principal** | Cliente |
+| **RF cubiertos** | RF-40 |
+| **Precondiciones** | - El cliente debe estar autenticado con un token JWT válido.<br>- El cliente debe poseer al menos una cuenta bancaria asociada a su perfil. |
+| **Postcondiciones** | - Se entrega un listado paginado y cronológico de todas las transferencias donde el cliente figure como emisor o receptor.<br>- Los datos son exclusivamente de lectura. |
+| **Escenario Principal** | 1. El cliente accede a la pestaña de **Historial de Transferencias** en la aplicación web.<br>2. El API Gateway valida la sesión y propaga la identidad del cliente extraída del JWT.<br>3. Transaction Service consulta en `transaction_db` todas las transacciones asociadas a las cuentas del cliente.<br>4. El servicio ordena los registros de manera descendente por fecha (`occurredAt`).<br>5. El frontend recibe la colección de transacciones y renderiza la tabla con montos, fechas, cuentas y estados finales. |
+| **Escenario Alternativo** | **1. Sesión caducada:** El frontend redirige a la pantalla de inicio de sesión.<br><br>**2. Sin transferencias previas:** El sistema responde exitosamente con un arreglo vacío y la interfaz muestra el mensaje informativo "No hay transferencias registradas".<br><br>**3. Error de conexión:** Se despliega un mensaje amigable solicitando reintentar la consulta sin exponer detalles internos de la base de datos. |
+| **Requerimientos** | - Filtrar estrictamente las operaciones para que ningún cliente pueda visualizar transferencias de terceros.<br>- Proveer orden cronológico y soporte para paginación.<br>- Desplegar montos convertidos a formato legible a partir de centavos en GTQ. |
+
+
+---
+
+#### Diagrama de flujo — CDU-TRX-04
+
+![Caso Flujo 04](../Imagenes/CDU-TRX-04%20-%20Flujo.drawio.png)
+
+
 ## Casos de Uso de Payment Service
 
+## CDU-PAY-01 — Procesar pago
+![Caso Expandido PAY-01](../Imagenes/CDU-PAY-01%20-%20Caso%20de%20Uso.drawio.png)
+
+| Campo | Descripción |
+|---|---|
+| **ID Caso de Uso** | CDU-PAY-01 |
+| **Nombre** | Procesar pago |
+| **Módulo al que pertenece** | Payment Service |
+| **Actor Principal** | Cliente / Cajero Receptor |
+| **RF cubiertos** | RF-17, RF-18, RF-19, RF-20 y RF-39 |
+| **Precondiciones** | - El usuario debe estar autenticado en el sistema.<br>- La cuenta de débito debe existir, estar activa y pertenecer al cliente.<br>- Los datos del servicio y monto deben cumplir las validaciones de formato. |
+| **Postcondiciones** | - Si el pago es exitoso: el balance de la cuenta queda debitado, el pago se registra en estado `COMPLETADO` y se publica el evento de confirmación.<br>- Si falla la llamada externa: se compensa el débito en la cuenta y el pago queda en estado `RECHAZADO`.<br>- Se emiten los eventos de auditoría correspondientes. |
+| **Escenario Principal** | 1. El usuario selecciona **Nuevo Pago**, ingresa la cuenta origen, tipo de pago (`INTERNO` o `EXTERNO`), proveedor/servicio y monto.<br>2. El sistema valida el formato de entrada y el API Gateway responde con `202 Accepted` conteniendo el `operationId`.<br>3. Payment Service registra el pago en su base de datos con estado `PROCESANDO`.<br>4. Payment Service publica el comando de débito `cuenta.debito.solicitado` por RabbitMQ con `correlationId`.<br>5. Account Service valida fondos, realiza el débito y emite `cuenta.debitada`.<br>6. Si el pago es `EXTERNO`, Payment Service invoca la API / pasarela externa correspondiente.<br>7. Al confirmarse el pago externo (o en caso de pago `INTERNO` inmediato), Payment Service actualiza el estado a `COMPLETADO`.<br>8. El servicio emite el evento de pago completado y el usuario es notificado del éxito. |
+| **Escenario Alternativo** | **1. Fondos insuficientes en la cuenta:** Account Service emite `cuenta.debito.rechazada`. Payment Service marca el pago como `RECHAZADO` y finaliza.<br><br>**2. Fallo o Timeout en el proveedor externo:** Si la pasarela externa falla o no responde dentro del tiempo límite, Payment Service transiciona a `COMPENSANDO`, publica `cuenta.compensacion.solicitada` hacia Account Service para restituir los fondos y finalmente marca el pago como `RECHAZADO`.<br><br>**3. Datos de servicio inválidos:** El sistema valida antes de publicar y rechaza la solicitud de inmediato. |
+| **Requerimientos** | - Soportar tipos de pagos `INTERNO` y `EXTERNO`.<br>- Gestionar los estados: `PROCESANDO`, `COMPLETADO`, `COMPENSANDO`, `RECHAZADO`.<br>- Manejar fallos externos mediante compensación asíncrona hacia Account Service.<br>- Garantizar persistencia con Outbox e idempotencia operativa. |
+
+---
+
+#### Diagrama de flujo — CDU-PAY-01
+
+![Caso Flujo 01](../Imagenes/CDU-PAY-01%20-%20Flujo.drawio.png)
 
 
+## CDU-PAY-02 — Consultar pagos
+![Caso Expandido PAY-02](../Imagenes/CDU-PAY-02%20-%20Caso%20de%20Uso.drawio.png)
+
+
+| Campo | Descripción |
+|---|---|
+| **ID Caso de Uso** | CDU-PAY-02 |
+| **Nombre** | Consultar pagos |
+| **Módulo al que pertenece** | Payment Service |
+| **Actor Principal** | Cliente / Cajero Receptor |
+| **RF cubiertos** | RF-29, RF-39 y RF-40 |
+| **Precondiciones** | - El usuario debe estar autenticado con token JWT válido.<br>- Para consulta individual, se debe proporcionar el `idPago` u `operationId`. Para listado general, se requiere la identidad del cliente. |
+| **Postcondiciones** | - Se entrega el detalle del pago individual o el listado histórico de pagos asociados al actor.<br>- La operación es de sólo lectura. |
+| **Escenario Principal** | 1. El usuario solicita consultar su historial de pagos o el estado de un pago específico desde el frontend.<br>2. El API Gateway valida el JWT y comprueba las reglas de autorización.<br>3. Payment Service realiza la búsqueda en `payment_db` filtrando por el ID de pago o por las cuentas del cliente.<br>4. Payment Service recupera los registros: identificador, tipo (`INTERNO`/`EXTERNO`), proveedor, monto, estado actual y fecha de creación.<br>5. El sistema entrega la información y el frontend la presenta en la tabla o tarjeta de detalle de pago. |
+| **Escenario Alternativo** | **1. Pago no encontrado:** El sistema responde con código 404 indicando que el registro no existe.<br><br>**2. Consulta no autorizada:** Si el cliente intenta consultar un pago perteneciente a otro usuario, se responde 403 Forbidden.<br><br>**3. Sin pagos previos:** Se responde con lista vacía y el frontend muestra el mensaje descriptivo correspondiente. |
+| **Requerimientos** | - Consultar estado de operaciones individuales originadas de forma asíncrona.<br>- Listar historial financiero de pagos del cliente.<br>- Consultar exclusivamente la persistencia de Payment Service (`payment_db`). |
+
+
+---
+
+#### Diagrama de flujo — CDU-PAY-02
+
+![Caso Flujo 02](../Imagenes/CDU-TRX-02%20-%20Flujo.drawio.png)
 ---
 
 ## Casos de Uso de Notification & Audit Service
