@@ -1,6 +1,6 @@
 # C4 - Contenedores
 
-![Diagrama de contenedores de Bank USAC](../Imagenes/Diagrama_Arquitectura.drawio.png)
+![Diagrama de contenedores de Bank USAC](../Imagenes/DiagramaArquitectura.png)
 
 ## Propósito
 
