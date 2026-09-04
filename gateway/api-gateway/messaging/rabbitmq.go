@@ -115,9 +115,9 @@ func ConsumirRespuestas(c *amqp.Connection, ops *operations.Store, gestor *respo
 }
 func estadoOperacion(t string) string {
 	switch t {
-	case "cuenta.creada", "pago.completado", "transferencia.completada":
+	case "cuenta.creada", "cuenta.acreditada", "pago.completado", "transferencia.completada":
 		return "COMPLETADO"
-	case "cuenta.creacion.rechazada", "pago.rechazado", "transferencia.rechazada":
+	case "cuenta.creacion.rechazada", "cuenta.credito.rechazado", "pago.rechazado", "transferencia.rechazada":
 		return "RECHAZADO"
 	case "pago.procesando", "transferencia.procesando":
 		return "PROCESANDO"

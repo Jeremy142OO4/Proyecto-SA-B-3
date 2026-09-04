@@ -6,6 +6,8 @@ Documento maestro de análisis, arquitectura, implementación, pruebas y operaci
 
 ## Índice
 
+- [Manual técnico](manual-tecnico.md)
+
 - [Análisis](#análisis)
   - [Requisitos funcionales](#requisitos-funcionales)
   - [Matriz básica de trazabilidad](#matriz-básica-de-trazabilidad)

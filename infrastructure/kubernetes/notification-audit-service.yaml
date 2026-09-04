@@ -44,6 +44,16 @@ spec:
                 secretKeyRef:
                   name: bank-usac-secrets
                   key: JWT_SECRET
+            - name: SMTP_HOST
+              valueFrom: { secretKeyRef: { name: bank-usac-secrets, key: SMTP_HOST } }
+            - name: SMTP_PORT
+              valueFrom: { secretKeyRef: { name: bank-usac-secrets, key: SMTP_PORT } }
+            - name: SMTP_USERNAME
+              valueFrom: { secretKeyRef: { name: bank-usac-secrets, key: SMTP_USERNAME } }
+            - name: SMTP_APP_PASSWORD
+              valueFrom: { secretKeyRef: { name: bank-usac-secrets, key: SMTP_APP_PASSWORD } }
+            - name: SMTP_FROM
+              valueFrom: { secretKeyRef: { name: bank-usac-secrets, key: SMTP_FROM } }
           resources:
             requests:
               memory: "64Mi"

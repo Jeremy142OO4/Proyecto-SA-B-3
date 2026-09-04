@@ -34,6 +34,7 @@ func Registrar(app *fiber.App, g *controllers.Gateway, clientes *controllers.Con
 	autenticadas.Get("/cuentas", middleware.AutorizarRoles("CLIENTE"), g.ListarCuentas)
 	autenticadas.Get("/cuentas/:idCuenta", middleware.AutorizarRoles("CLIENTE"), g.ConsultarCuenta)
 	autenticadas.Get("/cuentas/:idCuenta/movimientos", middleware.AutorizarRoles("CLIENTE"), g.ListarMovimientos)
+	autenticadas.Post("/cuentas/:idCuenta/deposito", middleware.AutorizarRoles("CLIENTE"), g.Depositar)
 	autenticadas.Get("/pagos", middleware.AutorizarRoles("CLIENTE"), g.ListarPagos)
 	autenticadas.Post("/pagos", middleware.AutorizarRoles("CLIENTE"), g.CrearPago)
 	autenticadas.Get("/pagos/:idPago", middleware.AutorizarRoles("CLIENTE"), g.ConsultarPago)
