@@ -12,6 +12,20 @@ if [ -z "${DRIVER_MINIKUBE:-}" ]; then
 fi
 
 cd "$RAIZ_PROYECTO"
+# Cargar únicamente la configuración local disponible para el envío de correo.
+# El JWT y las URLs de base de datos se controlan por variables del despliegue.
+if [ -f services/service-notification-audit/.env ]; then
+  JWT_SECRET_DESPLIEGUE="${JWT_SECRET-}"
+  set -a
+  . services/service-notification-audit/.env
+  set +a
+  if [ -n "$JWT_SECRET_DESPLIEGUE" ]; then
+    JWT_SECRET="$JWT_SECRET_DESPLIEGUE"
+  else
+    unset JWT_SECRET
+  fi
+  unset JWT_SECRET_DESPLIEGUE
+fi
 if command -v podman >/dev/null 2>&1; then
   podman rm -f bank-usac-rabbitmq bank-usac-api-gateway bank-usac-customer-service bank-usac-account-service bank-usac-payment-service bank-usac-transaction-service bank-usac-frontend 2>/dev/null || true
 fi
@@ -40,6 +54,11 @@ kubectl -n bank-usac create secret generic bank-usac-secrets \
   --from-literal=URL_BASE_DATOS_TRANSACCIONES="postgres://${TRANSACCIONES_USUARIO:-transacciones_usuario}:${TRANSACCIONES_CLAVE:-transacciones_local}@host.minikube.internal:${TRANSACCIONES_PUERTO_BD:-5435}/${TRANSACCIONES_BD:-transacciones_db}?sslmode=disable" \
   --from-literal=URL_BASE_DATOS_CLIENTES="postgres://${CLIENTES_USUARIO:-customer_user}:${CLIENTES_CLAVE:-customer_password}@host.minikube.internal:${CLIENTES_PUERTO_BD:-5432}/${CLIENTES_BD:-customer_db}?sslmode=disable" \
   --from-literal=URL_BASE_DATOS_AUDITORIA="postgres://${AUDITORIA_USUARIO:-audit_user}:${AUDITORIA_CLAVE:-audit_password}@host.minikube.internal:${AUDITORIA_PUERTO_BD:-5436}/${AUDITORIA_BD:-audit_db}?sslmode=disable" \
+  --from-literal=SMTP_HOST="${SMTP_HOST:-smtp.gmail.com}" \
+  --from-literal=SMTP_PORT="${SMTP_PORT:-587}" \
+  --from-literal=SMTP_USERNAME="${SMTP_USERNAME:-}" \
+  --from-literal=SMTP_APP_PASSWORD="${SMTP_APP_PASSWORD:-}" \
+  --from-literal=SMTP_FROM="${SMTP_FROM:-}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 kubectl apply -k infrastructure/kubernetes

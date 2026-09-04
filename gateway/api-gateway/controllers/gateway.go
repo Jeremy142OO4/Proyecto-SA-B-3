@@ -75,6 +75,26 @@ func (g *Gateway) CrearPago(c *fiber.Ctx) error {
 	id := uuid.New()
 	return g.aceptar(c, events.ComandoProcesarPago, id, events.SolicitudPago{IDPago: id, IDCliente: idCliente(c), IDCuentaOrigen: e.IDCuentaOrigen, Beneficiario: strings.TrimSpace(e.Beneficiario), Concepto: strings.TrimSpace(e.Concepto), MontoCentavos: e.MontoCentavos, TipoPago: tipo})
 }
+
+func (g *Gateway) Depositar(c *fiber.Ctx) error {
+	idCuenta, err := uuid.Parse(c.Params("idCuenta"))
+	if err != nil || idCuenta == uuid.Nil {
+		return fiber.NewError(422, "idCuenta inválido")
+	}
+	if err := g.validarPropiedadCuenta(c, idCuenta); err != nil {
+		return err
+	}
+	var entrada struct {
+		MontoCentavos int64 `json:"montoCentavos"`
+	}
+	if c.BodyParser(&entrada) != nil || entrada.MontoCentavos <= 0 {
+		return fiber.NewError(422, "montoCentavos debe ser mayor que cero")
+	}
+	id := uuid.New()
+	return g.aceptar(c, events.ComandoDepositar, id, events.SolicitudDeposito{
+		IDCuenta: idCuenta, IDOperacion: id, MontoCentavos: entrada.MontoCentavos,
+	})
+}
 func (g *Gateway) Transferir(c *fiber.Ctx) error {
 	var e entradaTransferencia
 	if c.BodyParser(&e) != nil {

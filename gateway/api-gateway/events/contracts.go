@@ -7,6 +7,7 @@ const (
 	ComandoListarCuentas           = "cuenta.historial.solicitado"
 	ComandoConsultarCuenta         = "cuenta.consulta.solicitada"
 	ComandoMovimientos             = "cuenta.movimientos.solicitados"
+	ComandoDepositar               = "cuenta.credito.solicitado"
 	ComandoProcesarPago            = "pago.procesamiento.solicitado"
 	ComandoConsultarPago           = "pago.consulta.solicitada"
 	ComandoHistorialPagos          = "pago.historial.solicitado"
@@ -44,6 +45,11 @@ type SolicitudMovimientos struct {
 	IDCuenta       uuid.UUID `json:"idCuenta"`
 	Limite         int       `json:"limite"`
 	Desplazamiento int       `json:"desplazamiento"`
+}
+type SolicitudDeposito struct {
+	IDCuenta      uuid.UUID `json:"idCuenta"`
+	IDOperacion   uuid.UUID `json:"idOperacion"`
+	MontoCentavos int64     `json:"montoCentavos"`
 }
 type SolicitudPago struct {
 	IDPago         uuid.UUID `json:"idPago"`

@@ -1,5 +1,40 @@
 # Diagramas de casos de uso
 
+## Catálogo y distribución de CDU
+
+Cada CDU se documenta con su diagrama de caso de uso, flujo expandido, actores, precondiciones, postcondiciones y requisitos funcionales. Las validaciones internas se modelan con `include`, `extend` o escenarios alternativos del CDU principal.
+
+| ID | Microservicio | Funcionalidad | Actor principal | RF cubiertos |
+|---|---|---|---|---|
+| CDU-CUS-01 | Customer Service | Registrar cliente | Cajero Receptor | RF-01, RF-02, RF-06, RF-07, RF-31 |
+| CDU-CUS-02 | Customer Service | Actualizar datos del cliente | Cliente / Cajero Receptor | RF-03 |
+| CDU-CUS-03 | Customer Service | Activar usuario | Cliente | RF-04, RF-32, RF-33 |
+| CDU-CUS-04 | Customer Service | Iniciar sesión | Todos los roles | RF-05, RF-25, RF-26 |
+| CDU-CUS-05 | Customer Service | Gestionar estado del usuario | Administrador | RF-33 |
+| CDU-ACC-01 | Account Service | Crear cuenta bancaria | Cajero Receptor | RF-08, RF-09, RF-34 |
+| CDU-ACC-02 | Account Service | Consultar saldo | Cliente / Cajero Receptor | RF-10 |
+| CDU-ACC-03 | Account Service | Actualizar balance | Sistema | RF-11, RF-36 |
+| CDU-ACC-04 | Account Service | Desactivar cuenta inactiva | Sistema | RF-12, RF-35 |
+| CDU-ACC-05 | Account Service | Consultar estado de cuenta | Cliente / Cajero / Administrador | RF-35 |
+| CDU-TRX-01 | Transaction Service | Realizar transferencia | Cliente / Cajero Receptor | RF-13, RF-14, RF-15, RF-37 |
+| CDU-TRX-02 | Transaction Service | Ejecutar Saga de transferencia | Sistema | RF-16, RF-38 |
+| CDU-TRX-03 | Transaction Service | Consultar estado de transferencia | Cliente / Cajero Receptor | RF-29, RF-38 |
+| CDU-TRX-04 | Transaction Service | Consultar historial de transacciones | Cliente | RF-40 |
+| CDU-PAY-01 | Payment Service | Procesar pago | Cliente / Cajero Receptor | RF-17, RF-18, RF-19, RF-20, RF-39 |
+| CDU-PAY-02 | Payment Service | Consultar pagos | Cliente / Cajero Receptor | RF-29, RF-39, RF-40 |
+| CDU-NOT-01 | Notification & Audit Service | Enviar notificación | Sistema | RF-21, RF-32 |
+| CDU-NOT-02 | Notification & Audit Service | Registrar evento de auditoría | Sistema | RF-22, RF-23, RF-24 |
+
+### Distribución entre integrantes
+
+| Integrante | CDU asignados | Total |
+|---|---|---:|
+| Integrante 1 | CDU-CUS-01, CDU-CUS-03, CDU-CUS-05, CDU-ACC-01, CDU-TRX-01, CDU-NOT-01 | 6 |
+| Integrante 2 | CDU-CUS-02, CDU-CUS-04, CDU-ACC-02, CDU-ACC-03, CDU-ACC-04, CDU-NOT-02 | 6 |
+| Integrante 3 | CDU-ACC-05, CDU-TRX-02, CDU-TRX-03, CDU-TRX-04, CDU-PAY-01, CDU-PAY-02 | 6 |
+
+Las relaciones con otros microservicios se representan como sistemas externos al límite del CDU; no se dibujan relaciones directas entre bases de datos independientes.
+
 ## Casos de Uso de Alto Nivel y Expandidos
 
 ### Diagram de CDU de Alto nivel
@@ -98,7 +133,7 @@
 
 ![Caso Expandido CUS-03](../Imagenes/Diagrama%20-%20CUS04.png)
 
-## Casos de Uso de Account Service
+## Casos de Uso de Customer Service
 ### Caso de Uso: Gestionar Estado del Usuario
 
 ![Caso Expandido CUS-05](../Imagenes/Diagrama%20-%20CDUCSU05.png)

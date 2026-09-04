@@ -2,8 +2,8 @@
 
 La ejecución está separada según el requisito del proyecto:
 
-- **Docker/Podman Compose:** PostgreSQL de cuentas, PostgreSQL de pagos y sus migraciones.
-- **Kubernetes/Minikube:** RabbitMQ, Account Service, Payment Service y frontend.
+- **Docker/Podman Compose:** las cinco bases PostgreSQL (clientes, cuentas, transacciones, pagos y auditoría) y sus migraciones.
+- **Kubernetes/Minikube:** RabbitMQ, API Gateway, los cinco microservicios y el frontend.
 
 Así, las bases de datos permanecen fuera del clúster de Kubernetes.
 
@@ -19,7 +19,7 @@ Desde la raíz del repositorio:
 docker compose up -d
 ```
 
-Quedan disponibles PostgreSQL de Account Service en el puerto `5433` y PostgreSQL de Payment Service en el `5434`. Los contenedores de migración terminan con código cero después de aplicar el esquema.
+Quedan disponibles PostgreSQL de Customer Service en el puerto `5432`, Account Service en `5433`, Payment Service en `5434`, Transaction Service en `5435` y Notification & Audit Service en `5436`. Los contenedores de migración terminan con código cero después de aplicar cada esquema.
 
 ## Despliegue Kubernetes
 
@@ -40,7 +40,7 @@ Para exponer temporalmente los componentes en la máquina anfitriona:
 
 El script de despliegue ya ejecuta este paso automáticamente. Los componentes quedan disponibles únicamente en `localhost`, mediante los puertos `3000`, `8082`, `8084` y `15672`.
 
-El frontend reserva el nombre interno `api-gateway:8080`. Cuando el integrante responsable despliegue el Gateway debe reemplazar el Service `ExternalName` por el Deployment y Service reales del Gateway.
+El frontend reserva el nombre interno `api-gateway:8080` para el proxy hacia el Gateway. Las solicitudes de negocio externas entran por el frontend; los servicios de aplicación no se exponen como puntos de entrada públicos.
 
 ## Limpieza
 
