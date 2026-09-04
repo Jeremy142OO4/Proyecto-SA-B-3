@@ -17,6 +17,10 @@ El diagrama de contenedores (C4, nivel 2) descompone el sistema Bank USAC en las
 - **Notification & Audit Service:** consume eventos, envía correos de activación mediante SMTP y conserva auditoría, trazabilidad e historial de notificaciones.
 - **RabbitMQ:** broker AMQP con exchanges de comandos, eventos, respuestas y fallidos; cada consumidor posee una cola durable y DLQ.
 
+## Relación con las vistas generales
+
+Esta vista corresponde a la arquitectura general de contenedores del sistema. El diagrama de contexto (`c4-contexto.md`) muestra únicamente actores, Bank USAC y sistemas externos; el diagrama de despliegue (`despliegue.md`) muestra dónde se ejecutan estos contenedores. Las bases de datos se mantienen separadas por microservicio y no se conectan entre sí.
+
 ## Persistencia y comunicación
 
 Cada microservicio es propietario de una base PostgreSQL independiente ubicada fuera del clúster de Kubernetes. No existen consultas directas ni llaves foráneas entre bases. La comunicación de negocio entre microservicios es asíncrona mediante RabbitMQ; los puertos HTTP internos se reservan para salud y operación.

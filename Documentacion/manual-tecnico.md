@@ -50,6 +50,8 @@ docker compose ps
 
 Compose levanta RabbitMQ y las bases PostgreSQL. Las migraciones de cada servicio se ejecutan mediante sus contenedores de migración. Las bases se exponen en los puertos 5432 (clientes), 5433 (cuentas), 5434 (pagos), 5435 (transacciones) y 5436 (auditoría).
 
+Cada componente de aplicación dispone de un Dockerfile reproducible: `services/service-customer`, `services/account-service`, `services/transaction-service`, `services/payment-service`, `services/service-notification-audit`, `gateway/api-gateway` y `frontend/bank-usac-web`. Las imágenes se construyen durante el despliegue de Kubernetes; Compose se reserva para RabbitMQ y PostgreSQL.
+
 ## 6. Despliegue en Kubernetes
 
 El script integral construye las imágenes, inicia Minikube, crea el Secret, aplica los manifiestos y espera el estado de cada Deployment:
@@ -136,8 +138,9 @@ El flujo mínimo de aceptación es: login TELLER, registro, envío SMTP, activac
 
 ## 12. Documentación relacionada
 
+- Requisitos y alcance: `analisis/requisitos-funcionales.md`, `requisitos-no-funcionales.md` y `funcionalidades-complementarias.md`.
 - Arquitectura: `arquitectura/c4-contexto.md`, `c4-contenedores.md`, `c4-componentes.md` y `despliegue.md`.
 - Dominio: `dominio/modelo-dominio.md`, `dominio/contextos-delimitados.md` y diagramas ER.
 - Eventos: `eventos/catalogo-eventos.md` y `eventos/contratos-eventos.md`.
 - Saga y SRE: `saga/saga-transferencia.md` y `sre/sli.md`, `slo.md`, `sla.md`.
-- Casos de uso y secuencias: `uml/casos-de-uso.md` y los diagramas de secuencia.
+- Casos de uso y secuencias: `uml/casos-de-uso.md`, `uml/matriz-diagramas.md` y los diagramas de secuencia.
