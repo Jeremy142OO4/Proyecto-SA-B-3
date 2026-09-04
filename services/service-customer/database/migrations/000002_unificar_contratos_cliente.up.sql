@@ -1,0 +1,17 @@
+ALTER TABLE customers DROP CONSTRAINT IF EXISTS customers_role_check;
+ALTER TABLE customers DROP CONSTRAINT IF EXISTS customers_status_check;
+
+UPDATE customers SET role = 'CLIENTE' WHERE role = 'CUSTOMER';
+UPDATE customers SET status = CASE status
+    WHEN 'PENDING_ACTIVATION' THEN 'PENDIENTE_ACTIVACION'
+    WHEN 'ACTIVE' THEN 'ACTIVO'
+    WHEN 'BLOCKED' THEN 'BLOQUEADO'
+    ELSE status
+END;
+
+ALTER TABLE customers
+    ADD CONSTRAINT customers_role_check CHECK (role IN ('ADMIN', 'TELLER', 'CLIENTE'));
+ALTER TABLE customers
+    ALTER COLUMN status SET DEFAULT 'PENDIENTE_ACTIVACION';
+ALTER TABLE customers
+    ADD CONSTRAINT customers_status_check CHECK (status IN ('PENDIENTE_ACTIVACION', 'ACTIVO', 'BLOQUEADO'));

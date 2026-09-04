@@ -1,0 +1,179 @@
+name: bank-usac-databases
+
+# Las bases de datos permanecen fuera de Kubernetes por requisito del proyecto.
+services:
+  postgres-cuentas:
+    image: docker.io/library/postgres:17-alpine
+    container_name: bank-usac-postgres-cuentas
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${CUENTAS_BD:-cuentas_db}
+      POSTGRES_USER: ${CUENTAS_USUARIO:-cuentas_usuario}
+      POSTGRES_PASSWORD: ${CUENTAS_CLAVE:-cuentas_local}
+    ports:
+      - "${CUENTAS_PUERTO_BD:-5433}:5432"
+    volumes:
+      - datos_postgres_cuentas:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  migraciones-cuentas:
+    image: docker.io/migrate/migrate:v4.18.3
+    container_name: bank-usac-migraciones-cuentas
+    restart: "no"
+    depends_on:
+      postgres-cuentas:
+        condition: service_healthy
+    volumes:
+      - ./services/account-service/database/migrations:/migrations:ro,Z
+    command:
+      - -path=/migrations
+      - -database=postgres://${CUENTAS_USUARIO:-cuentas_usuario}:${CUENTAS_CLAVE:-cuentas_local}@postgres-cuentas:5432/${CUENTAS_BD:-cuentas_db}?sslmode=disable
+      - up
+
+  postgres-pagos:
+    image: docker.io/library/postgres:17-alpine
+    container_name: bank-usac-postgres-pagos
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PAGOS_BD:-pagos_db}
+      POSTGRES_USER: ${PAGOS_USUARIO:-pagos_usuario}
+      POSTGRES_PASSWORD: ${PAGOS_CLAVE:-pagos_local}
+    ports:
+      - "${PAGOS_PUERTO_BD:-5434}:5432"
+    volumes:
+      - datos_postgres_pagos:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  migraciones-pagos:
+    image: docker.io/migrate/migrate:v4.18.3
+    container_name: bank-usac-migraciones-pagos
+    restart: "no"
+    depends_on:
+      postgres-pagos:
+        condition: service_healthy
+    volumes:
+      - ./services/payment-service/database/migrations:/migrations:ro,Z
+    command:
+      - -path=/migrations
+      - -database=postgres://${PAGOS_USUARIO:-pagos_usuario}:${PAGOS_CLAVE:-pagos_local}@postgres-pagos:5432/${PAGOS_BD:-pagos_db}?sslmode=disable
+      - up
+
+  postgres-transacciones:
+    image: docker.io/library/postgres:17-alpine
+    container_name: bank-usac-postgres-transacciones
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${TRANSACCIONES_BD:-transacciones_db}
+      POSTGRES_USER: ${TRANSACCIONES_USUARIO:-transacciones_usuario}
+      POSTGRES_PASSWORD: ${TRANSACCIONES_CLAVE:-transacciones_local}
+    ports:
+      - "${TRANSACCIONES_PUERTO_BD:-5435}:5432"
+    volumes:
+      - datos_postgres_transacciones:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  migraciones-transacciones:
+    image: docker.io/migrate/migrate:v4.18.3
+    container_name: bank-usac-migraciones-transacciones
+    restart: "no"
+    depends_on:
+      postgres-transacciones:
+        condition: service_healthy
+    volumes:
+      - ./services/transaction-service/database/migrations:/migrations:ro,Z
+    command:
+      - -path=/migrations
+      - -database=postgres://${TRANSACCIONES_USUARIO:-transacciones_usuario}:${TRANSACCIONES_CLAVE:-transacciones_local}@postgres-transacciones:5432/${TRANSACCIONES_BD:-transacciones_db}?sslmode=disable
+      - up
+
+  postgres-customer:
+    image: docker.io/library/postgres:17-alpine
+    container_name: bank-usac-postgres-clientes
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${CLIENTES_BD:-customer_db}
+      POSTGRES_USER: ${CLIENTES_USUARIO:-customer_user}
+      POSTGRES_PASSWORD: ${CLIENTES_CLAVE:-customer_password}
+    ports:
+      - "${CLIENTES_PUERTO_BD:-5432}:5432"
+    volumes:
+      - pg_customer_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  migraciones-clientes:
+    image: docker.io/migrate/migrate:v4.18.3
+    container_name: bank-usac-migraciones-clientes
+    restart: "no"
+    depends_on:
+      postgres-customer:
+        condition: service_healthy
+    volumes:
+      - ./services/service-customer/database/migrations:/migrations:ro,Z
+    command:
+      - -path=/migrations
+      - -database=postgres://${CLIENTES_USUARIO:-customer_user}:${CLIENTES_CLAVE:-customer_password}@postgres-customer:5432/${CLIENTES_BD:-customer_db}?sslmode=disable
+      - up
+
+
+  postgres-audit:
+    image: docker.io/library/postgres:15-alpine
+    container_name: bank_postgres_audit
+    environment:
+      POSTGRES_DB: audit_db
+      POSTGRES_USER: audit_user
+      POSTGRES_PASSWORD: audit_password
+    ports:
+      - "${AUDITORIA_PUERTO_BD:-5436}:5432"
+    volumes:
+      - pg_audit_data:/var/lib/postgresql/data
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  migraciones-auditoria:
+    image: docker.io/migrate/migrate:v4.18.3
+    container_name: bank-usac-migraciones-auditoria
+    restart: "no"
+    depends_on:
+      postgres-audit:
+        condition: service_healthy
+    volumes:
+      - ./services/service-notification-audit/database/migrations:/migrations:ro,Z
+    command:
+      - -path=/migrations
+      - -database=postgres://${AUDITORIA_USUARIO:-audit_user}:${AUDITORIA_CLAVE:-audit_password}@postgres-audit:5432/${AUDITORIA_BD:-audit_db}?sslmode=disable
+      - up
+
+
+volumes:
+  datos_postgres_cuentas:
+    name: bank-usac_datos_postgres_cuentas
+  datos_postgres_pagos:
+    name: bank-usac_datos_postgres_pagos
+  datos_postgres_transacciones:
+  pg_customer_data:
+  pg_audit_data:

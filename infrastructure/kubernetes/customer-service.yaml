@@ -1,0 +1,88 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: customer-service-config
+  namespace: bank-usac
+data:
+  PORT: "8081"
+  JWT_EXPIRATION_HOURS: "24"
+  ACTIVATION_LINK_BASE: "http://localhost:3000/activar"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: customer-service
+  namespace: bank-usac
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: customer-service }
+  template:
+    metadata:
+      labels: { app: customer-service }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+      initContainers:
+        - name: esperar-rabbitmq
+          image: alpine:3.22
+          command: [sh, -c, "until nc -z rabbitmq 5672; do sleep 2; done"]
+        - name: esperar-postgres-clientes
+          image: postgres:17-alpine
+          command:
+            - sh
+            - -c
+            - until pg_isready -d "$DATABASE_URL"; do sleep 2; done
+          env:
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: bank-usac-secrets, key: URL_BASE_DATOS_CLIENTES } }
+      containers:
+        - name: customer-service
+          image: bank-usac/customer-service:local
+          imagePullPolicy: Never
+          ports:
+            - { name: http, containerPort: 8081 }
+          envFrom:
+            - configMapRef: { name: customer-service-config }
+          env:
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: bank-usac-secrets, key: URL_BASE_DATOS_CLIENTES } }
+            - name: RABBITMQ_URL
+              valueFrom: { secretKeyRef: { name: bank-usac-secrets, key: URL_RABBITMQ } }
+            - name: JWT_SECRET
+              valueFrom: { secretKeyRef: { name: bank-usac-secrets, key: JWT_SECRET } }
+          startupProbe:
+            httpGet: { path: /health/live, port: http }
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /health/live, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 300m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+      terminationGracePeriodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: customer-service
+  namespace: bank-usac
+spec:
+  selector: { app: customer-service }
+  ports:
+    - { name: http, port: 8081, targetPort: http }
