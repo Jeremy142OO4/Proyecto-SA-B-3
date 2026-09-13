@@ -20,7 +20,7 @@ func (r *repoFalso) ProcesarResultado(context.Context, events.SobreMensaje, even
 func (r *repoFalso) Consultar(context.Context, uuid.UUID) (models.Transferencia, error) {
 	return r.transferencia, nil
 }
-func (r *repoFalso) Historial(context.Context, uuid.UUID, int, int) ([]models.Transferencia, error) {
+func (r *repoFalso) Historial(context.Context, events.SolicitudHistorial) ([]models.Transferencia, error) {
 	return nil, nil
 }
 func (r *repoFalso) ResponderConsulta(context.Context, events.SobreMensaje, string, any) (bool, error) {
@@ -43,5 +43,28 @@ func TestRechazaMismoOrigenDestino(t *testing.T) {
 	_, e := s.Solicitar(context.Background(), events.SobreMensaje{IDMensaje: uuid.New(), IDCorrelacion: uuid.New()}, events.SolicitudTransferencia{IDCliente: uuid.New(), IDCuentaOrigen: id, IDCuentaDestino: id, MontoCentavos: 100})
 	if e == nil {
 		t.Fatal("debio rechazar cuentas iguales")
+	}
+}
+
+func TestAceptaFiltrosDeHistorial(t *testing.T) {
+	r := &repoFalso{}
+	s := Nuevo(r)
+	cuenta := uuid.New()
+	ok, e := s.Historial(context.Background(), events.SobreMensaje{IDMensaje: uuid.New(), IDCorrelacion: uuid.New()}, events.SolicitudHistorial{
+		IDCliente: uuid.New(), IDCuenta: &cuenta, FechaDesde: "2026-01-01", FechaHasta: "2026-01-31", Estado: "APPROVED",
+	})
+	if e != nil || !ok {
+		t.Fatalf("filtros de historial rechazados: %v", e)
+	}
+}
+
+func TestRechazaRangoDeFechasInvalido(t *testing.T) {
+	r := &repoFalso{}
+	s := Nuevo(r)
+	_, e := s.Historial(context.Background(), events.SobreMensaje{IDMensaje: uuid.New(), IDCorrelacion: uuid.New()}, events.SolicitudHistorial{
+		IDCliente: uuid.New(), FechaDesde: "2026-02-01", FechaHasta: "2026-01-01",
+	})
+	if e == nil {
+		t.Fatal("debio rechazar un rango de fechas invertido")
 	}
 }

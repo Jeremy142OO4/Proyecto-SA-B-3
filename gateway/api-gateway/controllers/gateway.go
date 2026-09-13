@@ -177,7 +177,26 @@ func (g *Gateway) ConsultarPago(c *fiber.Ctx) error {
 	return g.consultar(c, events.ComandoConsultarPago, events.EventoPagoConsultado, events.SolicitudConsultarPago{IDPago: id}, propietario(c))
 }
 func (g *Gateway) ListarTransferencias(c *fiber.Ctx) error {
-	return g.consultarLista(c, events.ComandoHistorialTransferencias, events.EventoHistorialTransferencias, "transferencias")
+	solicitud := events.SolicitudHistorial{IDCliente: idCliente(c), Limite: limite(c), Desplazamiento: desplazamiento(c), Estado: strings.TrimSpace(c.Query("estado")), FechaDesde: strings.TrimSpace(c.Query("fechaDesde")), FechaHasta: strings.TrimSpace(c.Query("fechaHasta"))}
+	if valor := strings.TrimSpace(c.Query("idCuenta")); valor != "" {
+		id, e := uuid.Parse(valor)
+		if e != nil || id == uuid.Nil {
+			return fiber.NewError(400, "idCuenta invalido")
+		}
+		solicitud.IDCuenta = &id
+	}
+	return g.consultar(c, events.ComandoHistorialTransferencias, events.EventoHistorialTransferencias, solicitud, func(b json.RawMessage) (any, error) {
+		var x map[string]json.RawMessage
+		if e := json.Unmarshal(b, &x); e != nil {
+			return nil, e
+		}
+		var id uuid.UUID
+		if e := json.Unmarshal(x["idCliente"], &id); e != nil || id != idCliente(c) {
+			return nil, fiber.ErrForbidden
+		}
+		var lista any
+		return lista, json.Unmarshal(x["transferencias"], &lista)
+	})
 }
 func (g *Gateway) ConsultarTransferencia(c *fiber.Ctx) error {
 	id, e := uuid.Parse(c.Params("idTransferencia"))

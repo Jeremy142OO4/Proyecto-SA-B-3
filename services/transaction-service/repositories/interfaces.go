@@ -12,7 +12,7 @@ type Repositorio interface {
 	Iniciar(context.Context, events.SobreMensaje, models.Transferencia) (bool, error)
 	ProcesarResultado(context.Context, events.SobreMensaje, events.ResultadoMovimiento) (bool, error)
 	Consultar(context.Context, uuid.UUID) (models.Transferencia, error)
-	Historial(context.Context, uuid.UUID, int, int) ([]models.Transferencia, error)
+	Historial(context.Context, events.SolicitudHistorial) ([]models.Transferencia, error)
 	ResponderConsulta(context.Context, events.SobreMensaje, string, any) (bool, error)
 }
 type MensajeSalida struct {

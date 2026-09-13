@@ -32,6 +32,16 @@ func (p *publicadorFalso) Publicar(_ context.Context, m events.SobreMensaje) err
 			Tipo: events.EventoCuentaConsultada, Contenido: contenido,
 		})
 	}
+	if m.Tipo == events.ComandoHistorialTransferencias && p.respuestas != nil {
+		contenido, _ := json.Marshal(map[string]any{
+			"idCliente":      "11111111-1111-4111-8111-111111111111",
+			"transferencias": []any{},
+		})
+		p.respuestas.Entregar(events.SobreMensaje{
+			IDMensaje: uuid.New(), IDCorrelacion: m.IDCorrelacion,
+			Tipo: events.EventoHistorialTransferencias, Contenido: contenido,
+		})
+	}
 	return nil
 }
 func TestTransferenciaAceptada(t *testing.T) {
@@ -90,5 +100,33 @@ func TestConsultaPropagaCorrelationID(t *testing.T) {
 	}
 	if p.mensaje.IDCorrelacion.String() != "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" {
 		t.Fatalf("correlationId no propagado: %s", p.mensaje.IDCorrelacion)
+	}
+}
+
+func TestHistorialPropagaFiltros(t *testing.T) {
+	gestor := responses.Nuevo()
+	publicador := &publicadorFalso{respuestas: gestor}
+	gateway := NuevoGateway(publicador, operations.NuevoStore(), gestor, time.Second)
+	app := fiber.New()
+	app.Get("/", middleware.Correlacion, func(c *fiber.Ctx) error {
+		c.Locals("customerId", "11111111-1111-4111-8111-111111111111")
+		return gateway.ListarTransferencias(c)
+	})
+
+	peticion := httptest.NewRequest("GET", "/?idCuenta=22222222-2222-4222-8222-222222222222&fechaDesde=2026-09-01&fechaHasta=2026-09-10&estado=COMPLETADA", nil)
+	respuesta, err := app.Test(peticion)
+	if err != nil || respuesta.StatusCode != fiber.StatusOK {
+		t.Fatalf("esperaba 200: %v %d", err, respuesta.StatusCode)
+	}
+
+	var filtros events.SolicitudHistorial
+	if err = json.Unmarshal(publicador.mensaje.Contenido, &filtros); err != nil {
+		t.Fatalf("decodificar filtros publicados: %v", err)
+	}
+	if filtros.IDCuenta == nil || filtros.IDCuenta.String() != "22222222-2222-4222-8222-222222222222" {
+		t.Fatalf("cuenta no propagada: %v", filtros.IDCuenta)
+	}
+	if filtros.FechaDesde != "2026-09-01" || filtros.FechaHasta != "2026-09-10" || filtros.Estado != "COMPLETADA" {
+		t.Fatalf("filtros no propagados: %+v", filtros)
 	}
 }
