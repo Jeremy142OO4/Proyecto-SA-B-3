@@ -18,13 +18,14 @@ const (
 )
 
 type SolicitudPago struct {
-	IDPago         uuid.UUID `json:"idPago"`
-	IDCliente      uuid.UUID `json:"idCliente"`
-	IDCuentaOrigen uuid.UUID `json:"idCuentaOrigen"`
-	Beneficiario   string    `json:"beneficiario"`
-	Concepto       string    `json:"concepto"`
-	MontoCentavos  int64     `json:"montoCentavos"`
-	TipoPago       string    `json:"tipoPago"`
+	IDPago            uuid.UUID `json:"idPago"`
+	IDCliente         uuid.UUID `json:"idCliente"`
+	IDCuentaOrigen    uuid.UUID `json:"idCuentaOrigen"`
+	Beneficiario      string    `json:"beneficiario"`
+	Concepto          string    `json:"concepto"`
+	MontoCentavos     int64     `json:"montoCentavos"`
+	TipoPago          string    `json:"tipoPago"`
+	ResultadoSimulado string    `json:"resultadoSimulado,omitempty"`
 }
 type SolicitudMovimiento struct {
 	IDCuenta      uuid.UUID `json:"idCuenta"`

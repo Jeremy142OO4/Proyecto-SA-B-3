@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"strings"
 	"time"
 )
 
@@ -40,8 +39,8 @@ func (r *RepositorioPagosPostgres) Iniciar(ctx context.Context, m events.SobreMe
 		return p, false, tx.Commit(ctx)
 	}
 	ahora := time.Now().UTC()
-	p := &models.Pago{IDPago: s.IDPago, IDCliente: s.IDCliente, IDCuentaOrigen: s.IDCuentaOrigen, Beneficiario: s.Beneficiario, Concepto: s.Concepto, MontoCentavos: s.MontoCentavos, Moneda: "GTQ", TipoPago: models.TipoPago(s.TipoPago), Estado: models.EstadoPagoProcesando, IDCorrelacion: m.IDCorrelacion, FechaCreacion: ahora, FechaActualizacion: ahora}
-	_, err = tx.Exec(ctx, `INSERT INTO pagos(id_pago,id_cliente,id_cuenta_origen,beneficiario,concepto,monto_centavos,moneda,tipo_pago,estado,id_correlacion,fecha_creacion,fecha_actualizacion)VALUES($1,$2,$3,$4,$5,$6,'GTQ',$7,'PROCESANDO',$8,$9,$9)`, p.IDPago, p.IDCliente, p.IDCuentaOrigen, p.Beneficiario, p.Concepto, p.MontoCentavos, p.TipoPago, p.IDCorrelacion, ahora)
+	p := &models.Pago{IDPago: s.IDPago, IDCliente: s.IDCliente, IDCuentaOrigen: s.IDCuentaOrigen, Beneficiario: s.Beneficiario, Concepto: s.Concepto, MontoCentavos: s.MontoCentavos, Moneda: "GTQ", TipoPago: models.TipoPago(s.TipoPago), ResultadoSimulado: models.ResultadoSimulado(s.ResultadoSimulado), Estado: models.EstadoPagoProcesando, IDCorrelacion: m.IDCorrelacion, FechaCreacion: ahora, FechaActualizacion: ahora}
+	_, err = tx.Exec(ctx, `INSERT INTO pagos(id_pago,id_cliente,id_cuenta_origen,beneficiario,concepto,monto_centavos,moneda,tipo_pago,resultado_simulado,estado,id_correlacion,fecha_creacion,fecha_actualizacion)VALUES($1,$2,$3,$4,$5,$6,'GTQ',$7,$8,'PROCESANDO',$9,$10,$10)`, p.IDPago, p.IDCliente, p.IDCuentaOrigen, p.Beneficiario, p.Concepto, p.MontoCentavos, p.TipoPago, p.ResultadoSimulado, p.IDCorrelacion, ahora)
 	if err != nil {
 		return nil, false, fmt.Errorf("guardar pago: %w", err)
 	}
@@ -92,13 +91,18 @@ func (r *RepositorioPagosPostgres) ProcesarResultadoCuenta(ctx context.Context, 
 		contenido, _ := json.Marshal(pago)
 		err = insertarSalida(ctx, tx, events.EventoPagoRechazado, contenido, pago.IDCorrelacion)
 	case events.EventoCuentaDebitada:
-		if pago.TipoPago == models.TipoPagoExterno && strings.Contains(strings.ToUpper(pago.Beneficiario), "FALLO") {
+		if pago.TipoPago == models.TipoPagoExterno && pago.ResultadoSimulado != models.ResultadoExito {
 			pago.Estado = models.EstadoPagoCompensando
+			codigo := "PROVEEDOR_EXTERNO"
 			pago.MotivoRechazo = "fallo simulado del proveedor externo"
+			if pago.ResultadoSimulado == models.ResultadoTimeout {
+				codigo = "TIMEOUT_PROVEEDOR"
+				pago.MotivoRechazo = "timeout simulado del proveedor externo"
+			}
 			if err = actualizarPago(ctx, tx, pago); err != nil {
 				return false, err
 			}
-			if err = finalizarIntento(ctx, tx, pago.IDPago, "FALLIDO", "PROVEEDOR_EXTERNO", pago.MotivoRechazo); err != nil {
+			if err = finalizarIntento(ctx, tx, pago.IDPago, "FALLIDO", codigo, pago.MotivoRechazo); err != nil {
 				return false, err
 			}
 			contenido, _ := json.Marshal(events.SolicitudMovimiento{IDCuenta: pago.IDCuentaOrigen, IDOperacion: pago.IDPago, MontoCentavos: pago.MontoCentavos})
@@ -143,13 +147,13 @@ func finalizarIntento(ctx context.Context, tx pgx.Tx, idPago uuid.UUID, estado, 
 	return err
 }
 
-const columnasPago = `id_pago,id_cliente,id_cuenta_origen,beneficiario,concepto,monto_centavos,moneda,tipo_pago,estado,COALESCE(referencia_externa,''),id_correlacion,COALESCE(motivo_rechazo,''),fecha_creacion,fecha_actualizacion`
+const columnasPago = `id_pago,id_cliente,id_cuenta_origen,beneficiario,concepto,monto_centavos,moneda,tipo_pago,resultado_simulado,estado,COALESCE(referencia_externa,''),id_correlacion,COALESCE(motivo_rechazo,''),fecha_creacion,fecha_actualizacion`
 
 type scanner interface{ Scan(...any) error }
 
 func escanearPago(s scanner) (*models.Pago, error) {
 	var p models.Pago
-	err := s.Scan(&p.IDPago, &p.IDCliente, &p.IDCuentaOrigen, &p.Beneficiario, &p.Concepto, &p.MontoCentavos, &p.Moneda, &p.TipoPago, &p.Estado, &p.ReferenciaExterna, &p.IDCorrelacion, &p.MotivoRechazo, &p.FechaCreacion, &p.FechaActualizacion)
+	err := s.Scan(&p.IDPago, &p.IDCliente, &p.IDCuentaOrigen, &p.Beneficiario, &p.Concepto, &p.MontoCentavos, &p.Moneda, &p.TipoPago, &p.ResultadoSimulado, &p.Estado, &p.ReferenciaExterna, &p.IDCorrelacion, &p.MotivoRechazo, &p.FechaCreacion, &p.FechaActualizacion)
 	return &p, err
 }
 func buscarPagoTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*models.Pago, error) {

@@ -7,6 +7,7 @@ import (
 	"github.com/Proyecto-SA-B-3/payment-service/models"
 	"github.com/Proyecto-SA-B-3/payment-service/repositories"
 	"github.com/google/uuid"
+	"strings"
 )
 
 var (
@@ -32,6 +33,14 @@ func (s *servicioPagos) Procesar(ctx context.Context, m events.SobreMensaje, p e
 	}
 	if models.TipoPago(p.TipoPago) != models.TipoPagoInterno && models.TipoPago(p.TipoPago) != models.TipoPagoExterno {
 		return ErrTipoPagoInvalido
+	}
+	p.ResultadoSimulado = strings.ToUpper(strings.TrimSpace(p.ResultadoSimulado))
+	if p.ResultadoSimulado == "" || models.TipoPago(p.TipoPago) == models.TipoPagoInterno {
+		p.ResultadoSimulado = string(models.ResultadoExito)
+	}
+	resultado := models.ResultadoSimulado(p.ResultadoSimulado)
+	if resultado != models.ResultadoExito && resultado != models.ResultadoFallo && resultado != models.ResultadoTimeout {
+		return ErrSolicitudInvalida
 	}
 	_, _, err := s.repositorio.Iniciar(ctx, m, p)
 	return err

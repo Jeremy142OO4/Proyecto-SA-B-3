@@ -61,11 +61,12 @@ Las transferencias se procesan de forma asíncrona mediante RabbitMQ. La respues
 2. Seleccione la cuenta desde la que se debitará el dinero.
 3. Ingrese el beneficiario, el concepto y el monto.
 4. Seleccione el tipo de pago: **Interno** o **Externo**.
-5. Presione **Confirmar pago**.
+5. Para un pago externo, seleccione el resultado que desea simular: **Éxito**, **Fallo** o **Timeout**.
+6. Presione **Confirmar pago**.
 
 ![Nuevo pago](Imagenes/manual-nuevo-pago.png)
 
-El pago queda en estado de procesamiento mientras el servicio de pagos consume el evento. Consulte nuevamente la operación para confirmar si fue aprobada o rechazada.
+El pago queda en estado de procesamiento mientras el servicio consume los eventos. **Éxito** finaliza como `COMPLETADO`. **Fallo** y **Timeout** pasan por compensación, devuelven el monto debitado y finalizan como `RECHAZADO`. Esta selección existe para demostrar los comportamientos solicitados en el entorno académico y no representa una pasarela bancaria real.
 
 ### 3.5 Activar la cuenta por correo
 

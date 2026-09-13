@@ -32,11 +32,12 @@ type entradaCuenta struct {
 	IDCliente  uuid.UUID `json:"idCliente"`
 }
 type entradaPago struct {
-	IDCuentaOrigen uuid.UUID `json:"idCuentaOrigen"`
-	Beneficiario   string    `json:"beneficiario"`
-	Concepto       string    `json:"concepto"`
-	MontoCentavos  int64     `json:"montoCentavos"`
-	TipoPago       string    `json:"tipoPago"`
+	IDCuentaOrigen    uuid.UUID `json:"idCuentaOrigen"`
+	Beneficiario      string    `json:"beneficiario"`
+	Concepto          string    `json:"concepto"`
+	MontoCentavos     int64     `json:"montoCentavos"`
+	TipoPago          string    `json:"tipoPago"`
+	ResultadoSimulado string    `json:"resultadoSimulado"`
 }
 type entradaTransferencia struct {
 	IDCuentaOrigen  uuid.UUID `json:"idCuentaOrigen"`
@@ -66,14 +67,24 @@ func (g *Gateway) CrearPago(c *fiber.Ctx) error {
 		return fiber.NewError(400, "JSON invalido")
 	}
 	tipo := strings.ToUpper(e.TipoPago)
+	resultado := strings.ToUpper(strings.TrimSpace(e.ResultadoSimulado))
+	if resultado == "" {
+		resultado = "EXITO"
+	}
 	if e.IDCuentaOrigen == uuid.Nil || e.MontoCentavos <= 0 || strings.TrimSpace(e.Beneficiario) == "" || (tipo != "INTERNO" && tipo != "EXTERNO") {
 		return fiber.NewError(422, "datos del pago invalidos")
+	}
+	if tipo == "EXTERNO" && resultado != "EXITO" && resultado != "FALLO" && resultado != "TIMEOUT" {
+		return fiber.NewError(422, "resultadoSimulado debe ser EXITO, FALLO o TIMEOUT")
+	}
+	if tipo == "INTERNO" {
+		resultado = "EXITO"
 	}
 	if err := g.validarPropiedadCuenta(c, e.IDCuentaOrigen); err != nil {
 		return err
 	}
 	id := uuid.New()
-	return g.aceptar(c, events.ComandoProcesarPago, id, events.SolicitudPago{IDPago: id, IDCliente: idCliente(c), IDCuentaOrigen: e.IDCuentaOrigen, Beneficiario: strings.TrimSpace(e.Beneficiario), Concepto: strings.TrimSpace(e.Concepto), MontoCentavos: e.MontoCentavos, TipoPago: tipo})
+	return g.aceptar(c, events.ComandoProcesarPago, id, events.SolicitudPago{IDPago: id, IDCliente: idCliente(c), IDCuentaOrigen: e.IDCuentaOrigen, Beneficiario: strings.TrimSpace(e.Beneficiario), Concepto: strings.TrimSpace(e.Concepto), MontoCentavos: e.MontoCentavos, TipoPago: tipo, ResultadoSimulado: resultado})
 }
 
 func (g *Gateway) Depositar(c *fiber.Ctx) error {
