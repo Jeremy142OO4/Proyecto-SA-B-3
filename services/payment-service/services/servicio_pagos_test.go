@@ -12,11 +12,13 @@ import (
 
 type repoFalso struct {
 	iniciado       bool
+	solicitud      events.SolicitudPago
 	errorResultado error
 }
 
-func (r *repoFalso) Iniciar(context.Context, events.SobreMensaje, events.SolicitudPago) (*models.Pago, bool, error) {
+func (r *repoFalso) Iniciar(_ context.Context, _ events.SobreMensaje, solicitud events.SolicitudPago) (*models.Pago, bool, error) {
 	r.iniciado = true
+	r.solicitud = solicitud
 	return &models.Pago{}, true, nil
 }
 func (r *repoFalso) ProcesarResultadoCuenta(context.Context, events.SobreMensaje, events.ResultadoMovimiento) (bool, error) {
@@ -57,5 +59,26 @@ func TestRechazaMontoCero(t *testing.T) {
 	err := s.Procesar(context.Background(), events.SobreMensaje{IDMensaje: uuid.New(), IDCorrelacion: uuid.New()}, events.SolicitudPago{IDPago: uuid.New(), IDCliente: uuid.New(), IDCuentaOrigen: uuid.New(), Beneficiario: "X", Concepto: "Y", TipoPago: "INTERNO"})
 	if !errors.Is(err, ErrSolicitudInvalida) {
 		t.Fatalf("error inesperado: %v", err)
+	}
+}
+
+func TestAceptaEscenariosSimuladosDePagoExterno(t *testing.T) {
+	for _, resultado := range []string{"EXITO", "FALLO", "TIMEOUT"} {
+		t.Run(resultado, func(t *testing.T) {
+			r := &repoFalso{}
+			s := NuevoServicioPagos(r)
+			err := s.Procesar(context.Background(), events.SobreMensaje{IDMensaje: uuid.New(), IDCorrelacion: uuid.New()}, events.SolicitudPago{IDPago: uuid.New(), IDCliente: uuid.New(), IDCuentaOrigen: uuid.New(), Beneficiario: "Proveedor", Concepto: "Pago externo", MontoCentavos: 10000, TipoPago: "EXTERNO", ResultadoSimulado: resultado})
+			if err != nil || r.solicitud.ResultadoSimulado != resultado {
+				t.Fatalf("escenario %s no procesado: %v", resultado, err)
+			}
+		})
+	}
+}
+
+func TestRechazaEscenarioSimuladoDesconocido(t *testing.T) {
+	s := NuevoServicioPagos(&repoFalso{})
+	err := s.Procesar(context.Background(), events.SobreMensaje{IDMensaje: uuid.New(), IDCorrelacion: uuid.New()}, events.SolicitudPago{IDPago: uuid.New(), IDCliente: uuid.New(), IDCuentaOrigen: uuid.New(), Beneficiario: "Proveedor", Concepto: "Pago externo", MontoCentavos: 10000, TipoPago: "EXTERNO", ResultadoSimulado: "OTRO"})
+	if !errors.Is(err, ErrSolicitudInvalida) {
+		t.Fatalf("se esperaba solicitud invalida, se obtuvo: %v", err)
 	}
 }

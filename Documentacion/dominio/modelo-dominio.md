@@ -77,9 +77,11 @@ Estados admitidos:
 
 ### Pago
 
-Representa una instrucción de pago realizada desde una cuenta. Payment Service conserva el beneficiario, concepto, monto, moneda, tipo, referencia externa y estado del proceso.
+Representa una instrucción de pago realizada desde una cuenta. Payment Service conserva el beneficiario, concepto, monto, moneda, tipo, resultado externo simulado, referencia externa y estado del proceso.
 
 Los pagos pueden ser `INTERNO` o `EXTERNO` y pasan por estados como `PENDIENTE`, `PROCESANDO`, `COMPENSANDO`, `COMPLETADO` o `RECHAZADO`.
+
+En un pago externo, `resultadoSimulado` admite `EXITO`, `FALLO` y `TIMEOUT`. Un fallo o timeout posterior al débito obliga a compensar la cuenta antes de cerrar el pago como rechazado.
 
 ### Intento de pago
 

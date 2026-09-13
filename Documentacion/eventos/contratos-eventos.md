@@ -278,11 +278,22 @@ Routing key: `pago.procesamiento.solicitado`.
   "beneficiario": "Empresa de ejemplo",
   "concepto": "Pago de servicio",
   "montoCentavos": 7500,
-  "tipoPago": "EXTERNO"
+  "tipoPago": "EXTERNO",
+  "resultadoSimulado": "TIMEOUT"
 }
 ```
 
-Payment Service solicita el débito a Account Service. Después publica `pago.completado` o `pago.rechazado`.
+`resultadoSimulado` se utiliza únicamente en pagos `EXTERNO` y admite `EXITO`, `FALLO` o `TIMEOUT`. Si se omite, se utiliza `EXITO` para conservar compatibilidad con los clientes anteriores. En pagos `INTERNO` siempre se procesa como `EXITO`.
+
+Payment Service solicita el débito a Account Service y simula la respuesta del proveedor después de recibir `cuenta.debitada`:
+
+| Resultado | Estado final | Código del intento | Acción financiera |
+|---|---|---|---|
+| `EXITO` | `COMPLETADO` | `OK` | Conserva el débito y genera una referencia `EXT-*`. |
+| `FALLO` | `RECHAZADO` | `PROVEEDOR_EXTERNO` | Publica `cuenta.compensacion.solicitada` para devolver el débito. |
+| `TIMEOUT` | `RECHAZADO` | `TIMEOUT_PROVEEDOR` | Registra la ausencia de respuesta y publica la compensación. |
+
+Los casos de fallo y timeout pasan temporalmente por `COMPENSANDO`; el estado cambia a `RECHAZADO` cuando Account Service confirma `cuenta.compensada`. Finalmente se publica `pago.completado` o `pago.rechazado` mediante Outbox.
 
 ### Consultar pago
 

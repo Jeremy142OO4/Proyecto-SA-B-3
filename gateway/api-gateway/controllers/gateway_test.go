@@ -130,3 +130,29 @@ func TestHistorialPropagaFiltros(t *testing.T) {
 		t.Fatalf("filtros no propagados: %+v", filtros)
 	}
 }
+
+func TestPagoExternoPropagaResultadoSimulado(t *testing.T) {
+	gestor := responses.Nuevo()
+	publicador := &publicadorFalso{respuestas: gestor}
+	gateway := NuevoGateway(publicador, operations.NuevoStore(), gestor, time.Second)
+	app := fiber.New()
+	app.Post("/", middleware.Correlacion, func(c *fiber.Ctx) error {
+		c.Locals("customerId", "11111111-1111-4111-8111-111111111111")
+		return gateway.CrearPago(c)
+	})
+
+	peticion := httptest.NewRequest("POST", "/", strings.NewReader(`{"idCuentaOrigen":"22222222-2222-4222-8222-222222222222","beneficiario":"Proveedor externo","concepto":"Prueba","montoCentavos":1000,"tipoPago":"EXTERNO","resultadoSimulado":"TIMEOUT"}`))
+	peticion.Header.Set("Content-Type", "application/json")
+	respuesta, err := app.Test(peticion)
+	if err != nil || respuesta.StatusCode != fiber.StatusAccepted {
+		t.Fatalf("esperaba 202: %v %d", err, respuesta.StatusCode)
+	}
+
+	var solicitud events.SolicitudPago
+	if err = json.Unmarshal(publicador.mensaje.Contenido, &solicitud); err != nil {
+		t.Fatalf("decodificar pago publicado: %v", err)
+	}
+	if solicitud.ResultadoSimulado != "TIMEOUT" {
+		t.Fatalf("resultado no propagado: %+v", solicitud)
+	}
+}

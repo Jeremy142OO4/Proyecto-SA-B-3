@@ -83,6 +83,16 @@ Eventos relevantes:
 - `transferencia.solicitada`, `transferencia.completada`, `transferencia.rechazada` y eventos de compensación.
 - `pago.procesamiento.solicitado`, `pago.completado` y `pago.rechazado`.
 
+### Simulación de proveedor externo de pagos
+
+Payment Service no se conecta a una pasarela real porque la fase 2 solicita simular la integración. El comando `pago.procesamiento.solicitado` incluye `resultadoSimulado`, cuyos valores válidos son `EXITO`, `FALLO` y `TIMEOUT`.
+
+- `EXITO` completa el pago, conserva el débito y genera una referencia externa.
+- `FALLO` registra `PROVEEDOR_EXTERNO` y solicita compensar el débito.
+- `TIMEOUT` registra `TIMEOUT_PROVEEDOR` y solicita la misma compensación.
+
+El escenario queda persistido en `pagos.resultado_simulado`. La respuesta técnica se conserva en `intentos_pago.codigo_respuesta` y el detalle en `intentos_pago.detalle_error`. Esto permite demostrar los tres resultados sin depender de un proveedor externo ni de valores especiales en el nombre del beneficiario.
+
 El correo de activación es la notificación externa exigida: Customer Service genera el enlace y Notification & Audit Service lo envía por SMTP y registra el resultado `SENT` en su base.
 
 ## 8. API principal
