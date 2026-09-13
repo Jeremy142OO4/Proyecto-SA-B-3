@@ -8,12 +8,13 @@ export function PaginaCrearCuentaCliente() {
   async function enviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
     if (enviando) return;
+    const formulario = evento.currentTarget;
     const datos = new FormData(evento.currentTarget);
     setEnviando(true); setMensaje(''); setError('');
     try {
       const respuesta = await servicioCuentas.crear({idCliente: String(datos.get('idCliente')), tipoCuenta: String(datos.get('tipoCuenta'))});
       setMensaje(`Solicitud aceptada: ${respuesta.operationId}`);
-      evento.currentTarget.reset();
+      formulario.reset();
     } catch (e) { setError(e instanceof Error ? e.message : 'No fue posible solicitar la cuenta'); }
     finally { setEnviando(false); }
   }
