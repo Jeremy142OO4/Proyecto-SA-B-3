@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+patches:
+  - path: patch-configuracion-prod.yaml
+  - path: patch-configuracion-customer-prod.yaml
+images:
+  - name: bank-usac/account-service
+    newName: us-central1-docker.pkg.dev/PROJECT_ID/bank-usac/account-service
+    newTag: v2.0.0
+  - name: bank-usac/api-gateway
+    newName: us-central1-docker.pkg.dev/PROJECT_ID/bank-usac/api-gateway
+    newTag: v2.0.0
+  - name: bank-usac/customer-service
+    newName: us-central1-docker.pkg.dev/PROJECT_ID/bank-usac/customer-service
+    newTag: v2.0.0
+  - name: bank-usac/payment-service
+    newName: us-central1-docker.pkg.dev/PROJECT_ID/bank-usac/payment-service
+    newTag: v2.0.0
+  - name: bank-usac/transaction-service
+    newName: us-central1-docker.pkg.dev/PROJECT_ID/bank-usac/transaction-service
+    newTag: v2.0.0
+  - name: bank-usac/notification-audit-service
+    newName: us-central1-docker.pkg.dev/PROJECT_ID/bank-usac/notification-audit-service
+    newTag: v2.0.0
+  - name: bank-usac/frontend
+    newName: us-central1-docker.pkg.dev/PROJECT_ID/bank-usac/frontend
+    newTag: v2.0.0

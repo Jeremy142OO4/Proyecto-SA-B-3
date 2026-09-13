@@ -39,7 +39,13 @@ func (p *PublicadorOutbox) publicar(ctx context.Context) {
 	}
 	for _, s := range lista {
 		m := events.SobreMensaje{IDMensaje: s.IDMensaje, IDCorrelacion: s.IDCorrelacion, Tipo: s.TipoEvento, Version: s.VersionEvento, OcurridoEn: s.FechaCreacion, Productor: "payment-service", Contenido: json.RawMessage(s.Contenido)}
-		comando := s.TipoEvento == events.ComandoSolicitarDebito || s.TipoEvento == events.ComandoSolicitarCompensacion
+		// Los mensajes de validación también deben viajar por el intercambio de
+		// comandos; de lo contrario quedan publicados como eventos y Customer /
+		// Account Service nunca los consumen.
+		comando := s.TipoEvento == events.ComandoSolicitarDebito ||
+			s.TipoEvento == events.ComandoSolicitarCompensacion ||
+			s.TipoEvento == events.ComandoValidarKYC ||
+			s.TipoEvento == events.ComandoValidarCuenta
 		if e = p.publicador.Publicar(ctx, m, comando); e != nil {
 			_ = p.repo.RegistrarFallo(ctx, s.IDMensaje)
 			continue

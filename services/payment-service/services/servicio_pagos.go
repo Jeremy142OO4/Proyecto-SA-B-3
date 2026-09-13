@@ -17,6 +17,8 @@ var (
 
 type ServicioPagos interface {
 	Procesar(context.Context, events.SobreMensaje, events.SolicitudPago) error
+	ProcesarResultadoKYC(context.Context, events.SobreMensaje, events.ResultadoValidacionKYC) error
+	ProcesarResultadoValidacionCuenta(context.Context, events.SobreMensaje, events.ResultadoValidacionCuenta) error
 	ProcesarResultadoCuenta(context.Context, events.SobreMensaje, events.ResultadoMovimiento) error
 	Consultar(context.Context, uuid.UUID) (*models.Pago, error)
 	ListarCliente(context.Context, uuid.UUID, int, int) ([]models.Pago, error)
@@ -43,6 +45,20 @@ func (s *servicioPagos) Procesar(ctx context.Context, m events.SobreMensaje, p e
 		return ErrSolicitudInvalida
 	}
 	_, _, err := s.repositorio.Iniciar(ctx, m, p)
+	return err
+}
+func (s *servicioPagos) ProcesarResultadoKYC(ctx context.Context, m events.SobreMensaje, r events.ResultadoValidacionKYC) error {
+	err := s.repositorio.ProcesarResultadoKYC(ctx, m, r)
+	if errors.Is(err, repositories.ErrPagoNoEncontrado) {
+		return nil
+	}
+	return err
+}
+func (s *servicioPagos) ProcesarResultadoValidacionCuenta(ctx context.Context, m events.SobreMensaje, r events.ResultadoValidacionCuenta) error {
+	err := s.repositorio.ProcesarResultadoValidacionCuenta(ctx, m, r)
+	if errors.Is(err, repositories.ErrPagoNoEncontrado) {
+		return nil
+	}
 	return err
 }
 func (s *servicioPagos) ProcesarResultadoCuenta(ctx context.Context, m events.SobreMensaje, r events.ResultadoMovimiento) error {

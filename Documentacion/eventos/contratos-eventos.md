@@ -339,7 +339,9 @@ Routing key: `pago.procesamiento.solicitado`.
 
 `resultadoSimulado` se utiliza únicamente en pagos `EXTERNO` y admite `EXITO`, `FALLO` o `TIMEOUT`. Si se omite, se utiliza `EXITO` para conservar compatibilidad con los clientes anteriores. En pagos `INTERNO` siempre se procesa como `EXITO`.
 
-Payment Service solicita el débito a Account Service y simula la respuesta del proveedor después de recibir `cuenta.debitada`:
+Antes de solicitar el débito, Payment Service ejecuta las validaciones de la Saga. Publica `cliente.kyc.validacion.solicitada` con el mismo `idOperacion` y espera `cliente.kyc.verificado` o `cliente.kyc.rechazado`. Si KYC es válido, publica `cuenta.transferencia.validacion.solicitada` y espera `cuenta.transferencia.validada` o `cuenta.transferencia.rechazada`. Un rechazo en cualquiera de estas etapas genera `pago.rechazado` sin mover fondos.
+
+Después de recibir ambas validaciones positivas, Payment Service solicita el débito a Account Service y simula la respuesta del proveedor después de recibir `cuenta.debitada`:
 
 | Resultado | Estado final | Código del intento | Acción financiera |
 |---|---|---|---|

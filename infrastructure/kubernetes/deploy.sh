@@ -2,7 +2,7 @@
 set -eu
 
 RAIZ_PROYECTO=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-PERFIL_MINIKUBE=${PERFIL_MINIKUBE:-bank-usac}
+PERFIL_MINIKUBE=${PERFIL_MINIKUBE:-minikube}
 if [ -z "${DRIVER_MINIKUBE:-}" ]; then
   if command -v podman >/dev/null 2>&1; then
     DRIVER_MINIKUBE=podman
@@ -35,15 +35,15 @@ if ! minikube status -p "$PERFIL_MINIKUBE" >/dev/null 2>&1; then
   minikube start -p "$PERFIL_MINIKUBE" --driver="$DRIVER_MINIKUBE"
 fi
 
-minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/account-service:local services/account-service
-minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/customer-service:local services/service-customer
-minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/payment-service:local services/payment-service
-minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/transaction-service:local services/transaction-service
-minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/api-gateway:local gateway/api-gateway
-minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/notification-audit-service:local services/service-notification-audit
-minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/frontend:local frontend/bank-usac-web
+minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/account-service:dev services/account-service
+minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/customer-service:dev services/service-customer
+minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/payment-service:dev services/payment-service
+minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/transaction-service:dev services/transaction-service
+minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/api-gateway:dev gateway/api-gateway
+minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/notification-audit-service:dev services/service-notification-audit
+minikube image build -p "$PERFIL_MINIKUBE" -t bank-usac/frontend:dev frontend/bank-usac-web
 
-kubectl apply -f infrastructure/kubernetes/namespace.yaml
+kubectl apply -f infrastructure/kubernetes/base/namespace.yaml
 kubectl -n bank-usac create secret generic bank-usac-secrets \
   --from-literal=RABBITMQ_USUARIO="${RABBITMQ_USUARIO:-bank_usac}" \
   --from-literal=RABBITMQ_CLAVE="${RABBITMQ_CLAVE:-bank_usac_local}" \

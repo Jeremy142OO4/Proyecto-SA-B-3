@@ -18,6 +18,8 @@ type MensajeSalida struct {
 }
 type RepositorioPagos interface {
 	Iniciar(context.Context, events.SobreMensaje, events.SolicitudPago) (*models.Pago, bool, error)
+	ProcesarResultadoKYC(context.Context, events.SobreMensaje, events.ResultadoValidacionKYC) error
+	ProcesarResultadoValidacionCuenta(context.Context, events.SobreMensaje, events.ResultadoValidacionCuenta) error
 	ProcesarResultadoCuenta(context.Context, events.SobreMensaje, events.ResultadoMovimiento) (bool, error)
 	BuscarPorID(context.Context, uuid.UUID) (*models.Pago, error)
 	ListarPorCliente(context.Context, uuid.UUID, int, int) ([]models.Pago, error)

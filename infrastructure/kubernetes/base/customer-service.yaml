@@ -15,6 +15,11 @@ metadata:
   namespace: bank-usac
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels: { app: customer-service }
   template:
@@ -41,8 +46,8 @@ spec:
               valueFrom: { secretKeyRef: { name: bank-usac-secrets, key: URL_BASE_DATOS_CLIENTES } }
       containers:
         - name: customer-service
-          image: bank-usac/customer-service:local
-          imagePullPolicy: Never
+          image: bank-usac/customer-service:v2.0.0
+          imagePullPolicy: IfNotPresent
           ports:
             - { name: http, containerPort: 8081 }
           envFrom:

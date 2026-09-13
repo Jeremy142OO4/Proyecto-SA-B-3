@@ -63,19 +63,27 @@ func (s *servicioCuentas) ValidarTransferencia(ctx context.Context, solicitud ev
 		resultado.Codigo, resultado.Motivo = "CUENTA_ORIGEN_INVALIDA", err.Error()
 		return resultado
 	}
-	destino, err := s.repositorio.BuscarPorID(ctx, solicitud.IDCuentaDestino)
-	if err != nil {
-		resultado.Codigo, resultado.Motivo = "CUENTA_DESTINO_INVALIDA", err.Error()
-		return resultado
-	}
-	resultado.TipoCuentaOrigen, resultado.TipoCuentaDestino = string(origen.TipoCuenta), string(destino.TipoCuenta)
+	resultado.TipoCuentaOrigen = string(origen.TipoCuenta)
 	if origen.IDCliente != solicitud.IDCliente {
 		resultado.Codigo, resultado.Motivo = "CUENTA_ORIGEN_AJENA", "la cuenta origen no pertenece al cliente"
 		return resultado
 	}
-	if origen.Estado != models.EstadoCuentaActiva || destino.Estado != models.EstadoCuentaActiva {
-		resultado.Codigo, resultado.Motivo = "CUENTA_NO_ACTIVA", "ambas cuentas deben estar activas"
+	if origen.Estado != models.EstadoCuentaActiva {
+		resultado.Codigo, resultado.Motivo = "CUENTA_NO_ACTIVA", "la cuenta origen debe estar activa"
 		return resultado
+	}
+	// Los pagos solo envían la cuenta origen; las transferencias envían ambas.
+	if solicitud.IDCuentaDestino != uuid.Nil {
+		destino, err := s.repositorio.BuscarPorID(ctx, solicitud.IDCuentaDestino)
+		if err != nil {
+			resultado.Codigo, resultado.Motivo = "CUENTA_DESTINO_INVALIDA", err.Error()
+			return resultado
+		}
+		resultado.TipoCuentaDestino = string(destino.TipoCuenta)
+		if destino.Estado != models.EstadoCuentaActiva {
+			resultado.Codigo, resultado.Motivo = "CUENTA_NO_ACTIVA", "ambas cuentas deben estar activas"
+			return resultado
+		}
 	}
 	if origen.TipoCuenta == models.TipoCuentaAhorro && origen.SaldoCentavos-solicitud.MontoCentavos < 0 {
 		resultado.Codigo, resultado.Motivo = "SALDO_MINIMO_AHORRO", "la cuenta de ahorro no puede quedar con saldo negativo"

@@ -7,6 +7,11 @@ metadata:
     app: notification-audit-service
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: notification-audit-service
@@ -21,7 +26,7 @@ spec:
           command: ["sh", "-c", "until nc -z rabbitmq 5672 && nc -z host.minikube.internal 5436; do sleep 2; done"]
       containers:
         - name: notification-audit-service
-          image: bank-usac/notification-audit-service:local
+          image: bank-usac/notification-audit-service:v2.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

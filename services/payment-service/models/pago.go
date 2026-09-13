@@ -23,11 +23,13 @@ const (
 )
 
 const (
-	EstadoPagoPendiente   EstadoPago = "PENDIENTE"
-	EstadoPagoProcesando  EstadoPago = "PROCESANDO"
-	EstadoPagoCompensando EstadoPago = "COMPENSANDO"
-	EstadoPagoCompletado  EstadoPago = "COMPLETADO"
-	EstadoPagoRechazado   EstadoPago = "RECHAZADO"
+	EstadoPagoPendiente       EstadoPago = "PENDIENTE"
+	EstadoPagoValidandoKYC    EstadoPago = "VALIDANDO_KYC"
+	EstadoPagoValidandoCuenta EstadoPago = "VALIDANDO_CUENTA"
+	EstadoPagoProcesando      EstadoPago = "PROCESANDO"
+	EstadoPagoCompensando     EstadoPago = "COMPENSANDO"
+	EstadoPagoCompletado      EstadoPago = "COMPLETADO"
+	EstadoPagoRechazado       EstadoPago = "RECHAZADO"
 )
 
 type Pago struct {

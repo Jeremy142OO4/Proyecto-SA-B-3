@@ -5,6 +5,11 @@ metadata:
   namespace: bank-usac
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels: { app: account-service }
   template:
@@ -17,8 +22,8 @@ spec:
           command: [sh, -c, "until nc -z rabbitmq 5672 && nc -z host.minikube.internal 5433; do sleep 2; done"]
       containers:
         - name: account-service
-          image: bank-usac/account-service:local
-          imagePullPolicy: Never
+          image: bank-usac/account-service:v2.0.0
+          imagePullPolicy: IfNotPresent
           ports:
             - { name: http, containerPort: 8082 }
           envFrom:

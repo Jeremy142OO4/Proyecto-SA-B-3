@@ -39,8 +39,8 @@ func (r *RepositorioPagosPostgres) Iniciar(ctx context.Context, m events.SobreMe
 		return p, false, tx.Commit(ctx)
 	}
 	ahora := time.Now().UTC()
-	p := &models.Pago{IDPago: s.IDPago, IDCliente: s.IDCliente, IDCuentaOrigen: s.IDCuentaOrigen, Beneficiario: s.Beneficiario, Concepto: s.Concepto, MontoCentavos: s.MontoCentavos, Moneda: "GTQ", TipoPago: models.TipoPago(s.TipoPago), ResultadoSimulado: models.ResultadoSimulado(s.ResultadoSimulado), Estado: models.EstadoPagoProcesando, IDCorrelacion: m.IDCorrelacion, FechaCreacion: ahora, FechaActualizacion: ahora}
-	_, err = tx.Exec(ctx, `INSERT INTO pagos(id_pago,id_cliente,id_cuenta_origen,beneficiario,concepto,monto_centavos,moneda,tipo_pago,resultado_simulado,estado,id_correlacion,fecha_creacion,fecha_actualizacion)VALUES($1,$2,$3,$4,$5,$6,'GTQ',$7,$8,'PROCESANDO',$9,$10,$10)`, p.IDPago, p.IDCliente, p.IDCuentaOrigen, p.Beneficiario, p.Concepto, p.MontoCentavos, p.TipoPago, p.ResultadoSimulado, p.IDCorrelacion, ahora)
+	p := &models.Pago{IDPago: s.IDPago, IDCliente: s.IDCliente, IDCuentaOrigen: s.IDCuentaOrigen, Beneficiario: s.Beneficiario, Concepto: s.Concepto, MontoCentavos: s.MontoCentavos, Moneda: "GTQ", TipoPago: models.TipoPago(s.TipoPago), ResultadoSimulado: models.ResultadoSimulado(s.ResultadoSimulado), Estado: models.EstadoPagoValidandoKYC, IDCorrelacion: m.IDCorrelacion, FechaCreacion: ahora, FechaActualizacion: ahora}
+	_, err = tx.Exec(ctx, `INSERT INTO pagos(id_pago,id_cliente,id_cuenta_origen,beneficiario,concepto,monto_centavos,moneda,tipo_pago,resultado_simulado,estado,id_correlacion,fecha_creacion,fecha_actualizacion)VALUES($1,$2,$3,$4,$5,$6,'GTQ',$7,$8,'VALIDANDO_KYC',$9,$10,$10)`, p.IDPago, p.IDCliente, p.IDCuentaOrigen, p.Beneficiario, p.Concepto, p.MontoCentavos, p.TipoPago, p.ResultadoSimulado, p.IDCorrelacion, ahora)
 	if err != nil {
 		return nil, false, fmt.Errorf("guardar pago: %w", err)
 	}
@@ -48,14 +48,115 @@ func (r *RepositorioPagosPostgres) Iniciar(ctx context.Context, m events.SobreMe
 	if err != nil {
 		return nil, false, fmt.Errorf("guardar intento de pago: %w", err)
 	}
-	contenido, _ := json.Marshal(events.SolicitudMovimiento{IDCuenta: p.IDCuentaOrigen, IDOperacion: p.IDPago, MontoCentavos: p.MontoCentavos})
-	if err = insertarSalida(ctx, tx, events.ComandoSolicitarDebito, contenido, m.IDCorrelacion); err != nil {
+	contenido, _ := json.Marshal(events.SolicitudValidacionKYC{IDOperacion: p.IDPago, IDCliente: p.IDCliente})
+	if err = insertarSalida(ctx, tx, events.ComandoValidarKYC, contenido, m.IDCorrelacion); err != nil {
 		return nil, false, err
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return nil, false, err
 	}
 	return p, true, nil
+}
+
+func (r *RepositorioPagosPostgres) ProcesarResultadoKYC(ctx context.Context, m events.SobreMensaje, resultado events.ResultadoValidacionKYC) error {
+	tx, err := r.conexion.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	registrado, err := tx.Exec(ctx, `INSERT INTO mensajes_procesados(id_mensaje,nombre_consumidor,tipo_mensaje,id_correlacion,resultado) VALUES($1,'payment-service.validacion-kyc',$2,$3,'{}') ON CONFLICT DO NOTHING`, m.IDMensaje, m.Tipo, m.IDCorrelacion)
+	if err != nil {
+		return err
+	}
+	if registrado.RowsAffected() == 0 {
+		return tx.Commit(ctx)
+	}
+	pago, err := buscarPagoTxBloqueado(ctx, tx, resultado.IDOperacion)
+	if errors.Is(err, ErrPagoNoEncontrado) {
+		return ErrPagoNoEncontrado
+	}
+	if err != nil {
+		return err
+	}
+	if m.Tipo == events.EventoKYCRechazado || !resultado.Valido {
+		motivo := resultado.Motivo
+		if motivo == "" {
+			motivo = "KYC_NO_VERIFICADO"
+		}
+		if _, err = tx.Exec(ctx, `UPDATE pagos SET estado='RECHAZADO',motivo_rechazo=$1,fecha_actualizacion=NOW() WHERE id_pago=$2`, motivo, pago.IDPago); err != nil {
+			return err
+		}
+		if err = finalizarIntento(ctx, tx, pago.IDPago, "RECHAZADO", "KYC_NO_VERIFICADO", motivo); err != nil {
+			return err
+		}
+		contenido, _ := json.Marshal(map[string]any{"idPago": pago.IDPago, "estado": models.EstadoPagoRechazado, "codigo": "KYC_NO_VERIFICADO", "motivo": motivo})
+		if err = insertarSalida(ctx, tx, events.EventoPagoRechazado, contenido, pago.IDCorrelacion); err != nil {
+			return err
+		}
+	} else {
+		if _, err = tx.Exec(ctx, `UPDATE pagos SET estado='VALIDANDO_CUENTA',fecha_actualizacion=NOW() WHERE id_pago=$1`, pago.IDPago); err != nil {
+			return err
+		}
+		contenido, _ := json.Marshal(events.SolicitudValidacionCuenta{IDOperacion: pago.IDPago, IDCliente: pago.IDCliente, IDCuentaOrigen: pago.IDCuentaOrigen, MontoCentavos: pago.MontoCentavos})
+		if err = insertarSalida(ctx, tx, events.ComandoValidarCuenta, contenido, pago.IDCorrelacion); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *RepositorioPagosPostgres) ProcesarResultadoValidacionCuenta(ctx context.Context, m events.SobreMensaje, resultado events.ResultadoValidacionCuenta) error {
+	tx, err := r.conexion.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	registrado, err := tx.Exec(ctx, `INSERT INTO mensajes_procesados(id_mensaje,nombre_consumidor,tipo_mensaje,id_correlacion,resultado) VALUES($1,'payment-service.validacion-cuenta',$2,$3,'{}') ON CONFLICT DO NOTHING`, m.IDMensaje, m.Tipo, m.IDCorrelacion)
+	if err != nil {
+		return err
+	}
+	if registrado.RowsAffected() == 0 {
+		return tx.Commit(ctx)
+	}
+	pago, err := buscarPagoTxBloqueado(ctx, tx, resultado.IDOperacion)
+	if errors.Is(err, ErrPagoNoEncontrado) {
+		return ErrPagoNoEncontrado
+	}
+	if err != nil {
+		return err
+	}
+	if m.Tipo == events.EventoCuentaRechazada || !resultado.Valida {
+		motivo := resultado.Motivo
+		if motivo == "" {
+			motivo = resultado.Codigo
+		}
+		if motivo == "" {
+			motivo = "CUENTA_NO_VALIDA"
+		}
+		if _, err = tx.Exec(ctx, `UPDATE pagos SET estado='RECHAZADO',motivo_rechazo=$1,fecha_actualizacion=NOW() WHERE id_pago=$2`, motivo, pago.IDPago); err != nil {
+			return err
+		}
+		codigo := resultado.Codigo
+		if codigo == "" {
+			codigo = "CUENTA_NO_VALIDA"
+		}
+		if err = finalizarIntento(ctx, tx, pago.IDPago, "RECHAZADO", codigo, motivo); err != nil {
+			return err
+		}
+		contenido, _ := json.Marshal(map[string]any{"idPago": pago.IDPago, "estado": models.EstadoPagoRechazado, "codigo": codigo, "motivo": motivo})
+		if err = insertarSalida(ctx, tx, events.EventoPagoRechazado, contenido, pago.IDCorrelacion); err != nil {
+			return err
+		}
+	} else {
+		if _, err = tx.Exec(ctx, `UPDATE pagos SET estado='PROCESANDO',fecha_actualizacion=NOW() WHERE id_pago=$1`, pago.IDPago); err != nil {
+			return err
+		}
+		contenido, _ := json.Marshal(events.SolicitudMovimiento{IDCuenta: pago.IDCuentaOrigen, IDOperacion: pago.IDPago, MontoCentavos: pago.MontoCentavos})
+		if err = insertarSalida(ctx, tx, events.ComandoSolicitarDebito, contenido, pago.IDCorrelacion); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *RepositorioPagosPostgres) ProcesarResultadoCuenta(ctx context.Context, m events.SobreMensaje, respuesta events.ResultadoMovimiento) (bool, error) {

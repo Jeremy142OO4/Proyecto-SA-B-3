@@ -95,14 +95,18 @@ Transaction Service también produce `cuenta.debito.solicitado`, `cuenta.credito
 | Routing key | Clasificación | Productor principal | Consumidor principal | Propósito |
 |---|---|---|---|---|
 | `pago.procesamiento.solicitado` | Comando | API Gateway | Payment Service | Registrar e iniciar un pago. |
+| `cliente.kyc.validacion.solicitada` | Comando Fase 2 | Payment Service | Customer Service | Validar KYC del cliente antes de debitar un pago. |
+| `cuenta.transferencia.validacion.solicitada` | Comando Fase 2 | Payment Service | Account Service | Validar propiedad, estado, tipo y fondos de la cuenta de pago. |
 | `pago.consulta.solicitada` | Comando de consulta | API Gateway | Payment Service | Consultar un pago. |
 | `pago.historial.solicitado` | Comando de consulta | API Gateway | Payment Service | Consultar los pagos de un cliente. |
 | `pago.completado` | Evento | Payment Service | API Gateway y Notification & Audit Service | Informar la finalización exitosa de un pago. |
 | `pago.rechazado` | Evento | Payment Service | API Gateway y Notification & Audit Service | Informar el rechazo o compensación del pago. |
 | `pago.consultado` | Respuesta asíncrona | Payment Service | API Gateway | Entregar el detalle de un pago. |
 | `pago.historial.consultado` | Respuesta asíncrona | Payment Service | API Gateway | Entregar el historial de pagos. |
+| `cliente.kyc.verificado` / `cliente.kyc.rechazado` | Evento de respuesta | Customer Service | Payment Service | Autorizar o rechazar el pago según el estado KYC. |
+| `cuenta.transferencia.validada` / `cuenta.transferencia.rechazada` | Evento de respuesta | Account Service | Payment Service | Autorizar o rechazar el débito del pago según las reglas de cuenta. |
 
-Payment Service produce comandos de débito y compensación para Account Service y consume `cuenta.debitada`, `cuenta.debito.rechazado` y `cuenta.compensada`.
+Payment Service primero consume las respuestas de KYC y de reglas de cuenta; sólo cuando ambas son válidas produce el comando de débito. También produce comandos de compensación y consume `cuenta.debitada`, `cuenta.debito.rechazado` y `cuenta.compensada`.
 
 ## Notification & Audit Service
 

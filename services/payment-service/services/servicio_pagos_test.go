@@ -24,6 +24,12 @@ func (r *repoFalso) Iniciar(_ context.Context, _ events.SobreMensaje, solicitud 
 func (r *repoFalso) ProcesarResultadoCuenta(context.Context, events.SobreMensaje, events.ResultadoMovimiento) (bool, error) {
 	return true, r.errorResultado
 }
+func (r *repoFalso) ProcesarResultadoKYC(context.Context, events.SobreMensaje, events.ResultadoValidacionKYC) error {
+	return r.errorResultado
+}
+func (r *repoFalso) ProcesarResultadoValidacionCuenta(context.Context, events.SobreMensaje, events.ResultadoValidacionCuenta) error {
+	return r.errorResultado
+}
 
 func TestIgnoraResultadoDeCuentaDeOtraOperacion(t *testing.T) {
 	s := NuevoServicioPagos(&repoFalso{errorResultado: repositories.ErrPagoNoEncontrado})
