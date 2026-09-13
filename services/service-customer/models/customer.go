@@ -16,10 +16,18 @@ const (
 
 type CustomerStatus string
 
+type KYCStatus string
+
 const (
 	StatusPendingActivation CustomerStatus = "PENDIENTE_ACTIVACION"
 	StatusActive            CustomerStatus = "ACTIVO"
 	StatusBlocked           CustomerStatus = "BLOQUEADO"
+)
+
+const (
+	KYCPending  KYCStatus = "PENDING"
+	KYCVerified KYCStatus = "VERIFIED"
+	KYCRejected KYCStatus = "REJECTED"
 )
 
 type Customer struct {
@@ -36,6 +44,7 @@ type Customer struct {
 	PasswordHash     string         `db:"password_hash" json:"-"`
 	Role             Role           `db:"role" json:"role"`
 	Status           CustomerStatus `db:"status" json:"status"`
+	KYCStatus        KYCStatus      `db:"kyc_status" json:"kycStatus"`
 	CreatedAt        time.Time      `db:"created_at" json:"createdAt"`
 	UpdatedAt        time.Time      `db:"updated_at" json:"updatedAt"`
 }

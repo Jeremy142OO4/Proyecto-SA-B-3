@@ -28,6 +28,7 @@ const (
 	ComandoActualizarCliente       = "cliente.actualizacion.solicitada"
 	ComandoListarClientes          = "cliente.listado.solicitado"
 	ComandoEstadoCliente           = "cliente.estado.solicitado"
+	ComandoEstadoKYC               = "cliente.kyc.estado.solicitado"
 	ComandoAuditoriaRegistros      = "auditoria.registros.solicitados"
 	ComandoAuditoriaTraza          = "auditoria.traza.solicitada"
 	ComandoAuditoriaNotificaciones = "auditoria.notificaciones.solicitadas"
@@ -74,12 +75,13 @@ type SolicitudHistorial struct {
 	Desplazamiento int        `json:"desplazamiento"`
 }
 type SolicitudTransferencia struct {
-	IDTransferencia uuid.UUID `json:"idTransferencia"`
-	IDCliente       uuid.UUID `json:"idCliente"`
-	IDCuentaOrigen  uuid.UUID `json:"idCuentaOrigen"`
-	IDCuentaDestino uuid.UUID `json:"idCuentaDestino"`
-	MontoCentavos   int64     `json:"montoCentavos"`
-	Descripcion     string    `json:"descripcion,omitempty"`
+	IDTransferencia          uuid.UUID `json:"idTransferencia"`
+	IDCliente                uuid.UUID `json:"idCliente"`
+	IDCuentaOrigen           uuid.UUID `json:"idCuentaOrigen"`
+	IDCuentaDestino          uuid.UUID `json:"idCuentaDestino"`
+	MontoCentavos            int64     `json:"montoCentavos"`
+	Descripcion              string    `json:"descripcion,omitempty"`
+	ResultadoExternoSimulado string    `json:"resultadoExternoSimulado,omitempty"`
 }
 type SolicitudConsultarTransferencia struct {
 	IDTransferencia uuid.UUID `json:"idTransferencia"`

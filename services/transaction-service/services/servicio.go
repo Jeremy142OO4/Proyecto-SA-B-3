@@ -25,8 +25,29 @@ func (s *Servicio) Solicitar(ctx context.Context, m events.SobreMensaje, p event
 		return false, ErrSolicitudInvalida
 	}
 	ahora := time.Now().UTC()
-	t := models.Transferencia{IDTransferencia: id, IDCliente: cl, IDCuentaOrigen: o, IDCuentaDestino: d, IDCorrelacion: m.IDCorrelacion, MontoCentavos: monto, Moneda: "GTQ", Descripcion: strings.TrimSpace(desc), Estado: models.Pendiente, FechaCreacion: ahora, FechaActualizacion: ahora}
+	resultadoExterno := strings.ToUpper(strings.TrimSpace(p.ResultadoExternoSimulado))
+	if resultadoExterno == "" {
+		resultadoExterno = "EXITO"
+	}
+	if resultadoExterno != "EXITO" && resultadoExterno != "FALLO" && resultadoExterno != "TIMEOUT" {
+		return false, ErrSolicitudInvalida
+	}
+	t := models.Transferencia{IDTransferencia: id, IDCliente: cl, IDCuentaOrigen: o, IDCuentaDestino: d, IDCorrelacion: m.IDCorrelacion, MontoCentavos: monto, Moneda: "GTQ", Descripcion: strings.TrimSpace(desc), Estado: models.ValidandoKYC, ResultadoExternoSimulado: resultadoExterno, FechaCreacion: ahora, FechaActualizacion: ahora}
 	return s.repo.Iniciar(ctx, m, t)
+}
+
+func (s *Servicio) ResultadoKYC(ctx context.Context, m events.SobreMensaje, p events.ResultadoValidacionKYC) (bool, error) {
+	if m.IDMensaje == uuid.Nil || m.IDCorrelacion == uuid.Nil || p.IDOperacion == uuid.Nil || p.IDCliente == uuid.Nil {
+		return false, ErrSolicitudInvalida
+	}
+	return s.repo.ProcesarResultadoKYC(ctx, m, p)
+}
+
+func (s *Servicio) ResultadoCuentas(ctx context.Context, m events.SobreMensaje, p events.ResultadoValidacionCuentas) (bool, error) {
+	if m.IDMensaje == uuid.Nil || m.IDCorrelacion == uuid.Nil || p.IDOperacion == uuid.Nil {
+		return false, ErrSolicitudInvalida
+	}
+	return s.repo.ProcesarResultadoCuentas(ctx, m, p)
 }
 func (s *Servicio) Resultado(ctx context.Context, m events.SobreMensaje, p events.ResultadoMovimiento) (bool, error) {
 	if m.IDMensaje == uuid.Nil || m.IDCorrelacion == uuid.Nil || p.IDOperacion == uuid.Nil {
@@ -75,7 +96,7 @@ func validarHistorial(p events.SolicitudHistorial) error {
 	if p.Estado != "" {
 		estado := strings.ToUpper(strings.TrimSpace(p.Estado))
 		switch estado {
-		case "PENDING", "APPROVED", "FAILED", string(models.Pendiente), string(models.Procesando), string(models.Completada), string(models.Rechazada), string(models.Compensando), string(models.Compensada), string(models.CompensacionFallida):
+		case "PENDING", "APPROVED", "FAILED", string(models.ValidandoKYC), string(models.ValidandoCuentas), string(models.Pendiente), string(models.Procesando), string(models.Completada), string(models.Rechazada), string(models.Compensando), string(models.Compensada), string(models.CompensacionFallida):
 		default:
 			return ErrSolicitudInvalida
 		}

@@ -48,3 +48,13 @@ La prueba de integración de Payment Service crea los tres escenarios contra Pos
 
 La prueba automatizada se ejecuta con `URL_BASE_DATOS_PRUEBAS` y el caso `TestIntegracionEscenariosSimulados`.
 
+## Verificación de la Saga de fase 2
+
+El caso `TestIntegracionSagaFase2` comprueba contra PostgreSQL las transiciones de KYC, validación de cuentas, débito, crédito y compensación. Se verifican tres escenarios:
+
+- `EXITO`: termina `COMPLETADA` después del crédito.
+- `FALLO`: registra `FALLO_EXTERNO` y termina `COMPENSADA`.
+- `TIMEOUT`: registra `TIMEOUT_EXTERNO` y termina `COMPENSADA`.
+
+Las pruebas integrales también deben confirmar que KYC no verificado y una cuenta origen ajena se rechazan antes del débito, que el saldo se conserva tras una compensación y que toda la traza mantiene el mismo `idCorrelacion`.
+

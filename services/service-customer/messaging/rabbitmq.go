@@ -63,7 +63,7 @@ func NewRabbitMQClient(url string, repo repositories.CustomerRepository, svc ser
 	if _, err := ch.QueueDeclare(colaComandosCliente, true, false, false, false, argumentos); err != nil {
 		return nil, err
 	}
-	for _, tipo := range []string{events.ComandoValidarCliente, events.ComandoRegistrarCliente, events.ComandoActivarCliente, events.ComandoLoginCliente, events.ComandoPerfilCliente, events.ComandoActualizarCliente, events.ComandoListarClientes, events.ComandoEstadoCliente} {
+	for _, tipo := range []string{events.ComandoValidarCliente, events.ComandoValidarKYC, events.ComandoRegistrarCliente, events.ComandoActivarCliente, events.ComandoLoginCliente, events.ComandoPerfilCliente, events.ComandoActualizarCliente, events.ComandoListarClientes, events.ComandoEstadoCliente, events.ComandoEstadoKYC} {
 		if err := ch.QueueBind(colaComandosCliente, tipo, intercambioComandos, false, nil); err != nil {
 			return nil, err
 		}
@@ -117,6 +117,13 @@ func (r *RabbitMQClient) procesarComando(ctx context.Context, sobre events.Event
 			return errors.New("solicitud de validacion invalida")
 		}
 		return r.repo.RegistrarValidacionCliente(ctx, sobre.MessageID, sobre.CorrelationID, solicitud.IDSolicitud, solicitud.IDCliente)
+	}
+	if sobre.Type == events.ComandoValidarKYC {
+		var solicitud events.SolicitudValidacionKYC
+		if json.Unmarshal(sobre.Payload, &solicitud) != nil || solicitud.IDOperacion == uuid.Nil || solicitud.IDCliente == uuid.Nil {
+			return errors.New("solicitud de validacion KYC invalida")
+		}
+		return r.repo.RegistrarValidacionKYC(ctx, sobre.MessageID, sobre.CorrelationID, solicitud.IDOperacion, solicitud.IDCliente)
 	}
 	estado, cuerpo := r.ejecutarRPC(ctx, sobre)
 	contenido, _ := json.Marshal(respuestaRPC{Estado: estado, Cuerpo: cuerpo})
@@ -217,6 +224,19 @@ func (r *RabbitMQClient) ejecutarRPC(ctx context.Context, sobre events.EventEnve
 			return errorRespuesta(400, err)
 		}
 		cliente, err := r.svc.UpdateCustomerStatus(ctx, req.IDCliente, req.Estado)
+		if err != nil {
+			return errorRespuesta(400, err)
+		}
+		return respuesta(200, cliente)
+	case events.ComandoEstadoKYC:
+		var req struct {
+			IDCliente uuid.UUID `json:"idCliente"`
+			EstadoKYC string    `json:"estadoKyc"`
+		}
+		if err := json.Unmarshal(sobre.Payload, &req); err != nil {
+			return errorRespuesta(400, err)
+		}
+		cliente, err := r.svc.UpdateCustomerKYCStatus(ctx, req.IDCliente, req.EstadoKYC)
 		if err != nil {
 			return errorRespuesta(400, err)
 		}

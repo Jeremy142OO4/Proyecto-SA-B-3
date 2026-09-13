@@ -90,3 +90,57 @@ func insertarTransferenciaPrueba(t *testing.T, conexion *pgxpool.Pool, idCliente
 		t.Fatalf("insertar transferencia de prueba: %v", err)
 	}
 }
+
+func TestIntegracionSagaFase2(t *testing.T) {
+	url := os.Getenv("URL_BASE_DATOS_PRUEBAS")
+	if url == "" {
+		t.Skip("URL_BASE_DATOS_PRUEBAS no configurada")
+	}
+	ctx := context.Background()
+	conexion, err := pgxpool.New(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conexion.Close()
+	repositorio := NuevoPostgres(conexion)
+
+	for _, escenario := range []struct {
+		resultado string
+		estado    models.Estado
+		codigo    string
+	}{{"EXITO", models.Completada, ""}, {"FALLO", models.Compensada, "FALLO_EXTERNO"}, {"TIMEOUT", models.Compensada, "TIMEOUT_EXTERNO"}} {
+		t.Run(escenario.resultado, func(t *testing.T) {
+			id, cliente, origen, destino, correlacion := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+			t.Cleanup(func() {
+				_, _ = conexion.Exec(ctx, `DELETE FROM mensajes_salida WHERE id_correlacion=$1`, correlacion)
+				_, _ = conexion.Exec(ctx, `DELETE FROM mensajes_procesados WHERE id_correlacion=$1`, correlacion)
+				_, _ = conexion.Exec(ctx, `DELETE FROM transferencias WHERE id_transferencia=$1`, id)
+			})
+			transferencia := models.Transferencia{IDTransferencia: id, IDCliente: cliente, IDCuentaOrigen: origen, IDCuentaDestino: destino, IDCorrelacion: correlacion, MontoCentavos: 100, Moneda: "GTQ", Estado: models.ValidandoKYC, ResultadoExternoSimulado: escenario.resultado, FechaCreacion: time.Now().UTC()}
+			if _, err = repositorio.Iniciar(ctx, events.SobreMensaje{IDMensaje: uuid.New(), IDCorrelacion: correlacion, Tipo: events.ComandoTransferencia}, transferencia); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = repositorio.ProcesarResultadoKYC(ctx, events.SobreMensaje{IDMensaje: uuid.New(), IDCorrelacion: correlacion, Tipo: events.EventoKYCVerificado}, events.ResultadoValidacionKYC{IDOperacion: id, IDCliente: cliente, EstadoKYC: "VERIFIED", Valido: true}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = repositorio.ProcesarResultadoCuentas(ctx, events.SobreMensaje{IDMensaje: uuid.New(), IDCorrelacion: correlacion, Tipo: events.EventoCuentasValidadas}, events.ResultadoValidacionCuentas{IDOperacion: id, IDCliente: cliente, Valida: true, TipoCuentaOrigen: "AHORRO", TipoCuentaDestino: "CORRIENTE"}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = repositorio.ProcesarResultado(ctx, events.SobreMensaje{IDMensaje: uuid.New(), IDCorrelacion: correlacion, Tipo: events.EventoDebitada}, events.ResultadoMovimiento{IDOperacion: id, IDCuenta: origen, MontoCentavos: 100}); err != nil {
+				t.Fatal(err)
+			}
+			if escenario.resultado == "EXITO" {
+				_, err = repositorio.ProcesarResultado(ctx, events.SobreMensaje{IDMensaje: uuid.New(), IDCorrelacion: correlacion, Tipo: events.EventoAcreditada}, events.ResultadoMovimiento{IDOperacion: id, IDCuenta: destino, MontoCentavos: 100})
+			} else {
+				_, err = repositorio.ProcesarResultado(ctx, events.SobreMensaje{IDMensaje: uuid.New(), IDCorrelacion: correlacion, Tipo: events.EventoCuentaCompensada}, events.ResultadoMovimiento{IDOperacion: id, IDCuenta: origen, MontoCentavos: 100})
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			obtenida, err := repositorio.Consultar(ctx, id)
+			if err != nil || obtenida.Estado != escenario.estado || obtenida.CodigoError != escenario.codigo {
+				t.Fatalf("resultado inesperado: %+v error=%v", obtenida, err)
+			}
+		})
+	}
+}

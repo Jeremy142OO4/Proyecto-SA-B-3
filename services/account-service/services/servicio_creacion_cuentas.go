@@ -23,7 +23,7 @@ func (s *servicioCreacionCuentas) SolicitarCreacion(ctx context.Context, mensaje
 		return ErrMensajeInvalido
 	}
 	tipo := models.TipoCuenta(solicitud.TipoCuenta)
-	if tipo != models.TipoCuentaMonetaria && tipo != models.TipoCuentaAhorro {
+	if tipo != models.TipoCuentaMonetaria && tipo != models.TipoCuentaAhorro && tipo != models.TipoCuentaCorriente {
 		return ErrTipoCuentaInvalido
 	}
 	_, err := s.repositorio.Iniciar(ctx, mensaje, solicitud)

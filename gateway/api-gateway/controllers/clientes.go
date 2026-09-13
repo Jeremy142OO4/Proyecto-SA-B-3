@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/Proyecto-SA-B-3/api-gateway/events"
 	"github.com/Proyecto-SA-B-3/api-gateway/messaging"
@@ -160,10 +161,14 @@ func (cc *ControladorClientes) CambiarEstado(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "idCliente invalido")
 	}
 	var entrada struct {
-		Estado string `json:"estado"`
+		Estado    string `json:"estado"`
+		EstadoKYC string `json:"estadoKyc"`
 	}
 	if c.BodyParser(&entrada) != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "JSON invalido")
+	}
+	if strings.TrimSpace(entrada.EstadoKYC) != "" {
+		return cc.reenviar(c, events.ComandoEstadoKYC, map[string]any{"idCliente": id, "estadoKyc": entrada.EstadoKYC})
 	}
 	return cc.reenviar(c, events.ComandoEstadoCliente, map[string]any{"idCliente": id, "estado": entrada.Estado})
 }

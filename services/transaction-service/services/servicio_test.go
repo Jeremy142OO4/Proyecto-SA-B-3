@@ -17,6 +17,12 @@ func (r *repoFalso) Iniciar(_ context.Context, _ events.SobreMensaje, t models.T
 func (r *repoFalso) ProcesarResultado(context.Context, events.SobreMensaje, events.ResultadoMovimiento) (bool, error) {
 	return true, nil
 }
+func (r *repoFalso) ProcesarResultadoKYC(context.Context, events.SobreMensaje, events.ResultadoValidacionKYC) (bool, error) {
+	return true, nil
+}
+func (r *repoFalso) ProcesarResultadoCuentas(context.Context, events.SobreMensaje, events.ResultadoValidacionCuentas) (bool, error) {
+	return true, nil
+}
 func (r *repoFalso) Consultar(context.Context, uuid.UUID) (models.Transferencia, error) {
 	return r.transferencia, nil
 }

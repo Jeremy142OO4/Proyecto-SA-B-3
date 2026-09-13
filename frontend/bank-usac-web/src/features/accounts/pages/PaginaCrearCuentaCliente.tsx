@@ -23,7 +23,7 @@ export function PaginaCrearCuentaCliente() {
     {mensaje && <div className="alerta">{mensaje}</div>}{error && <div className="alerta error">{error}</div>}
     <form onSubmit={enviar}>
       <label>Identificador del cliente<input name="idCliente" required minLength={36} maxLength={36} placeholder="UUID del cliente" /></label>
-      <label>Tipo de cuenta<select name="tipoCuenta" defaultValue="MONETARIA"><option value="MONETARIA">Monetaria</option><option value="AHORRO">Ahorro</option></select></label>
+      <label>Tipo de cuenta<select name="tipoCuenta" defaultValue="CORRIENTE"><option value="CORRIENTE">Corriente</option><option value="AHORRO">Ahorro</option><option value="MONETARIA">Monetaria (compatibilidad)</option></select></label>
       <button disabled={enviando}>{enviando ? 'Enviando…' : 'Solicitar creación'}</button>
     </form>
   </div>;

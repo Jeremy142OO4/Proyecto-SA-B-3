@@ -114,6 +114,21 @@ func (s *auditService) handleNotificationDispatch(
 				err,
 			)
 		}
+	case "transferencia.rechazada", "transferencia.compensada", "transferencia.compensacion.fallida":
+		estado := models.NotificationSent
+		asunto := "Transferencia bancaria no completada"
+		resumen := "La transferencia fue rechazada sin aplicar cambios definitivos."
+		if envelope.Type == "transferencia.compensada" {
+			resumen = "La transferencia fue compensada y los fondos regresaron a la cuenta origen."
+		}
+		if envelope.Type == "transferencia.compensacion.fallida" {
+			estado = models.NotificationFailed
+			asunto = "Error al compensar transferencia"
+			resumen = "La compensación requiere revisión administrativa."
+		}
+		if err := s.notificationRepo.SaveNotificationLog(ctx, &models.NotificationLog{ID: uuid.New(), CorrelationID: envelope.CorrelationID, Recipient: "accounts-involved", NotificationType: "TRANSFER_ALERT", Subject: asunto, BodySummary: resumen, Status: estado, SentAt: time.Now().UTC()}); err != nil {
+			log.Printf("[notification-audit-service] error registrando notificacion final: correlationId=%s error=%v", envelope.CorrelationID, err)
+		}
 	}
 }
 

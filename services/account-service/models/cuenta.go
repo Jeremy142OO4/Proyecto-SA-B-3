@@ -11,6 +11,7 @@ type TipoCuenta string
 const (
 	TipoCuentaMonetaria TipoCuenta = "MONETARIA"
 	TipoCuentaAhorro    TipoCuenta = "AHORRO"
+	TipoCuentaCorriente TipoCuenta = "CORRIENTE"
 )
 
 type EstadoCuenta string
