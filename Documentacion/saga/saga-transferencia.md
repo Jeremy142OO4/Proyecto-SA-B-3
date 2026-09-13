@@ -52,6 +52,19 @@ La Saga debe garantizar que una transferencia finalice en uno de estos resultado
 | `COMPENSADA` | El débito previo fue revertido correctamente. | Sí |
 | `COMPENSACION_FALLIDA` | No fue posible revertir automáticamente el débito. | Sí, requiere revisión |
 
+### Equivalencia con los estados solicitados en Fase 2
+
+La API conserva los nombres en español del modelo existente. Para consultas que lleguen con los nombres de Fase 2, Transaction Service aplica esta equivalencia:
+
+| Estado Fase 2 | Estado persistido | Interpretación |
+|---|---|---|
+| `PENDING` | `PENDIENTE`, `VALIDANDO_KYC` o `VALIDANDO_CUENTAS` | Operación aceptada que aún no termina sus validaciones. |
+| `APPROVED` | `COMPLETADA` | Transferencia aprobada y aplicada completamente. |
+| `FAILED` | `RECHAZADA`, `COMPENSADA` o `COMPENSACION_FALLIDA` | Fallo sin débito, fallo compensado o compensación pendiente de revisión. |
+| `PROCESSING` | `PROCESANDO` | Débito o crédito en ejecución. |
+
+Cada alta y cada cambio de estado se registra en `historial_estados_transferencia` mediante un trigger transaccional. La auditoría también conserva los eventos publicados con el mismo `idCorrelacion`.
+
 ## Validaciones iniciales
 
 Antes de registrar la transferencia se comprueba que:

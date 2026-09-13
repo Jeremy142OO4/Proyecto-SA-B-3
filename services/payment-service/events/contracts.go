@@ -15,6 +15,12 @@ const (
 	EventoPagoRechazado          = "pago.rechazado"
 	EventoPagoConsultado         = "pago.consultado"
 	EventoHistorialConsultado    = "pago.historial.consultado"
+	ComandoValidarKYC            = "cliente.kyc.validacion.solicitada"
+	EventoKYCVerificado          = "cliente.kyc.verificado"
+	EventoKYCRechazado           = "cliente.kyc.rechazado"
+	ComandoValidarCuenta         = "cuenta.transferencia.validacion.solicitada"
+	EventoCuentaValidada         = "cuenta.transferencia.validada"
+	EventoCuentaRechazada        = "cuenta.transferencia.rechazada"
 )
 
 type SolicitudPago struct {
@@ -31,6 +37,33 @@ type SolicitudMovimiento struct {
 	IDCuenta      uuid.UUID `json:"idCuenta"`
 	IDOperacion   uuid.UUID `json:"idOperacion"`
 	MontoCentavos int64     `json:"montoCentavos"`
+}
+type SolicitudValidacionKYC struct {
+	IDOperacion uuid.UUID `json:"idOperacion"`
+	IDCliente   uuid.UUID `json:"idCliente"`
+}
+type ResultadoValidacionKYC struct {
+	IDOperacion uuid.UUID `json:"idOperacion"`
+	IDCliente   uuid.UUID `json:"idCliente"`
+	EstadoKYC   string    `json:"estadoKyc"`
+	Valido      bool      `json:"valido"`
+	Motivo      string    `json:"motivo,omitempty"`
+}
+type SolicitudValidacionCuenta struct {
+	IDOperacion     uuid.UUID `json:"idOperacion"`
+	IDCliente       uuid.UUID `json:"idCliente"`
+	IDCuentaOrigen  uuid.UUID `json:"idCuentaOrigen"`
+	IDCuentaDestino uuid.UUID `json:"idCuentaDestino"`
+	MontoCentavos   int64     `json:"montoCentavos"`
+}
+type ResultadoValidacionCuenta struct {
+	IDOperacion       uuid.UUID `json:"idOperacion"`
+	IDCliente         uuid.UUID `json:"idCliente"`
+	Valida            bool      `json:"valida"`
+	TipoCuentaOrigen  string    `json:"tipoCuentaOrigen,omitempty"`
+	TipoCuentaDestino string    `json:"tipoCuentaDestino,omitempty"`
+	Codigo            string    `json:"codigo,omitempty"`
+	Motivo            string    `json:"motivo,omitempty"`
 }
 type ResultadoMovimiento struct {
 	IDOperacion uuid.UUID `json:"idOperacion"`

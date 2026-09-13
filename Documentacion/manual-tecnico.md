@@ -72,6 +72,14 @@ kubectl -n bank-usac port-forward svc/frontend 3000:80
 
 Después se abre `http://localhost:3000`. El Gateway escucha internamente en el puerto 8080 y RabbitMQ utiliza AMQP 5672; el panel de RabbitMQ usa 15672.
 
+### Separación de ambientes y escalamiento
+
+Los manifiestos se organizan en `infrastructure/kubernetes/base`, `overlays/dev` y `overlays/prod`. El overlay de desarrollo utiliza imágenes `bank-usac/*:dev` construidas por Minikube y conserva las bases PostgreSQL en Docker/Podman. El overlay de producción cambia las imágenes a Artifact Registry (`us-central1-docker.pkg.dev/...:<versión>`), usa `IfNotPresent` y permite que las URLs de base de datos apunten a Cloud SQL u otro PostgreSQL administrado.
+
+`payment-service` y `transaction-service` cuentan con un HorizontalPodAutoscaler (`autoscaling/v2`) configurado entre 1 y 4 réplicas, con objetivo de CPU del 80 %. Todos los Deployments de aplicación utilizan estrategia `RollingUpdate` con `maxUnavailable: 0` y `maxSurge: 1`. El script `verify-metrics-server.sh` comprueba la API de métricas y habilita el addon en Minikube; en GKE esta capacidad debe estar disponible en el clúster.
+
+Para un despliegue GKE se utiliza `infrastructure/kubernetes/deploy-gke.sh`. El script obtiene las credenciales del clúster, crea el Secret desde variables de entorno, renderiza el overlay de producción con el proyecto y versión indicados, verifica Metrics Server y espera todos los rollouts.
+
 ## 7. Comunicación y eventos
 
 El Gateway publica comandos en `banco.comandos`. Los microservicios publican eventos en `banco.eventos` mediante Outbox y consumen con confirmación manual, idempotencia y DLQ. Las respuestas correlacionadas permiten que el Gateway actualice `/api/operaciones/:id`.
@@ -95,7 +103,7 @@ El escenario queda persistido en `pagos.resultado_simulado`. La respuesta técni
 
 ### Saga ampliada de la fase 2
 
-Una transferencia ya no inicia con el débito. Transaction Service coordina estas etapas mediante RabbitMQ:
+Una transferencia o pago ya no inicia con el débito. Transaction Service y Payment Service coordinan estas etapas mediante RabbitMQ:
 
 1. Registra la operación como `VALIDANDO_KYC` y solicita `cliente.kyc.validacion.solicitada`.
 2. Customer Service confirma acceso activo y KYC `VERIFIED`.
@@ -104,6 +112,8 @@ Una transferencia ya no inicia con el débito. Transaction Service coordina esta
 5. Solamente después de ambas aprobaciones se solicita el débito.
 6. `EXITO` continúa al crédito; `FALLO` y `TIMEOUT` solicitan compensar el débito.
 7. Notification & Audit Service registra la notificación del resultado terminal.
+
+Payment Service aplica las mismas dos validaciones antes de un pago: solicita KYC al Customer Service y las reglas de cuenta al Account Service. Sólo con `cliente.kyc.verificado` y `cuenta.transferencia.validada` publica `cuenta.debito.solicitado`; un rechazo termina el pago sin débito.
 
 Los eventos nuevos, payloads y códigos de error están descritos en `eventos/catalogo-eventos.md` y `eventos/contratos-eventos.md`.
 

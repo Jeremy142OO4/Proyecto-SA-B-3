@@ -1,32 +1,37 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: transaction-service
+  name: payment-service
   namespace: bank-usac
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
-    matchLabels: { app: transaction-service }
+    matchLabels: { app: payment-service }
   template:
     metadata:
-      labels: { app: transaction-service }
+      labels: { app: payment-service }
     spec:
       initContainers:
         - name: esperar-dependencias
           image: alpine:3.22
-          command: [sh, -c, "until nc -z rabbitmq 5672 && nc -z host.minikube.internal 5435; do sleep 2; done"]
+          command: [sh, -c, "until nc -z rabbitmq 5672 && nc -z host.minikube.internal 5434; do sleep 2; done"]
       containers:
-        - name: transaction-service
-          image: bank-usac/transaction-service:local
-          imagePullPolicy: Never
+        - name: payment-service
+          image: bank-usac/payment-service:v2.0.0
+          imagePullPolicy: IfNotPresent
           ports:
-            - { name: http, containerPort: 8083 }
+            - { name: http, containerPort: 8084 }
           envFrom:
             - configMapRef: { name: bank-usac-config }
           env:
-            - { name: PUERTO_HTTP, value: "8083" }
+            - { name: PUERTO_HTTP, value: "8084" }
             - name: URL_BASE_DATOS
-              valueFrom: { secretKeyRef: { name: bank-usac-secrets, key: URL_BASE_DATOS_TRANSACCIONES } }
+              valueFrom: { secretKeyRef: { name: bank-usac-secrets, key: URL_BASE_DATOS_PAGOS } }
             - name: URL_RABBITMQ
               valueFrom: { secretKeyRef: { name: bank-usac-secrets, key: URL_RABBITMQ } }
           readinessProbe:
@@ -48,9 +53,9 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: transaction-service
+  name: payment-service
   namespace: bank-usac
 spec:
-  selector: { app: transaction-service }
+  selector: { app: payment-service }
   ports:
-    - { name: http, port: 8083, targetPort: http }
+    - { name: http, port: 8084, targetPort: http }
