@@ -62,6 +62,7 @@ func (s *servicioCuentas) ConsultarCuenta(ctx context.Context, idCuenta uuid.UUI
 	}
 	return s.repositorio.BuscarPorID(ctx, idCuenta)
 }
+
 func (s *servicioCuentas) ListarCuentas(ctx context.Context, idCliente uuid.UUID) ([]models.Cuenta, error) {
 	if idCliente == uuid.Nil {
 		return nil, ErrClienteInvalido

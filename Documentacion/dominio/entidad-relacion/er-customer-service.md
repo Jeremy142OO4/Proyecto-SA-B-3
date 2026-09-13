@@ -2,7 +2,7 @@
 
 El diagrama representa la estructura persistente administrada exclusivamente por **Customer Service** en la base de datos `customer_db`. Incluye la información de clientes y usuarios, los tokens de activación de un solo uso y las tablas técnicas necesarias para idempotencia y publicación confiable de eventos.
 
-![Diagrama entidad-relación de Customer Service](../../Imagenes/ER_Customer.png)
+![Diagrama entidad-relación de Customer Service](../../Imagenes/ER_customer.png)
 
 ## Entidades principales
 

@@ -4,7 +4,7 @@ import { EstadoCarga, EstadoError, EstadoVacio } from '../../../components/feedb
 import { usarConsulta } from '../../../hooks/usarConsulta';
 import { servicioCuentas } from '../services/servicioCuentas';
 
-const dinero = (v: number) => new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(v / 100);
+const dinero = (centavos: number) => new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(centavos / 100);
 
 export function PaginaDetalleCuenta() {
   const { idCuenta = '' } = useParams();
@@ -24,14 +24,22 @@ export function PaginaDetalleCuenta() {
       await servicioCuentas.depositar(idCuenta, Math.round(Number(monto) * 100));
       setMensaje('Depósito enviado. El saldo se actualizará en unos segundos.');
       setMonto('');
-    } catch (e) { setErrorDeposito(e instanceof Error ? e.message : 'No fue posible realizar el depósito'); }
-    finally { setDepositando(false); }
+    } catch (e) {
+      setErrorDeposito(e instanceof Error ? e.message : 'No fue posible realizar el depósito');
+    } finally {
+      setDepositando(false);
+    }
   }
 
   if (cuenta.cargando) return <EstadoCarga />;
   if (cuenta.error) return <EstadoError mensaje={cuenta.error} />;
   return <>
-    <div className="hero-saldo"><span>{cuenta.datos?.tipoCuenta}</span><h2>{dinero(cuenta.datos?.saldoCentavos ?? 0)}</h2><p>Cuenta •••• {cuenta.datos?.numeroCuenta.slice(-4)}</p></div>
+    <div className="hero-saldo">
+      <span>{cuenta.datos?.tipoCuenta}</span>
+      <h2>{dinero(cuenta.datos?.saldoCentavos ?? 0)}</h2>
+      <p>Número de cuenta: {cuenta.datos?.numeroCuenta}</p>
+      <p>ID de cuenta: {cuenta.datos?.idCuenta}</p>
+    </div>
     <div className="panel-formulario">
       <p>Operación de prueba</p><h3>Agregar fondos</h3>
       <form className="acciones" onSubmit={depositar}>

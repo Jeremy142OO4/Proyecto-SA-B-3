@@ -2,7 +2,7 @@
 set -eu
 
 RAIZ_PROYECTO=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-PERFIL_MINIKUBE=${PERFIL_MINIKUBE:-minikube}
+PERFIL_MINIKUBE=${PERFIL_MINIKUBE:-bank-usac}
 if [ -z "${DRIVER_MINIKUBE:-}" ]; then
   if command -v podman >/dev/null 2>&1; then
     DRIVER_MINIKUBE=podman
