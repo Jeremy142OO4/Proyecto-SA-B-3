@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"strings"
+	"time"
 )
 
 var ErrNoEncontrada = errors.New("transferencia no encontrada")
@@ -142,14 +144,52 @@ func (r *Postgres) Consultar(ctx context.Context, id uuid.UUID) (models.Transfer
 	}
 	return t, e
 }
-func (r *Postgres) Historial(ctx context.Context, id uuid.UUID, lim, off int) ([]models.Transferencia, error) {
+func (r *Postgres) Historial(ctx context.Context, p events.SolicitudHistorial) ([]models.Transferencia, error) {
+	lim, off := p.Limite, p.Desplazamiento
 	if lim <= 0 || lim > 100 {
 		lim = 25
 	}
 	if off < 0 {
 		off = 0
 	}
-	rows, e := r.db.Query(ctx, `SELECT id_transferencia,id_cliente,id_cuenta_origen,id_cuenta_destino,id_correlacion,monto_centavos,moneda,descripcion,estado,codigo_error,fecha_creacion,fecha_actualizacion FROM transferencias WHERE id_cliente=$1 ORDER BY fecha_creacion DESC LIMIT $2 OFFSET $3`, id, lim, off)
+	consulta := `SELECT id_transferencia,id_cliente,id_cuenta_origen,id_cuenta_destino,id_correlacion,monto_centavos,moneda,descripcion,estado,codigo_error,fecha_creacion,fecha_actualizacion FROM transferencias WHERE id_cliente=$1`
+	argumentos := []any{p.IDCliente}
+	posicion := 2
+	if p.IDCuenta != nil {
+		consulta += fmt.Sprintf(" AND (id_cuenta_origen=$%d OR id_cuenta_destino=$%d)", posicion, posicion+1)
+		argumentos = append(argumentos, *p.IDCuenta, *p.IDCuenta)
+		posicion += 2
+	}
+	if p.FechaDesde != "" {
+		fecha, e := parsearFecha(p.FechaDesde, false)
+		if e != nil {
+			return nil, e
+		}
+		consulta += fmt.Sprintf(" AND fecha_creacion >= $%d", posicion)
+		argumentos = append(argumentos, fecha)
+		posicion++
+	}
+	if p.FechaHasta != "" {
+		fecha, e := parsearFecha(p.FechaHasta, true)
+		if e != nil {
+			return nil, e
+		}
+		operador := "<"
+		if len(strings.TrimSpace(p.FechaHasta)) != len("2006-01-02") {
+			operador = "<="
+		}
+		consulta += fmt.Sprintf(" AND fecha_creacion %s $%d", operador, posicion)
+		argumentos = append(argumentos, fecha)
+		posicion++
+	}
+	if estado := normalizarEstado(p.Estado); estado != "" {
+		consulta += fmt.Sprintf(" AND estado=$%d", posicion)
+		argumentos = append(argumentos, estado)
+		posicion++
+	}
+	consulta += fmt.Sprintf(" ORDER BY fecha_creacion DESC LIMIT $%d OFFSET $%d", posicion, posicion+1)
+	argumentos = append(argumentos, lim, off)
+	rows, e := r.db.Query(ctx, consulta, argumentos...)
 	if e != nil {
 		return nil, e
 	}
@@ -163,6 +203,36 @@ func (r *Postgres) Historial(ctx context.Context, id uuid.UUID, lim, off int) ([
 		lista = append(lista, t)
 	}
 	return lista, rows.Err()
+}
+
+func parsearFecha(valor string, fin bool) (time.Time, error) {
+	valor = strings.TrimSpace(valor)
+	if len(valor) == len("2006-01-02") {
+		fecha, e := time.ParseInLocation("2006-01-02", valor, time.UTC)
+		if e != nil {
+			return time.Time{}, e
+		}
+		if fin {
+			return fecha.Add(24 * time.Hour), nil
+		}
+		return fecha, nil
+	}
+	return time.Parse(time.RFC3339, valor)
+}
+
+func normalizarEstado(estado string) string {
+	switch strings.ToUpper(strings.TrimSpace(estado)) {
+	case "PENDING":
+		return string(models.Pendiente)
+	case "APPROVED":
+		return string(models.Completada)
+	case "FAILED":
+		return string(models.Rechazada)
+	case string(models.Pendiente), string(models.Procesando), string(models.Completada), string(models.Rechazada), string(models.Compensando), string(models.Compensada), string(models.CompensacionFallida):
+		return strings.ToUpper(strings.TrimSpace(estado))
+	default:
+		return ""
+	}
 }
 func (r *Postgres) ResponderConsulta(ctx context.Context, m events.SobreMensaje, tipo string, p any) (bool, error) {
 	tx, e := r.db.Begin(ctx)

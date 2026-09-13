@@ -125,7 +125,11 @@ type SolicitudConsulta struct {
 	IDTransferencia uuid.UUID `json:"idTransferencia"`
 }
 type SolicitudHistorial struct {
-	IDCliente      uuid.UUID `json:"idCliente"`
-	Limite         int       `json:"limite"`
-	Desplazamiento int       `json:"desplazamiento"`
+	IDCliente      uuid.UUID  `json:"idCliente"`
+	IDCuenta       *uuid.UUID `json:"idCuenta,omitempty"`
+	FechaDesde     string     `json:"fechaDesde,omitempty"`
+	FechaHasta     string     `json:"fechaHasta,omitempty"`
+	Estado         string     `json:"estado,omitempty"`
+	Limite         int        `json:"limite"`
+	Desplazamiento int        `json:"desplazamiento"`
 }
