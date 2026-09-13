@@ -29,7 +29,7 @@ func (s *servicioCuentas) CrearCuenta(ctx context.Context, solicitud events.Soli
 	}
 
 	tipoCuenta := models.TipoCuenta(solicitud.TipoCuenta)
-	if tipoCuenta != models.TipoCuentaMonetaria && tipoCuenta != models.TipoCuentaAhorro {
+	if tipoCuenta != models.TipoCuentaMonetaria && tipoCuenta != models.TipoCuentaAhorro && tipoCuenta != models.TipoCuentaCorriente {
 		return nil, ErrTipoCuentaInvalido
 	}
 
@@ -54,6 +54,35 @@ func (s *servicioCuentas) CrearCuenta(ctx context.Context, solicitud events.Soli
 		return nil, fmt.Errorf("guardar nueva cuenta: %w", err)
 	}
 	return cuenta, nil
+}
+
+func (s *servicioCuentas) ValidarTransferencia(ctx context.Context, solicitud events.SolicitudValidacionTransferencia) events.ResultadoValidacionTransferencia {
+	resultado := events.ResultadoValidacionTransferencia{IDOperacion: solicitud.IDOperacion, IDCliente: solicitud.IDCliente}
+	origen, err := s.repositorio.BuscarPorID(ctx, solicitud.IDCuentaOrigen)
+	if err != nil {
+		resultado.Codigo, resultado.Motivo = "CUENTA_ORIGEN_INVALIDA", err.Error()
+		return resultado
+	}
+	destino, err := s.repositorio.BuscarPorID(ctx, solicitud.IDCuentaDestino)
+	if err != nil {
+		resultado.Codigo, resultado.Motivo = "CUENTA_DESTINO_INVALIDA", err.Error()
+		return resultado
+	}
+	resultado.TipoCuentaOrigen, resultado.TipoCuentaDestino = string(origen.TipoCuenta), string(destino.TipoCuenta)
+	if origen.IDCliente != solicitud.IDCliente {
+		resultado.Codigo, resultado.Motivo = "CUENTA_ORIGEN_AJENA", "la cuenta origen no pertenece al cliente"
+		return resultado
+	}
+	if origen.Estado != models.EstadoCuentaActiva || destino.Estado != models.EstadoCuentaActiva {
+		resultado.Codigo, resultado.Motivo = "CUENTA_NO_ACTIVA", "ambas cuentas deben estar activas"
+		return resultado
+	}
+	if origen.TipoCuenta == models.TipoCuentaAhorro && origen.SaldoCentavos-solicitud.MontoCentavos < 0 {
+		resultado.Codigo, resultado.Motivo = "SALDO_MINIMO_AHORRO", "la cuenta de ahorro no puede quedar con saldo negativo"
+		return resultado
+	}
+	resultado.Valida = true
+	return resultado
 }
 
 func (s *servicioCuentas) ConsultarCuenta(ctx context.Context, idCuenta uuid.UUID) (*models.Cuenta, error) {

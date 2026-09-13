@@ -11,6 +11,17 @@ Este catálogo describe los mensajes intercambiados mediante RabbitMQ por los co
 - Cada mensaje utiliza el sobre común definido en [Contratos de eventos](contratos-eventos.md).
 - Todos los mensajes de una misma operación conservan el mismo `idCorrelacion`.
 
+## Eventos incorporados en la fase 2
+
+| Capacidad | Comandos o eventos |
+|---|---|
+| KYC | `cliente.kyc.estado.solicitado`, `cliente.kyc.validacion.solicitada`, `cliente.kyc.verificado`, `cliente.kyc.rechazado` |
+| Tipos y reglas de cuenta | `cuenta.transferencia.validacion.solicitada`, `cuenta.transferencia.validada`, `cuenta.transferencia.rechazada` |
+| Historial filtrado | `transferencia.historial.solicitado`, `transferencia.historial.consultado` con filtros opcionales |
+| Fallos externos | `pago.procesamiento.solicitado` y `transferencia.solicitada` incorporan el escenario simulado; los resultados terminales usan los eventos existentes de completado, rechazo y compensación. |
+
+Los eventos exitosos se clasifican como `INFO`; rechazos recuperables y compensaciones como `WARNING`; timeouts, DLQ y compensaciones fallidas como `ERROR`. Esta clasificación es utilizada por Notification & Audit Service sin cambiar la routing key original.
+
 ## Customer Service
 
 | Routing key | Clasificación | Productor principal | Consumidor principal | Propósito |
@@ -22,6 +33,10 @@ Este catálogo describe los mensajes intercambiados mediante RabbitMQ por los co
 | `cliente.actualizacion.solicitada` | Comando | API Gateway | Customer Service | Actualizar los datos permitidos de un cliente. |
 | `cliente.listado.solicitado` | Comando de consulta | API Gateway | Customer Service | Consultar clientes registrados. |
 | `cliente.estado.solicitado` | Comando | API Gateway | Customer Service | Cambiar el estado de un usuario. |
+| `cliente.kyc.estado.solicitado` | Comando Fase 2 | API Gateway | Customer Service | Cambiar KYC a `PENDING`, `VERIFIED` o `REJECTED`. |
+| `cliente.kyc.validacion.solicitada` | Comando Fase 2 | Transaction Service | Customer Service | Validar KYC antes de una transferencia. |
+| `cliente.kyc.verificado` | Evento Fase 2 | Customer Service | Transaction Service | Autorizar la continuación de la Saga. |
+| `cliente.kyc.rechazado` | Evento Fase 2 | Customer Service | Transaction Service | Detener la Saga antes de mover fondos. |
 | `cliente.validacion.solicitada` | Comando | Account Service | Customer Service | Validar que un cliente exista y esté activo. |
 | `cliente.creado` | Evento | Customer Service | Notification & Audit Service | Informar el registro exitoso del cliente. |
 | `cliente.activado` | Evento | Customer Service | Notification & Audit Service | Informar que el usuario fue activado. |
@@ -40,6 +55,9 @@ Este catálogo describe los mensajes intercambiados mediante RabbitMQ por los co
 | `cuenta.debito.solicitado` | Comando financiero | Transaction o Payment Service | Account Service | Debitar una cuenta si está habilitada y tiene fondos. |
 | `cuenta.credito.solicitado` | Comando financiero | Transaction Service | Account Service | Acreditar fondos en la cuenta destino. |
 | `cuenta.compensacion.solicitada` | Comando financiero | Transaction o Payment Service | Account Service | Revertir un débito previamente aplicado. |
+| `cuenta.transferencia.validacion.solicitada` | Comando Fase 2 | Transaction Service | Account Service | Validar propiedad, estado y tipos de las cuentas. |
+| `cuenta.transferencia.validada` | Evento Fase 2 | Account Service | Transaction Service | Autorizar el débito después de validar las cuentas. |
+| `cuenta.transferencia.rechazada` | Evento Fase 2 | Account Service | Transaction Service | Rechazar la operación antes del débito. |
 | `cuenta.creada` | Evento | Account Service | API Gateway y Notification & Audit Service | Informar la creación exitosa de una cuenta. |
 | `cuenta.creacion.rechazada` | Evento | Account Service | API Gateway y Notification & Audit Service | Informar que la cuenta no pudo crearse. |
 | `cuenta.debitada` | Evento | Account Service | Transaction o Payment Service | Confirmar el débito. |

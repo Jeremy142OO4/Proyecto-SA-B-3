@@ -82,6 +82,18 @@ func (c *Consumidor) procesar(ctx context.Context, d amqp.Delivery) error {
 		if e == nil {
 			_, e = c.servicio.Resultado(ctx, m, p)
 		}
+	case events.EventoKYCVerificado, events.EventoKYCRechazado:
+		var p events.ResultadoValidacionKYC
+		e = json.Unmarshal(m.Contenido, &p)
+		if e == nil {
+			_, e = c.servicio.ResultadoKYC(ctx, m, p)
+		}
+	case events.EventoCuentasValidadas, events.EventoCuentasRechazadas:
+		var p events.ResultadoValidacionCuentas
+		e = json.Unmarshal(m.Contenido, &p)
+		if e == nil {
+			_, e = c.servicio.ResultadoCuentas(ctx, m, p)
+		}
 	default:
 		e = fmt.Errorf("tipo no soportado %s", d.RoutingKey)
 	}
@@ -101,7 +113,7 @@ func (c *Consumidor) procesar(ctx context.Context, d amqp.Delivery) error {
 
 func esEventoCuenta(tipo string) bool {
 	switch tipo {
-	case events.EventoDebitada, events.EventoDebitoRechazado, events.EventoAcreditada, events.EventoCreditoRechazado, events.EventoCuentaCompensada, events.EventoCompensacionRechazada:
+	case events.EventoDebitada, events.EventoDebitoRechazado, events.EventoAcreditada, events.EventoCreditoRechazado, events.EventoCuentaCompensada, events.EventoCompensacionRechazada, events.EventoKYCVerificado, events.EventoKYCRechazado, events.EventoCuentasValidadas, events.EventoCuentasRechazadas:
 		return true
 	default:
 		return false

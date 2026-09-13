@@ -33,12 +33,103 @@ func (r *Postgres) Iniciar(ctx context.Context, m events.SobreMensaje, t models.
 	if !nuevo {
 		return false, tx.Commit(ctx)
 	}
-	_, e = tx.Exec(ctx, `INSERT INTO transferencias(id_transferencia,id_cliente,id_cuenta_origen,id_cuenta_destino,id_correlacion,monto_centavos,moneda,descripcion,estado,fecha_creacion,fecha_actualizacion) VALUES($1,$2,$3,$4,$5,$6,'GTQ',$7,$8,$9,$9)`, t.IDTransferencia, t.IDCliente, t.IDCuentaOrigen, t.IDCuentaDestino, t.IDCorrelacion, t.MontoCentavos, t.Descripcion, t.Estado, t.FechaCreacion)
+	_, e = tx.Exec(ctx, `INSERT INTO transferencias(id_transferencia,id_cliente,id_cuenta_origen,id_cuenta_destino,id_correlacion,monto_centavos,moneda,descripcion,estado,resultado_externo_simulado,fecha_creacion,fecha_actualizacion) VALUES($1,$2,$3,$4,$5,$6,'GTQ',$7,$8,$9,$10,$10)`, t.IDTransferencia, t.IDCliente, t.IDCuentaOrigen, t.IDCuentaDestino, t.IDCorrelacion, t.MontoCentavos, t.Descripcion, t.Estado, t.ResultadoExternoSimulado, t.FechaCreacion)
 	if e != nil {
 		return false, e
 	}
-	p := events.SolicitudMovimiento{IDCuenta: t.IDCuentaOrigen, IDOperacion: t.IDTransferencia, MontoCentavos: t.MontoCentavos}
-	if e = insertarSalida(ctx, tx, events.ComandoDebito, m.IDCorrelacion, p, true); e != nil {
+	p := events.SolicitudValidacionKYC{IDOperacion: t.IDTransferencia, IDCliente: t.IDCliente}
+	if e = insertarSalida(ctx, tx, events.ComandoValidarKYC, m.IDCorrelacion, p, true); e != nil {
+		return false, e
+	}
+	return true, tx.Commit(ctx)
+}
+
+func (r *Postgres) ProcesarResultadoKYC(ctx context.Context, m events.SobreMensaje, res events.ResultadoValidacionKYC) (bool, error) {
+	tx, e := r.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	if e != nil {
+		return false, e
+	}
+	defer tx.Rollback(ctx)
+	nuevo, e := registrarMensaje(ctx, tx, m, "transaction-service.validacion-kyc")
+	if e != nil || !nuevo {
+		if e == nil {
+			e = tx.Commit(ctx)
+		}
+		return false, e
+	}
+	var transferencia models.Transferencia
+	e = tx.QueryRow(ctx, `SELECT id_transferencia,id_cliente,id_cuenta_origen,id_cuenta_destino,monto_centavos,estado FROM transferencias WHERE id_transferencia=$1 FOR UPDATE`, res.IDOperacion).Scan(&transferencia.IDTransferencia, &transferencia.IDCliente, &transferencia.IDCuentaOrigen, &transferencia.IDCuentaDestino, &transferencia.MontoCentavos, &transferencia.Estado)
+	if errors.Is(e, pgx.ErrNoRows) {
+		return false, ErrNoEncontrada
+	}
+	if e != nil {
+		return false, e
+	}
+	if transferencia.Estado != models.ValidandoKYC {
+		return false, tx.Commit(ctx)
+	}
+	if m.Tipo == events.EventoKYCRechazado || !res.Valido {
+		codigo := "KYC_NO_VERIFICADO"
+		if _, e = tx.Exec(ctx, `UPDATE transferencias SET estado='RECHAZADA',codigo_error=$1,fecha_actualizacion=NOW() WHERE id_transferencia=$2`, codigo, transferencia.IDTransferencia); e != nil {
+			return false, e
+		}
+		if e = insertarSalida(ctx, tx, events.EventoRechazada, m.IDCorrelacion, map[string]any{"idTransferencia": transferencia.IDTransferencia, "estado": models.Rechazada, "codigo": codigo, "motivo": res.Motivo}, false); e != nil {
+			return false, e
+		}
+		return true, tx.Commit(ctx)
+	}
+	if _, e = tx.Exec(ctx, `UPDATE transferencias SET estado='VALIDANDO_CUENTAS',fecha_actualizacion=NOW() WHERE id_transferencia=$1`, transferencia.IDTransferencia); e != nil {
+		return false, e
+	}
+	solicitud := events.SolicitudValidacionCuentas{IDOperacion: transferencia.IDTransferencia, IDCliente: transferencia.IDCliente, IDCuentaOrigen: transferencia.IDCuentaOrigen, IDCuentaDestino: transferencia.IDCuentaDestino, MontoCentavos: transferencia.MontoCentavos}
+	if e = insertarSalida(ctx, tx, events.ComandoValidarCuentas, m.IDCorrelacion, solicitud, true); e != nil {
+		return false, e
+	}
+	return true, tx.Commit(ctx)
+}
+
+func (r *Postgres) ProcesarResultadoCuentas(ctx context.Context, m events.SobreMensaje, res events.ResultadoValidacionCuentas) (bool, error) {
+	tx, e := r.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	if e != nil {
+		return false, e
+	}
+	defer tx.Rollback(ctx)
+	nuevo, e := registrarMensaje(ctx, tx, m, "transaction-service.validacion-cuentas")
+	if e != nil || !nuevo {
+		if e == nil {
+			e = tx.Commit(ctx)
+		}
+		return false, e
+	}
+	var transferencia models.Transferencia
+	e = tx.QueryRow(ctx, `SELECT id_transferencia,id_cuenta_origen,monto_centavos,estado FROM transferencias WHERE id_transferencia=$1 FOR UPDATE`, res.IDOperacion).Scan(&transferencia.IDTransferencia, &transferencia.IDCuentaOrigen, &transferencia.MontoCentavos, &transferencia.Estado)
+	if errors.Is(e, pgx.ErrNoRows) {
+		return false, ErrNoEncontrada
+	}
+	if e != nil {
+		return false, e
+	}
+	if transferencia.Estado != models.ValidandoCuentas {
+		return false, tx.Commit(ctx)
+	}
+	if m.Tipo == events.EventoCuentasRechazadas || !res.Valida {
+		codigo := res.Codigo
+		if codigo == "" {
+			codigo = "CUENTAS_NO_VALIDAS"
+		}
+		if _, e = tx.Exec(ctx, `UPDATE transferencias SET estado='RECHAZADA',codigo_error=$1,fecha_actualizacion=NOW() WHERE id_transferencia=$2`, codigo, transferencia.IDTransferencia); e != nil {
+			return false, e
+		}
+		if e = insertarSalida(ctx, tx, events.EventoRechazada, m.IDCorrelacion, map[string]any{"idTransferencia": transferencia.IDTransferencia, "estado": models.Rechazada, "codigo": codigo, "motivo": res.Motivo}, false); e != nil {
+			return false, e
+		}
+		return true, tx.Commit(ctx)
+	}
+	if _, e = tx.Exec(ctx, `UPDATE transferencias SET estado='PENDIENTE',fecha_actualizacion=NOW() WHERE id_transferencia=$1`, transferencia.IDTransferencia); e != nil {
+		return false, e
+	}
+	solicitud := events.SolicitudMovimiento{IDCuenta: transferencia.IDCuentaOrigen, IDOperacion: transferencia.IDTransferencia, MontoCentavos: transferencia.MontoCentavos}
+	if e = insertarSalida(ctx, tx, events.ComandoDebito, m.IDCorrelacion, solicitud, true); e != nil {
 		return false, e
 	}
 	return true, tx.Commit(ctx)
@@ -58,7 +149,7 @@ func (r *Postgres) ProcesarResultado(ctx context.Context, m events.SobreMensaje,
 		return false, tx.Commit(ctx)
 	}
 	var t models.Transferencia
-	e = tx.QueryRow(ctx, `SELECT id_transferencia,id_cliente,id_cuenta_origen,id_cuenta_destino,id_correlacion,monto_centavos,moneda,descripcion,estado,codigo_error,fecha_creacion,fecha_actualizacion FROM transferencias WHERE id_transferencia=$1 FOR UPDATE`, res.IDOperacion).Scan(&t.IDTransferencia, &t.IDCliente, &t.IDCuentaOrigen, &t.IDCuentaDestino, &t.IDCorrelacion, &t.MontoCentavos, &t.Moneda, &t.Descripcion, &t.Estado, &t.CodigoError, &t.FechaCreacion, &t.FechaActualizacion)
+	e = tx.QueryRow(ctx, `SELECT id_transferencia,id_cliente,id_cuenta_origen,id_cuenta_destino,id_correlacion,monto_centavos,moneda,descripcion,estado,codigo_error,resultado_externo_simulado,fecha_creacion,fecha_actualizacion FROM transferencias WHERE id_transferencia=$1 FOR UPDATE`, res.IDOperacion).Scan(&t.IDTransferencia, &t.IDCliente, &t.IDCuentaOrigen, &t.IDCuentaDestino, &t.IDCorrelacion, &t.MontoCentavos, &t.Moneda, &t.Descripcion, &t.Estado, &t.CodigoError, &t.ResultadoExternoSimulado, &t.FechaCreacion, &t.FechaActualizacion)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return false, ErrNoEncontrada
 	}
@@ -74,9 +165,20 @@ func (r *Postgres) ProcesarResultado(ctx context.Context, m events.SobreMensaje,
 		if t.Estado != models.Pendiente {
 			return false, tx.Commit(ctx)
 		}
-		estado = models.Procesando
-		salida = events.ComandoCredito
-		payload = events.SolicitudMovimiento{IDCuenta: t.IDCuentaDestino, IDOperacion: t.IDTransferencia, MontoCentavos: t.MontoCentavos}
+		if t.ResultadoExternoSimulado == "FALLO" || t.ResultadoExternoSimulado == "TIMEOUT" {
+			estado = models.Compensando
+			salida = events.ComandoCompensacion
+			codigo := "FALLO_EXTERNO"
+			if t.ResultadoExternoSimulado == "TIMEOUT" {
+				codigo = "TIMEOUT_EXTERNO"
+			}
+			res.Codigo = codigo
+			payload = events.SolicitudMovimiento{IDCuenta: t.IDCuentaOrigen, IDOperacion: t.IDTransferencia, MontoCentavos: t.MontoCentavos}
+		} else {
+			estado = models.Procesando
+			salida = events.ComandoCredito
+			payload = events.SolicitudMovimiento{IDCuenta: t.IDCuentaDestino, IDOperacion: t.IDTransferencia, MontoCentavos: t.MontoCentavos}
+		}
 		esComando = true
 	case events.EventoDebitoRechazado:
 		if t.Estado != models.Pendiente {
@@ -117,7 +219,13 @@ func (r *Postgres) ProcesarResultado(ctx context.Context, m events.SobreMensaje,
 	default:
 		return false, fmt.Errorf("evento no soportado %s", m.Tipo)
 	}
-	_, e = tx.Exec(ctx, `UPDATE transferencias SET estado=$1,codigo_error=$2,fecha_actualizacion=NOW() WHERE id_transferencia=$3`, estado, res.Codigo, t.IDTransferencia)
+	codigoError := res.Codigo
+	// Al completar una compensación, conservar el motivo del fallo externo
+	// registrado al recibir el evento de débito.
+	if codigoError == "" {
+		codigoError = t.CodigoError
+	}
+	_, e = tx.Exec(ctx, `UPDATE transferencias SET estado=$1,codigo_error=$2,fecha_actualizacion=NOW() WHERE id_transferencia=$3`, estado, codigoError, t.IDTransferencia)
 	if e != nil {
 		return false, e
 	}
@@ -138,7 +246,7 @@ func (r *Postgres) ProcesarResultado(ctx context.Context, m events.SobreMensaje,
 
 func (r *Postgres) Consultar(ctx context.Context, id uuid.UUID) (models.Transferencia, error) {
 	var t models.Transferencia
-	e := r.db.QueryRow(ctx, `SELECT id_transferencia,id_cliente,id_cuenta_origen,id_cuenta_destino,id_correlacion,monto_centavos,moneda,descripcion,estado,codigo_error,fecha_creacion,fecha_actualizacion FROM transferencias WHERE id_transferencia=$1`, id).Scan(&t.IDTransferencia, &t.IDCliente, &t.IDCuentaOrigen, &t.IDCuentaDestino, &t.IDCorrelacion, &t.MontoCentavos, &t.Moneda, &t.Descripcion, &t.Estado, &t.CodigoError, &t.FechaCreacion, &t.FechaActualizacion)
+	e := r.db.QueryRow(ctx, `SELECT id_transferencia,id_cliente,id_cuenta_origen,id_cuenta_destino,id_correlacion,monto_centavos,moneda,descripcion,estado,codigo_error,resultado_externo_simulado,fecha_creacion,fecha_actualizacion FROM transferencias WHERE id_transferencia=$1`, id).Scan(&t.IDTransferencia, &t.IDCliente, &t.IDCuentaOrigen, &t.IDCuentaDestino, &t.IDCorrelacion, &t.MontoCentavos, &t.Moneda, &t.Descripcion, &t.Estado, &t.CodigoError, &t.ResultadoExternoSimulado, &t.FechaCreacion, &t.FechaActualizacion)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return t, ErrNoEncontrada
 	}
@@ -152,7 +260,7 @@ func (r *Postgres) Historial(ctx context.Context, p events.SolicitudHistorial) (
 	if off < 0 {
 		off = 0
 	}
-	consulta := `SELECT id_transferencia,id_cliente,id_cuenta_origen,id_cuenta_destino,id_correlacion,monto_centavos,moneda,descripcion,estado,codigo_error,fecha_creacion,fecha_actualizacion FROM transferencias WHERE id_cliente=$1`
+	consulta := `SELECT id_transferencia,id_cliente,id_cuenta_origen,id_cuenta_destino,id_correlacion,monto_centavos,moneda,descripcion,estado,codigo_error,resultado_externo_simulado,fecha_creacion,fecha_actualizacion FROM transferencias WHERE id_cliente=$1`
 	argumentos := []any{p.IDCliente}
 	posicion := 2
 	if p.IDCuenta != nil {
@@ -197,7 +305,7 @@ func (r *Postgres) Historial(ctx context.Context, p events.SolicitudHistorial) (
 	lista := []models.Transferencia{}
 	for rows.Next() {
 		var t models.Transferencia
-		if e = rows.Scan(&t.IDTransferencia, &t.IDCliente, &t.IDCuentaOrigen, &t.IDCuentaDestino, &t.IDCorrelacion, &t.MontoCentavos, &t.Moneda, &t.Descripcion, &t.Estado, &t.CodigoError, &t.FechaCreacion, &t.FechaActualizacion); e != nil {
+		if e = rows.Scan(&t.IDTransferencia, &t.IDCliente, &t.IDCuentaOrigen, &t.IDCuentaDestino, &t.IDCorrelacion, &t.MontoCentavos, &t.Moneda, &t.Descripcion, &t.Estado, &t.CodigoError, &t.ResultadoExternoSimulado, &t.FechaCreacion, &t.FechaActualizacion); e != nil {
 			return nil, e
 		}
 		lista = append(lista, t)
@@ -228,7 +336,7 @@ func normalizarEstado(estado string) string {
 		return string(models.Completada)
 	case "FAILED":
 		return string(models.Rechazada)
-	case string(models.Pendiente), string(models.Procesando), string(models.Completada), string(models.Rechazada), string(models.Compensando), string(models.Compensada), string(models.CompensacionFallida):
+	case string(models.ValidandoKYC), string(models.ValidandoCuentas), string(models.Pendiente), string(models.Procesando), string(models.Completada), string(models.Rechazada), string(models.Compensando), string(models.Compensada), string(models.CompensacionFallida):
 		return strings.ToUpper(strings.TrimSpace(estado))
 	default:
 		return ""

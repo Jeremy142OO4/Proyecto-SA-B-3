@@ -197,6 +197,15 @@ func (r *customerRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status mo
 	return &customer, err
 }
 
+func (r *customerRepo) UpdateKYCStatus(ctx context.Context, id uuid.UUID, status models.KYCStatus) (*models.Customer, error) {
+	var customer models.Customer
+	err := r.db.GetContext(ctx, &customer, `UPDATE customers SET kyc_status=$1,updated_at=NOW() WHERE customer_id=$2 RETURNING *`, status, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return &customer, err
+}
+
 func (r *customerRepo) RegistrarValidacionCliente(ctx context.Context, mensajeID, correlacionID uuid.UUID, solicitudID, clienteID uuid.UUID) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -243,6 +252,55 @@ func (r *customerRepo) RegistrarValidacionCliente(ctx context.Context, mensajeID
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO processed_messages
 		(message_id,consumer_name,result_reference) VALUES($1,$2,$3)`, mensajeID, "customer-service.validacion-cliente", solicitudID.String()); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (r *customerRepo) RegistrarValidacionKYC(ctx context.Context, mensajeID, correlacionID, operacionID, clienteID uuid.UUID) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var procesado bool
+	if err = tx.GetContext(ctx, &procesado, `SELECT EXISTS(SELECT 1 FROM processed_messages WHERE message_id=$1 AND consumer_name='customer-service.validacion-kyc')`, mensajeID); err != nil {
+		return err
+	}
+	if procesado {
+		return tx.Commit()
+	}
+	var acceso models.CustomerStatus
+	var kyc models.KYCStatus
+	err = tx.QueryRowContext(ctx, `SELECT status,kyc_status FROM customers WHERE customer_id=$1`, clienteID).Scan(&acceso, &kyc)
+	valido := err == nil && acceso == models.StatusActive && kyc == models.KYCVerified
+	motivo := ""
+	if errors.Is(err, sql.ErrNoRows) {
+		motivo = "cliente no encontrado"
+	} else if err != nil {
+		return err
+	} else if acceso != models.StatusActive {
+		motivo = "cliente no activo"
+	} else if kyc != models.KYCVerified {
+		motivo = "KYC no verificado: " + string(kyc)
+	}
+	tipo := events.EventoKYCVerificado
+	if !valido {
+		tipo = events.EventoKYCRechazado
+	}
+	resultado := events.ResultadoValidacionKYC{IDOperacion: operacionID, IDCliente: clienteID, EstadoKYC: string(kyc), Valido: valido, Motivo: motivo}
+	sobre, err := events.NewEnvelope(tipo, correlacionID, &mensajeID, resultado)
+	if err != nil {
+		return err
+	}
+	contenido, err := json.Marshal(sobre)
+	if err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO outbox_messages(id,event_type,payload,correlation_id,causation_id,created_at) VALUES($1,$2,$3,$4,$5,$6)`, uuid.New(), tipo, contenido, correlacionID, mensajeID, time.Now().UTC()); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO processed_messages(message_id,consumer_name,result_reference) VALUES($1,'customer-service.validacion-kyc',$2)`, mensajeID, operacionID.String()); err != nil {
 		return err
 	}
 	return tx.Commit()

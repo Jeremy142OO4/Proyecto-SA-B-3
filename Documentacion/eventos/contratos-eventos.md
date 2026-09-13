@@ -220,7 +220,61 @@ Routing key principal: `transferencia.solicitada`.
   "idCuentaOrigen": "dbd100f4-a377-460d-a707-88be2b17ca73",
   "idCuentaDestino": "8963e68e-1478-405d-ad2d-a4a1971d75aa",
   "montoCentavos": 12500,
-  "descripcion": "Transferencia de ejemplo"
+  "descripcion": "Transferencia de ejemplo",
+  "resultadoExternoSimulado": "EXITO"
+}
+```
+
+`resultadoExternoSimulado` admite `EXITO`, `FALLO` y `TIMEOUT`. Si se omite, se utiliza `EXITO`. Los escenarios de fallo y timeout se aplican después del débito para demostrar la compensación de la Saga.
+
+### Validación KYC de la Saga
+
+Comando `cliente.kyc.validacion.solicitada`:
+
+```json
+{
+  "idOperacion": "18236dfb-c887-48af-9780-82270b09a166",
+  "idCliente": "ff46a46b-7de0-4683-b7ff-48034cc287e5"
+}
+```
+
+Respuesta `cliente.kyc.verificado` o `cliente.kyc.rechazado`:
+
+```json
+{
+  "idOperacion": "18236dfb-c887-48af-9780-82270b09a166",
+  "idCliente": "ff46a46b-7de0-4683-b7ff-48034cc287e5",
+  "estadoKyc": "VERIFIED",
+  "valido": true,
+  "motivo": ""
+}
+```
+
+### Validación de cuentas y tipos
+
+Comando `cuenta.transferencia.validacion.solicitada`:
+
+```json
+{
+  "idOperacion": "18236dfb-c887-48af-9780-82270b09a166",
+  "idCliente": "ff46a46b-7de0-4683-b7ff-48034cc287e5",
+  "idCuentaOrigen": "dbd100f4-a377-460d-a707-88be2b17ca73",
+  "idCuentaDestino": "8963e68e-1478-405d-ad2d-a4a1971d75aa",
+  "montoCentavos": 12500
+}
+```
+
+Respuesta `cuenta.transferencia.validada` o `cuenta.transferencia.rechazada`:
+
+```json
+{
+  "idOperacion": "18236dfb-c887-48af-9780-82270b09a166",
+  "idCliente": "ff46a46b-7de0-4683-b7ff-48034cc287e5",
+  "valida": true,
+  "tipoCuentaOrigen": "AHORRO",
+  "tipoCuentaDestino": "CORRIENTE",
+  "codigo": "",
+  "motivo": ""
 }
 ```
 

@@ -9,6 +9,8 @@ type Estado string
 
 const (
 	Pendiente           Estado = "PENDIENTE"
+	ValidandoKYC        Estado = "VALIDANDO_KYC"
+	ValidandoCuentas    Estado = "VALIDANDO_CUENTAS"
 	Procesando          Estado = "PROCESANDO"
 	Completada          Estado = "COMPLETADA"
 	Rechazada           Estado = "RECHAZADA"
@@ -18,16 +20,17 @@ const (
 )
 
 type Transferencia struct {
-	IDTransferencia    uuid.UUID `json:"idTransferencia"`
-	IDCliente          uuid.UUID `json:"idCliente"`
-	IDCuentaOrigen     uuid.UUID `json:"idCuentaOrigen"`
-	IDCuentaDestino    uuid.UUID `json:"idCuentaDestino"`
-	IDCorrelacion      uuid.UUID `json:"idCorrelacion"`
-	MontoCentavos      int64     `json:"montoCentavos"`
-	Moneda             string    `json:"moneda"`
-	Descripcion        string    `json:"descripcion,omitempty"`
-	Estado             Estado    `json:"estado"`
-	CodigoError        string    `json:"codigoError,omitempty"`
-	FechaCreacion      time.Time `json:"fechaCreacion"`
-	FechaActualizacion time.Time `json:"fechaActualizacion"`
+	IDTransferencia          uuid.UUID `json:"idTransferencia"`
+	IDCliente                uuid.UUID `json:"idCliente"`
+	IDCuentaOrigen           uuid.UUID `json:"idCuentaOrigen"`
+	IDCuentaDestino          uuid.UUID `json:"idCuentaDestino"`
+	IDCorrelacion            uuid.UUID `json:"idCorrelacion"`
+	MontoCentavos            int64     `json:"montoCentavos"`
+	Moneda                   string    `json:"moneda"`
+	Descripcion              string    `json:"descripcion,omitempty"`
+	Estado                   Estado    `json:"estado"`
+	CodigoError              string    `json:"codigoError,omitempty"`
+	ResultadoExternoSimulado string    `json:"resultadoExternoSimulado,omitempty"`
+	FechaCreacion            time.Time `json:"fechaCreacion"`
+	FechaActualizacion       time.Time `json:"fechaActualizacion"`
 }

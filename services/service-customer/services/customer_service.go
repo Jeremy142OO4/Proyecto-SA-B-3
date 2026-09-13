@@ -30,6 +30,22 @@ type CustomerService interface {
 	UpdateCustomer(ctx context.Context, customerID uuid.UUID, req UpdateRequest, correlationID uuid.UUID) (*models.Customer, error)
 	ListCustomers(ctx context.Context, limit, offset int) ([]*models.Customer, error)
 	UpdateCustomerStatus(ctx context.Context, customerID uuid.UUID, status string) (*models.Customer, error)
+	UpdateCustomerKYCStatus(ctx context.Context, customerID uuid.UUID, status string) (*models.Customer, error)
+}
+
+func (s *customerService) UpdateCustomerKYCStatus(ctx context.Context, customerID uuid.UUID, status string) (*models.Customer, error) {
+	estado := models.KYCStatus(strings.ToUpper(strings.TrimSpace(status)))
+	if estado != models.KYCPending && estado != models.KYCVerified && estado != models.KYCRejected {
+		return nil, errors.New("estado KYC invalido")
+	}
+	cliente, err := s.repo.UpdateKYCStatus(ctx, customerID, estado)
+	if err != nil {
+		return nil, err
+	}
+	if cliente == nil {
+		return nil, errors.New("cliente no encontrado")
+	}
+	return cliente, nil
 }
 
 func (s *customerService) ListCustomers(ctx context.Context, limit, offset int) ([]*models.Customer, error) {

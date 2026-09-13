@@ -1,9 +1,11 @@
 import { clienteApi } from '../../../services/clienteApi';
 import type { EstadoCliente } from '../../auth/types/auth';
-import type { ClienteAdministrado } from '../types/clienteAdministrado';
+import type { ClienteAdministrado, EstadoKYC } from '../types/clienteAdministrado';
 
 export const servicioAdministracion = {
   listarClientes: () => clienteApi.obtener<ClienteAdministrado[]>('/administracion/clientes'),
   cambiarEstado: (idCliente: string, estado: EstadoCliente) =>
     clienteApi.actualizarParcial<ClienteAdministrado>(`/administracion/clientes/${idCliente}/estado`, { estado }),
+  cambiarEstadoKYC: (idCliente: string, estadoKyc: EstadoKYC) =>
+    clienteApi.actualizarParcial<ClienteAdministrado>(`/administracion/clientes/${idCliente}/estado`, { estadoKyc }),
 };

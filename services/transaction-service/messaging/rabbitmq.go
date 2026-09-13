@@ -46,7 +46,7 @@ func DeclararTopologia(ch *amqp.Channel) error {
 			return e
 		}
 	}
-	for _, k := range []string{events.EventoDebitada, events.EventoDebitoRechazado, events.EventoAcreditada, events.EventoCreditoRechazado, events.EventoCuentaCompensada, events.EventoCompensacionRechazada} {
+	for _, k := range []string{events.EventoDebitada, events.EventoDebitoRechazado, events.EventoAcreditada, events.EventoCreditoRechazado, events.EventoCuentaCompensada, events.EventoCompensacionRechazada, events.EventoKYCVerificado, events.EventoKYCRechazado, events.EventoCuentasValidadas, events.EventoCuentasRechazadas} {
 		if e := ch.QueueBind(ColaEventosCuenta, k, IntercambioEventos, false, nil); e != nil {
 			return e
 		}

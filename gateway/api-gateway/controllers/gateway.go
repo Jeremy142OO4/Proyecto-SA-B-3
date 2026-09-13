@@ -40,10 +40,11 @@ type entradaPago struct {
 	ResultadoSimulado string    `json:"resultadoSimulado"`
 }
 type entradaTransferencia struct {
-	IDCuentaOrigen  uuid.UUID `json:"idCuentaOrigen"`
-	IDCuentaDestino uuid.UUID `json:"idCuentaDestino"`
-	MontoCentavos   int64     `json:"montoCentavos"`
-	Descripcion     string    `json:"descripcion"`
+	IDCuentaOrigen           uuid.UUID `json:"idCuentaOrigen"`
+	IDCuentaDestino          uuid.UUID `json:"idCuentaDestino"`
+	MontoCentavos            int64     `json:"montoCentavos"`
+	Descripcion              string    `json:"descripcion"`
+	ResultadoExternoSimulado string    `json:"resultadoExternoSimulado"`
 }
 
 func (g *Gateway) CrearCuenta(c *fiber.Ctx) error {
@@ -52,8 +53,8 @@ func (g *Gateway) CrearCuenta(c *fiber.Ctx) error {
 		return fiber.NewError(400, "JSON invalido")
 	}
 	tipo := strings.ToUpper(e.TipoCuenta)
-	if tipo != "MONETARIA" && tipo != "AHORRO" {
-		return fiber.NewError(422, "tipoCuenta debe ser MONETARIA o AHORRO")
+	if tipo != "MONETARIA" && tipo != "AHORRO" && tipo != "CORRIENTE" {
+		return fiber.NewError(422, "tipoCuenta debe ser MONETARIA, AHORRO o CORRIENTE")
 	}
 	if e.IDCliente == uuid.Nil {
 		return fiber.NewError(422, "idCliente es obligatorio")
@@ -114,11 +115,18 @@ func (g *Gateway) Transferir(c *fiber.Ctx) error {
 	if e.IDCuentaOrigen == uuid.Nil || e.IDCuentaDestino == uuid.Nil || e.IDCuentaOrigen == e.IDCuentaDestino || e.MontoCentavos <= 0 {
 		return fiber.NewError(422, "cuentas distintas y montoCentavos mayor que cero son obligatorios")
 	}
+	resultadoExterno := strings.ToUpper(strings.TrimSpace(e.ResultadoExternoSimulado))
+	if resultadoExterno == "" {
+		resultadoExterno = "EXITO"
+	}
+	if resultadoExterno != "EXITO" && resultadoExterno != "FALLO" && resultadoExterno != "TIMEOUT" {
+		return fiber.NewError(422, "resultadoExternoSimulado debe ser EXITO, FALLO o TIMEOUT")
+	}
 	if err := g.validarPropiedadCuenta(c, e.IDCuentaOrigen); err != nil {
 		return err
 	}
 	id := uuid.New()
-	return g.aceptar(c, events.ComandoTransferir, id, events.SolicitudTransferencia{IDTransferencia: id, IDCliente: idCliente(c), IDCuentaOrigen: e.IDCuentaOrigen, IDCuentaDestino: e.IDCuentaDestino, MontoCentavos: e.MontoCentavos, Descripcion: strings.TrimSpace(e.Descripcion)})
+	return g.aceptar(c, events.ComandoTransferir, id, events.SolicitudTransferencia{IDTransferencia: id, IDCliente: idCliente(c), IDCuentaOrigen: e.IDCuentaOrigen, IDCuentaDestino: e.IDCuentaDestino, MontoCentavos: e.MontoCentavos, Descripcion: strings.TrimSpace(e.Descripcion), ResultadoExternoSimulado: resultadoExterno})
 }
 func (g *Gateway) ListarCuentas(c *fiber.Ctx) error {
 	return g.consultar(c, events.ComandoListarCuentas, events.EventoCuentasConsultadas, events.SolicitudHistorial{IDCliente: idCliente(c), Limite: limite(c), Desplazamiento: desplazamiento(c)}, func(b json.RawMessage) (any, error) {

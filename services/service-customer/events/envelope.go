@@ -49,6 +49,10 @@ const (
 	ComandoActualizarCliente = "cliente.actualizacion.solicitada"
 	ComandoListarClientes    = "cliente.listado.solicitado"
 	ComandoEstadoCliente     = "cliente.estado.solicitado"
+	ComandoValidarKYC        = "cliente.kyc.validacion.solicitada"
+	EventoKYCVerificado      = "cliente.kyc.verificado"
+	EventoKYCRechazado       = "cliente.kyc.rechazado"
+	ComandoEstadoKYC         = "cliente.kyc.estado.solicitado"
 )
 
 type SolicitudValidacionCliente struct {
@@ -60,6 +64,19 @@ type ResultadoValidacionCliente struct {
 	IDSolicitud uuid.UUID `json:"idSolicitud"`
 	IDCliente   uuid.UUID `json:"idCliente"`
 	Activo      bool      `json:"activo"`
+	Motivo      string    `json:"motivo,omitempty"`
+}
+
+type SolicitudValidacionKYC struct {
+	IDOperacion uuid.UUID `json:"idOperacion"`
+	IDCliente   uuid.UUID `json:"idCliente"`
+}
+
+type ResultadoValidacionKYC struct {
+	IDOperacion uuid.UUID `json:"idOperacion"`
+	IDCliente   uuid.UUID `json:"idCliente"`
+	EstadoKYC   string    `json:"estadoKyc"`
+	Valido      bool      `json:"valido"`
 	Motivo      string    `json:"motivo,omitempty"`
 }
 

@@ -49,11 +49,12 @@ No envíe varias veces el mismo formulario mientras la solicitud aparece como pe
 2. Seleccione la cuenta de origen.
 3. Escriba el identificador de la cuenta destino (UUID).
 4. Indique el monto y, opcionalmente, una descripción.
-5. Presione **Confirmar transferencia**.
+5. Para la demostración académica, seleccione el resultado externo: **Éxito**, **Fallo** o **Timeout**.
+6. Presione **Confirmar transferencia**.
 
 ![Nueva transferencia](Imagenes/manual-nueva-transferencia.png)
 
-Las transferencias se procesan de forma asíncrona mediante RabbitMQ. La respuesta inicial confirma que la solicitud fue recibida; el estado final puede consultarse desde el listado o detalle de operaciones. Una transferencia requiere una cuenta origen activa y saldo suficiente.
+Las transferencias se procesan de forma asíncrona mediante RabbitMQ. Antes de mover fondos, el sistema exige KYC `VERIFIED` y valida la propiedad, estado y tipo de las cuentas. La respuesta inicial confirma que la solicitud fue recibida; el estado final puede consultarse desde el listado o detalle. En los escenarios **Fallo** y **Timeout**, el débito se compensa automáticamente.
 
 ### 3.4 Registrar un pago
 

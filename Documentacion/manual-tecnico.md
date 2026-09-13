@@ -93,6 +93,20 @@ Payment Service no se conecta a una pasarela real porque la fase 2 solicita simu
 
 El escenario queda persistido en `pagos.resultado_simulado`. La respuesta técnica se conserva en `intentos_pago.codigo_respuesta` y el detalle en `intentos_pago.detalle_error`. Esto permite demostrar los tres resultados sin depender de un proveedor externo ni de valores especiales en el nombre del beneficiario.
 
+### Saga ampliada de la fase 2
+
+Una transferencia ya no inicia con el débito. Transaction Service coordina estas etapas mediante RabbitMQ:
+
+1. Registra la operación como `VALIDANDO_KYC` y solicita `cliente.kyc.validacion.solicitada`.
+2. Customer Service confirma acceso activo y KYC `VERIFIED`.
+3. Transaction Service cambia a `VALIDANDO_CUENTAS` y solicita `cuenta.transferencia.validacion.solicitada`.
+4. Account Service valida propiedad de la cuenta origen, estado y tipos de ambas cuentas.
+5. Solamente después de ambas aprobaciones se solicita el débito.
+6. `EXITO` continúa al crédito; `FALLO` y `TIMEOUT` solicitan compensar el débito.
+7. Notification & Audit Service registra la notificación del resultado terminal.
+
+Los eventos nuevos, payloads y códigos de error están descritos en `eventos/catalogo-eventos.md` y `eventos/contratos-eventos.md`.
+
 El correo de activación es la notificación externa exigida: Customer Service genera el enlace y Notification & Audit Service lo envía por SMTP y registra el resultado `SENT` en su base.
 
 ## 8. API principal

@@ -19,6 +19,7 @@ La Saga debe garantizar que una transferencia finalice en uno de estos resultado
 | API Gateway | Recibir la solicitud externa y publicar `transferencia.solicitada`. |
 | RabbitMQ | Transportar comandos y eventos de forma asíncrona. |
 | Transaction Service | Registrar la transferencia, coordinar la Saga y conservar su estado. |
+| Customer Service | Confirmar que el cliente está activo y que su KYC está `VERIFIED`. |
 | Account Service | Validar cuentas y aplicar débito, crédito o compensación. |
 | Notification & Audit Service | Registrar los eventos y generar notificaciones cuando corresponda. |
 
@@ -35,11 +36,14 @@ La Saga debe garantizar que una transferencia finalice en uno de estos resultado
 | `estado` | Situación actual de la Saga. |
 | `idCorrelacion` | Identificador compartido por todos los mensajes del flujo. |
 | `codigoError` | Motivo técnico o de negocio cuando la operación no finaliza exitosamente. |
+| `resultadoExternoSimulado` | Escenario controlado `EXITO`, `FALLO` o `TIMEOUT` usado para demostrar compensación. |
 
 ## Estados
 
 | Estado | Significado | Estado terminal |
 |---|---|---:|
+| `VALIDANDO_KYC` | Customer Service está validando el estado KYC del cliente. | No |
+| `VALIDANDO_CUENTAS` | Account Service está validando propiedad, estado y tipos de ambas cuentas. | No |
 | `PENDIENTE` | La transferencia fue registrada y todavía no inició el débito. | No |
 | `PROCESANDO` | La Saga está ejecutando débito o crédito. | No |
 | `COMPLETADA` | Débito y crédito finalizaron correctamente. | Sí |
@@ -56,26 +60,26 @@ Antes de registrar la transferencia se comprueba que:
 2. La cuenta origen y la cuenta destino sean diferentes.
 3. `montoCentavos` sea mayor que cero.
 4. La moneda sea `GTQ`.
-5. La operación no haya sido registrada previamente.
+5. El escenario externo sea `EXITO`, `FALLO` o `TIMEOUT`.
+6. La operación no haya sido registrada previamente.
 
-La existencia, estado y saldo de las cuentas son validados por Account Service cuando procesa cada comando financiero.
+Después del registro, Customer Service valida KYC y Account Service valida propiedad, estado y tipo de las cuentas antes de permitir cualquier movimiento financiero.
 
 ## Flujo exitoso
 
 | Paso | Responsable | Mensaje o acción | Resultado |
 |---:|---|---|---|
 | 1 | API Gateway | Publica `transferencia.solicitada`. | Inicia la operación asíncrona. |
-| 2 | Transaction Service | Valida y registra la transferencia como `PENDIENTE`. | La solicitud queda persistida. |
-| 3 | Transaction Service | Registra en Outbox `cuenta.debito.solicitado`. | Se prepara el débito. |
-| 4 | Publicador Outbox | Publica el comando en RabbitMQ. | Account Service puede consumirlo. |
-| 5 | Account Service | Valida cuenta origen, estado y fondos. | Determina si el débito es válido. |
-| 6 | Account Service | Aplica el débito y registra el movimiento. | El saldo origen disminuye. |
-| 7 | Account Service | Publica `cuenta.debitada`. | Confirma el débito. |
-| 8 | Transaction Service | Cambia a `PROCESANDO` y publica `cuenta.credito.solicitado`. | Inicia el crédito. |
-| 9 | Account Service | Valida y acredita la cuenta destino. | El saldo destino aumenta. |
-| 10 | Account Service | Publica `cuenta.acreditada`. | Confirma el crédito. |
-| 11 | Transaction Service | Cambia la transferencia a `COMPLETADA`. | Finaliza la Saga. |
-| 12 | Transaction Service | Publica `transferencia.completada`. | Gateway, auditoría y notificaciones reciben el resultado. |
+| 2 | Transaction Service | Registra la transferencia como `VALIDANDO_KYC` y publica `cliente.kyc.validacion.solicitada`. | La solicitud queda persistida sin mover fondos. |
+| 3 | Customer Service | Comprueba acceso activo y KYC `VERIFIED`; publica `cliente.kyc.verificado`. | Autoriza continuar. |
+| 4 | Transaction Service | Cambia a `VALIDANDO_CUENTAS` y publica `cuenta.transferencia.validacion.solicitada`. | Solicita validación financiera. |
+| 5 | Account Service | Valida propiedad de la cuenta origen, estados y tipos de ambas cuentas; publica `cuenta.transferencia.validada`. | Autoriza el débito. |
+| 6 | Transaction Service | Cambia a `PENDIENTE` y publica `cuenta.debito.solicitado`. | Inicia el movimiento. |
+| 7 | Account Service | Valida fondos, aplica el débito y publica `cuenta.debitada`. | El saldo origen disminuye. |
+| 8 | Transaction Service | Para `EXITO`, cambia a `PROCESANDO` y publica `cuenta.credito.solicitado`. | Inicia el crédito. |
+| 9 | Account Service | Acredita la cuenta destino y publica `cuenta.acreditada`. | El saldo destino aumenta. |
+| 10 | Transaction Service | Cambia a `COMPLETADA` y publica `transferencia.completada`. | Finaliza la Saga. |
+| 11 | Notification & Audit Service | Registra la traza y la notificación final. | El resultado queda auditable. |
 
 Todos los comandos y eventos conservan el mismo `idCorrelacion`. Cada evento derivado puede utilizar como `idCausa` el identificador del mensaje anterior.
 
@@ -126,6 +130,10 @@ No se marca la transferencia como completada ni compensada cuando existe incerti
 
 | Punto de fallo | Cambio aplicado | Evento recibido | Acción | Estado final esperado |
 |---|---|---|---|---|
+| KYC pendiente o rechazado | Ninguno | `cliente.kyc.rechazado` | Rechazar antes del débito. | `RECHAZADA` |
+| Cuenta ajena, inactiva o tipo no admitido | Ninguno | `cuenta.transferencia.rechazada` | Rechazar antes del débito. | `RECHAZADA` |
+| Fallo externo simulado | Débito en origen | Escenario `FALLO` | Registrar `FALLO_EXTERNO` y compensar. | `COMPENSADA` o `COMPENSACION_FALLIDA` |
+| Timeout externo simulado | Débito en origen | Escenario `TIMEOUT` | Registrar `TIMEOUT_EXTERNO` y compensar. | `COMPENSADA` o `COMPENSACION_FALLIDA` |
 | Validación inicial | Ninguno | No aplica | Rechazar la solicitud. | `RECHAZADA` |
 | Débito | Ninguno | `cuenta.debito.rechazado` | Finalizar sin compensar. | `RECHAZADA` |
 | Crédito | Débito en origen | `cuenta.credito.rechazado` | Solicitar compensación del débito. | `COMPENSADA` o `COMPENSACION_FALLIDA` |

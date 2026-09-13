@@ -73,6 +73,17 @@ func (c *ConsumidorCuentas) procesar(ctx context.Context, entrega amqp.Delivery)
 
 	var err error
 	switch entrega.RoutingKey {
+	case events.ComandoValidarTransferencia:
+		var solicitud events.SolicitudValidacionTransferencia
+		if errorJSON := json.Unmarshal(mensaje.Contenido, &solicitud); errorJSON != nil {
+			return c.enviarFallidoYAceptar(ctx, entrega, errorJSON)
+		}
+		resultado := c.servicio.ValidarTransferencia(ctx, solicitud)
+		tipoEvento := events.EventoTransferenciaValidada
+		if !resultado.Valida {
+			tipoEvento = events.EventoTransferenciaRechazada
+		}
+		_, err = c.repositorioSalida.RegistrarRespuesta(ctx, mensaje, nombreConsumidor, tipoEvento, resultado)
 	case events.ComandoListarCuentas:
 		var solicitud events.SolicitudListarCuentas
 		if errorJSON := json.Unmarshal(mensaje.Contenido, &solicitud); errorJSON != nil {
