@@ -34,6 +34,9 @@ type ResultadoValidacionTransferencia struct {
 	Valida            bool      `json:"valida"`
 	TipoCuentaOrigen  string    `json:"tipoCuentaOrigen,omitempty"`
 	TipoCuentaDestino string    `json:"tipoCuentaDestino,omitempty"`
+	SaldoMinimoCentavos         int64 `json:"saldoMinimoCentavos,omitempty"`
+	ComisionTransaccionCentavos int64 `json:"comisionTransaccionCentavos,omitempty"`
+	MontoTotalCentavos          int64 `json:"montoTotalCentavos,omitempty"`
 	Codigo            string    `json:"codigo,omitempty"`
 	Motivo            string    `json:"motivo,omitempty"`
 }

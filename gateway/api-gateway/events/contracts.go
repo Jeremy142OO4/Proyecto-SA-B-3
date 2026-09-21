@@ -35,9 +35,11 @@ const (
 )
 
 type SolicitudCrearCuenta struct {
-	IDSolicitud uuid.UUID `json:"idSolicitud"`
-	IDCliente   uuid.UUID `json:"idCliente"`
-	TipoCuenta  string    `json:"tipoCuenta"`
+	IDSolicitud                 uuid.UUID `json:"idSolicitud"`
+	IDCliente                   uuid.UUID `json:"idCliente"`
+	TipoCuenta                  string    `json:"tipoCuenta"`
+	SaldoMinimoCentavos         int64     `json:"saldoMinimoCentavos"`
+	ComisionTransaccionCentavos int64     `json:"comisionTransaccionCentavos"`
 }
 type SolicitudConsultarCuenta struct {
 	IDCuenta uuid.UUID `json:"idCuenta"`

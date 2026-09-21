@@ -18,6 +18,8 @@ type SolicitudCreacionCuenta struct {
 	IDSolicitud        uuid.UUID             `json:"idSolicitud"`
 	IDCliente          uuid.UUID             `json:"idCliente"`
 	TipoCuenta         TipoCuenta            `json:"tipoCuenta"`
+	SaldoMinimoCentavos         int64                `json:"saldoMinimoCentavos"`
+	ComisionTransaccionCentavos int64                `json:"comisionTransaccionCentavos"`
 	Estado             EstadoSolicitudCuenta `json:"estado"`
 	IDCorrelacion      uuid.UUID             `json:"idCorrelacion"`
 	IDCuenta           *uuid.UUID            `json:"idCuenta,omitempty"`

@@ -153,8 +153,9 @@ func esErrorPermanente(err error) bool {
 	return errors.Is(err, services.ErrMontoInvalido) ||
 		errors.Is(err, services.ErrMensajeInvalido) ||
 		errors.Is(err, repositories.ErrCuentaNoEncontrada) ||
-		errors.Is(err, repositories.ErrCuentaNoActiva) ||
+		 errors.Is(err, repositories.ErrCuentaNoActiva) ||
 		errors.Is(err, repositories.ErrFondosInsuficientes) ||
+		errors.Is(err, repositories.ErrSaldoMinimo) ||
 		errors.Is(err, repositories.ErrMovimientoNoEncontrado)
 }
 
@@ -228,6 +229,8 @@ func codigoError(err error) string {
 		return "CUENTA_NO_ACTIVA"
 	case errors.Is(err, repositories.ErrFondosInsuficientes):
 		return "FONDOS_INSUFICIENTES"
+	case errors.Is(err, repositories.ErrSaldoMinimo):
+		return "SALDO_MINIMO"
 	case errors.Is(err, repositories.ErrMovimientoNoEncontrado):
 		return "MOVIMIENTO_NO_ENCONTRADO"
 	case errors.Is(err, services.ErrMontoInvalido):

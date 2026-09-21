@@ -29,6 +29,8 @@ type Cuenta struct {
 	NumeroCuenta       string       `json:"numeroCuenta"`
 	TipoCuenta         TipoCuenta   `json:"tipoCuenta"`
 	SaldoCentavos      int64        `json:"saldoCentavos"`
+	SaldoMinimoCentavos         int64        `json:"saldoMinimoCentavos"`
+	ComisionTransaccionCentavos int64        `json:"comisionTransaccionCentavos"`
 	Moneda             string       `json:"moneda"`
 	Estado             EstadoCuenta `json:"estado"`
 	UltimaActividad    *time.Time   `json:"ultimaActividad,omitempty"`

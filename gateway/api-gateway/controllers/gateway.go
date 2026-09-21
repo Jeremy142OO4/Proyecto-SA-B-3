@@ -28,8 +28,10 @@ func NuevoGateway(p Publicador, o *operations.Store, r *responses.Gestor, t time
 }
 
 type entradaCuenta struct {
-	TipoCuenta string    `json:"tipoCuenta"`
-	IDCliente  uuid.UUID `json:"idCliente"`
+	TipoCuenta                  string    `json:"tipoCuenta"`
+	IDCliente                   uuid.UUID `json:"idCliente"`
+	SaldoMinimoCentavos         int64     `json:"saldoMinimoCentavos"`
+	ComisionTransaccionCentavos int64     `json:"comisionTransaccionCentavos"`
 }
 type entradaPago struct {
 	IDCuentaOrigen    uuid.UUID `json:"idCuentaOrigen"`
@@ -59,8 +61,15 @@ func (g *Gateway) CrearCuenta(c *fiber.Ctx) error {
 	if e.IDCliente == uuid.Nil {
 		return fiber.NewError(422, "idCliente es obligatorio")
 	}
+	if e.SaldoMinimoCentavos < 0 || e.ComisionTransaccionCentavos < 0 {
+		return fiber.NewError(422, "las reglas de cuenta no pueden ser negativas")
+	}
 	id := uuid.New()
-	return g.aceptar(c, events.ComandoCrearCuenta, id, events.SolicitudCrearCuenta{IDSolicitud: id, IDCliente: e.IDCliente, TipoCuenta: tipo})
+	return g.aceptar(c, events.ComandoCrearCuenta, id, events.SolicitudCrearCuenta{
+		IDSolicitud: id, IDCliente: e.IDCliente, TipoCuenta: tipo,
+		SaldoMinimoCentavos: e.SaldoMinimoCentavos,
+		ComisionTransaccionCentavos: e.ComisionTransaccionCentavos,
+	})
 }
 func (g *Gateway) CrearPago(c *fiber.Ctx) error {
 	var e entradaPago

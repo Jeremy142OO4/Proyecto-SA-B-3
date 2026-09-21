@@ -12,7 +12,7 @@ export function PaginaCrearCuentaCliente() {
     const datos = new FormData(evento.currentTarget);
     setEnviando(true); setMensaje(''); setError('');
     try {
-      const respuesta = await servicioCuentas.crear({idCliente: String(datos.get('idCliente')), tipoCuenta: String(datos.get('tipoCuenta'))});
+      const respuesta = await servicioCuentas.crear({idCliente: String(datos.get('idCliente')), tipoCuenta: String(datos.get('tipoCuenta')), saldoMinimoCentavos: Number(datos.get('saldoMinimoCentavos') || 0), comisionTransaccionCentavos: Number(datos.get('comisionTransaccionCentavos') || 0)});
       setMensaje(`Solicitud aceptada: ${respuesta.operationId}`);
       formulario.reset();
     } catch (e) { setError(e instanceof Error ? e.message : 'No fue posible solicitar la cuenta'); }
@@ -24,6 +24,8 @@ export function PaginaCrearCuentaCliente() {
     <form onSubmit={enviar}>
       <label>Identificador del cliente<input name="idCliente" required minLength={36} maxLength={36} placeholder="UUID del cliente" /></label>
       <label>Tipo de cuenta<select name="tipoCuenta" defaultValue="CORRIENTE"><option value="CORRIENTE">Corriente</option><option value="AHORRO">Ahorro</option><option value="MONETARIA">Monetaria (compatibilidad)</option></select></label>
+      <label>Saldo mínimo (centavos)<input name="saldoMinimoCentavos" type="number" min="0" defaultValue="0" /></label>
+      <label>Comisión por transacción (centavos)<input name="comisionTransaccionCentavos" type="number" min="0" defaultValue="0" /></label>
       <button disabled={enviando}>{enviando ? 'Enviando…' : 'Solicitar creación'}</button>
     </form>
   </div>;

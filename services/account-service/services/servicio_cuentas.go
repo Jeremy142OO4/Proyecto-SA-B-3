@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/Proyecto-SA-B-3/account-service/events"
@@ -27,8 +28,11 @@ func (s *servicioCuentas) CrearCuenta(ctx context.Context, solicitud events.Soli
 	if solicitud.IDCliente == uuid.Nil {
 		return nil, ErrClienteInvalido
 	}
+	if solicitud.SaldoMinimoCentavos < 0 || solicitud.ComisionTransaccionCentavos < 0 {
+		return nil, ErrReglaCuentaInvalida
+	}
 
-	tipoCuenta := models.TipoCuenta(solicitud.TipoCuenta)
+	tipoCuenta := models.TipoCuenta(strings.ToUpper(strings.TrimSpace(solicitud.TipoCuenta)))
 	if tipoCuenta != models.TipoCuentaMonetaria && tipoCuenta != models.TipoCuentaAhorro && tipoCuenta != models.TipoCuentaCorriente {
 		return nil, ErrTipoCuentaInvalido
 	}
@@ -44,6 +48,8 @@ func (s *servicioCuentas) CrearCuenta(ctx context.Context, solicitud events.Soli
 		NumeroCuenta:       numeroCuenta,
 		TipoCuenta:         tipoCuenta,
 		SaldoCentavos:      0,
+		SaldoMinimoCentavos: solicitud.SaldoMinimoCentavos,
+		ComisionTransaccionCentavos: solicitud.ComisionTransaccionCentavos,
 		Moneda:             "GTQ",
 		Estado:             models.EstadoCuentaActiva,
 		FechaCreacion:      ahora,
@@ -58,12 +64,19 @@ func (s *servicioCuentas) CrearCuenta(ctx context.Context, solicitud events.Soli
 
 func (s *servicioCuentas) ValidarTransferencia(ctx context.Context, solicitud events.SolicitudValidacionTransferencia) events.ResultadoValidacionTransferencia {
 	resultado := events.ResultadoValidacionTransferencia{IDOperacion: solicitud.IDOperacion, IDCliente: solicitud.IDCliente}
+	if solicitud.MontoCentavos <= 0 {
+		resultado.Codigo, resultado.Motivo = "MONTO_INVALIDO", "el monto debe ser mayor que cero"
+		return resultado
+	}
 	origen, err := s.repositorio.BuscarPorID(ctx, solicitud.IDCuentaOrigen)
 	if err != nil {
 		resultado.Codigo, resultado.Motivo = "CUENTA_ORIGEN_INVALIDA", err.Error()
 		return resultado
 	}
 	resultado.TipoCuentaOrigen = string(origen.TipoCuenta)
+	resultado.SaldoMinimoCentavos = origen.SaldoMinimoCentavos
+	resultado.ComisionTransaccionCentavos = origen.ComisionTransaccionCentavos
+	resultado.MontoTotalCentavos = solicitud.MontoCentavos + origen.ComisionTransaccionCentavos
 	if origen.IDCliente != solicitud.IDCliente {
 		resultado.Codigo, resultado.Motivo = "CUENTA_ORIGEN_AJENA", "la cuenta origen no pertenece al cliente"
 		return resultado
@@ -85,8 +98,9 @@ func (s *servicioCuentas) ValidarTransferencia(ctx context.Context, solicitud ev
 			return resultado
 		}
 	}
-	if origen.TipoCuenta == models.TipoCuentaAhorro && origen.SaldoCentavos-solicitud.MontoCentavos < 0 {
-		resultado.Codigo, resultado.Motivo = "SALDO_MINIMO_AHORRO", "la cuenta de ahorro no puede quedar con saldo negativo"
+	totalDebito := solicitud.MontoCentavos + origen.ComisionTransaccionCentavos
+	if totalDebito < solicitud.MontoCentavos || origen.SaldoCentavos-totalDebito < origen.SaldoMinimoCentavos {
+		resultado.Codigo, resultado.Motivo = "SALDO_MINIMO", "la operacion dejaria la cuenta por debajo del saldo minimo permitido"
 		return resultado
 	}
 	resultado.Valida = true
