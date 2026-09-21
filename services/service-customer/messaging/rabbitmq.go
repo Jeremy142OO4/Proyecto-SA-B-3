@@ -236,7 +236,7 @@ func (r *RabbitMQClient) ejecutarRPC(ctx context.Context, sobre events.EventEnve
 		if err := json.Unmarshal(sobre.Payload, &req); err != nil {
 			return errorRespuesta(400, err)
 		}
-		cliente, err := r.svc.UpdateCustomerKYCStatus(ctx, req.IDCliente, req.EstadoKYC)
+		cliente, err := r.svc.UpdateCustomerKYCStatus(ctx, req.IDCliente, req.EstadoKYC, sobre.CorrelationID)
 		if err != nil {
 			return errorRespuesta(400, err)
 		}

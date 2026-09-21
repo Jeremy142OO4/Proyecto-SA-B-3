@@ -17,7 +17,7 @@ type CustomerRepository interface {
 	GetByDocumentID(ctx context.Context, docID string) (*models.Customer, error)
 	List(ctx context.Context, limit, offset int) ([]*models.Customer, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status models.CustomerStatus) (*models.Customer, error)
-	UpdateKYCStatus(ctx context.Context, id uuid.UUID, status models.KYCStatus) (*models.Customer, error)
+	UpdateKYCStatusWithOutbox(ctx context.Context, id uuid.UUID, status models.KYCStatus, outboxEvent *models.OutboxMessage) (*models.Customer, error)
 	Update(ctx context.Context, customer *models.Customer) error
 	ActivateCustomer(ctx context.Context, customerID uuid.UUID, tokenID uuid.UUID, outboxEvent *models.OutboxMessage) error
 	FindActivationToken(ctx context.Context, tokenHash string) (*models.ActivationToken, error)

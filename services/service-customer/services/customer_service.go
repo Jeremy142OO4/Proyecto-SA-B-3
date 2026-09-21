@@ -30,15 +30,37 @@ type CustomerService interface {
 	UpdateCustomer(ctx context.Context, customerID uuid.UUID, req UpdateRequest, correlationID uuid.UUID) (*models.Customer, error)
 	ListCustomers(ctx context.Context, limit, offset int) ([]*models.Customer, error)
 	UpdateCustomerStatus(ctx context.Context, customerID uuid.UUID, status string) (*models.Customer, error)
-	UpdateCustomerKYCStatus(ctx context.Context, customerID uuid.UUID, status string) (*models.Customer, error)
+	UpdateCustomerKYCStatus(ctx context.Context, customerID uuid.UUID, status string, correlationID uuid.UUID) (*models.Customer, error)
 }
 
-func (s *customerService) UpdateCustomerKYCStatus(ctx context.Context, customerID uuid.UUID, status string) (*models.Customer, error) {
+func (s *customerService) UpdateCustomerKYCStatus(ctx context.Context, customerID uuid.UUID, status string, correlationID uuid.UUID) (*models.Customer, error) {
 	estado := models.KYCStatus(strings.ToUpper(strings.TrimSpace(status)))
 	if estado != models.KYCPending && estado != models.KYCVerified && estado != models.KYCRejected {
 		return nil, errors.New("estado KYC invalido")
 	}
-	cliente, err := s.repo.UpdateKYCStatus(ctx, customerID, estado)
+	if correlationID == uuid.Nil {
+		correlationID = uuid.New()
+	}
+	envelope, err := events.NewEnvelope(
+		events.EventoKYCActualizado,
+		correlationID,
+		nil,
+		events.CustomerKYCUpdatedPayload{CustomerID: customerID, EstadoKYC: string(estado)},
+	)
+	if err != nil {
+		return nil, err
+	}
+	payload, err := json.Marshal(envelope)
+	if err != nil {
+		return nil, err
+	}
+	cliente, err := s.repo.UpdateKYCStatusWithOutbox(ctx, customerID, estado, &models.OutboxMessage{
+		ID:            uuid.New(),
+		EventType:     events.EventoKYCActualizado,
+		Payload:       payload,
+		CorrelationID: correlationID,
+		CreatedAt:     time.Now().UTC(),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -163,6 +185,7 @@ func (s *customerService) RegisterCustomer(ctx context.Context, req RegisterRequ
 		PasswordHash:     string(hash),
 		Role:             role,
 		Status:           models.StatusPendingActivation,
+		KYCStatus:        models.KYCPending,
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	}

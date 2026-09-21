@@ -53,6 +53,7 @@ const (
 	EventoKYCVerificado      = "cliente.kyc.verificado"
 	EventoKYCRechazado       = "cliente.kyc.rechazado"
 	ComandoEstadoKYC         = "cliente.kyc.estado.solicitado"
+	EventoKYCActualizado     = "cliente.kyc.estado.actualizado"
 )
 
 type SolicitudValidacionCliente struct {
@@ -78,6 +79,11 @@ type ResultadoValidacionKYC struct {
 	EstadoKYC   string    `json:"estadoKyc"`
 	Valido      bool      `json:"valido"`
 	Motivo      string    `json:"motivo,omitempty"`
+}
+
+type CustomerKYCUpdatedPayload struct {
+	CustomerID uuid.UUID `json:"idCliente"`
+	EstadoKYC  string    `json:"estadoKyc"`
 }
 
 type CustomerCreatedPayload struct {

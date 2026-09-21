@@ -197,13 +197,33 @@ func (r *customerRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status mo
 	return &customer, err
 }
 
-func (r *customerRepo) UpdateKYCStatus(ctx context.Context, id uuid.UUID, status models.KYCStatus) (*models.Customer, error) {
+func (r *customerRepo) UpdateKYCStatusWithOutbox(ctx context.Context, id uuid.UUID, status models.KYCStatus, outboxEvent *models.OutboxMessage) (*models.Customer, error) {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
 	var customer models.Customer
-	err := r.db.GetContext(ctx, &customer, `UPDATE customers SET kyc_status=$1,updated_at=NOW() WHERE customer_id=$2 RETURNING *`, status, id)
+	err = tx.GetContext(ctx, &customer, `UPDATE customers SET kyc_status=$1,updated_at=NOW() WHERE customer_id=$2 RETURNING *`, status, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
-	return &customer, err
+	if err != nil {
+		return nil, err
+	}
+	if outboxEvent != nil {
+		_, err = tx.ExecContext(ctx, `INSERT INTO outbox_messages
+			(id,event_type,payload,correlation_id,causation_id,created_at)
+			VALUES($1,$2,$3,$4,$5,$6)`, outboxEvent.ID, outboxEvent.EventType, outboxEvent.Payload, outboxEvent.CorrelationID, outboxEvent.CausationID, outboxEvent.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return &customer, nil
 }
 
 func (r *customerRepo) RegistrarValidacionCliente(ctx context.Context, mensajeID, correlacionID uuid.UUID, solicitudID, clienteID uuid.UUID) error {
