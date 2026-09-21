@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"bank-usac/service-notification-audit/events"
+	"bank-usac/service-notification-audit/models"
 	"bank-usac/service-notification-audit/services"
 
 	"github.com/google/uuid"
@@ -181,10 +182,17 @@ func (r *RabbitMQConsumer) executeCommand(ctx context.Context, sobre events.Even
 		return responder(200, registros)
 	case events.ComandoNotificaciones:
 		var req struct {
-			Limite int `json:"limite"`
+			Limite       int    `json:"limite"`
+			Destinatario string `json:"destinatario"`
+			Estado       string `json:"estado"`
+			IDCorrelacion uuid.UUID `json:"idCorrelacion"`
 		}
 		_ = json.Unmarshal(sobre.Payload, &req)
-		notificaciones, err := r.auditSvc.GetRecentNotifications(ctx, req.Limite)
+		filter := models.NotificationFilter{Limit: req.Limite, Recipient: req.Destinatario, Status: models.NotificationStatus(req.Estado)}
+		if req.IDCorrelacion != uuid.Nil {
+			filter.CorrelationID = &req.IDCorrelacion
+		}
+		notificaciones, err := r.auditSvc.GetNotifications(ctx, filter)
 		if err != nil {
 			return fallar(err)
 		}

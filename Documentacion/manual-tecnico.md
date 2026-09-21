@@ -134,7 +134,7 @@ Todas las rutas de negocio se consumen a través del Gateway y requieren `Author
 | GET | `/api/cuentas/:idCuenta/movimientos` | Consultar movimientos |
 | POST | `/api/transferencias` | Solicitar transferencia |
 | POST | `/api/pagos` | Solicitar pago |
-| GET | `/api/auditoria/notificaciones` | Consultar notificaciones (ADMIN) |
+| GET | `/api/auditoria/notificaciones` | Consultar notificaciones (ADMIN); admite `limite`, `destinatario`, `estado` e `idCorrelacion` |
 
 El depósito de prueba usa el comando asíncrono `cuenta.credito.solicitado`; no modifica directamente la base desde el Gateway.
 

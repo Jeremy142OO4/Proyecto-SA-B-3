@@ -15,6 +15,7 @@ Registra eventos relevantes recibidos por el servicio para permitir auditoría y
 - `correlation_id`: identificador que agrupa todos los eventos de una misma operación distribuida.
 - `causation_id`: identificador del evento que originó el evento actual, cuando aplique.
 - `event_type`: tipo del evento recibido.
+- `severity`: clasificación operacional del evento: `INFO`, `WARNING` o `ERROR`.
 - `producer`: componente que publicó el evento.
 - `version`: versión del contrato del evento.
 - `payload`: payload seguro del evento en formato `JSONB`.
