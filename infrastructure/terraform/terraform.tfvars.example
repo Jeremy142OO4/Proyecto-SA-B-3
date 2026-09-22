@@ -8,3 +8,8 @@ cloud_sql_storage_gb = 10
 
 # Restringir al rango de red del cluster Kubernetes antes de produccion.
 cloud_sql_authorized_networks = ["0.0.0.0/0"]
+
+gke_cluster_name = "bank-usac-gke"
+gke_node_count   = 2
+gke_machine_type = "e2-medium"
+gke_disk_size_gb = 30

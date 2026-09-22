@@ -31,3 +31,18 @@ output "database_subnetwork" {
   description = "Subred conservada para el futuro cluster Kubernetes."
   value       = google_compute_subnetwork.database.name
 }
+
+output "gke_cluster_name" {
+  description = "Nombre del cluster GKE creado por Terraform."
+  value       = google_container_cluster.bank_usac.name
+}
+
+output "gke_cluster_location" {
+  description = "Zona del cluster GKE creado por Terraform."
+  value       = google_container_cluster.bank_usac.location
+}
+
+output "gke_get_credentials_command" {
+  description = "Comando para configurar kubectl contra el cluster GKE."
+  value       = "gcloud container clusters get-credentials ${google_container_cluster.bank_usac.name} --zone ${google_container_cluster.bank_usac.location} --project ${var.project_id}"
+}

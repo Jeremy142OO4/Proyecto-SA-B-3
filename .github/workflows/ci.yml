@@ -1,6 +1,10 @@
 name: Integracion continua
 
 on:
+  pull_request:
+    branches: [develop, main, master]
+  push:
+    branches: [develop, main, master]
   workflow_dispatch:
 
 permissions:
@@ -44,7 +48,13 @@ jobs:
         run: go build ./...
 
       - name: Test
-        run: go test ./...
+        run: go test -cover ./...
+
+      - name: Pruebas unitarias explicitas
+        run: go test -run 'Test[^I]' ./...
+
+      - name: Pruebas de integracion disponibles
+        run: go test -run 'TestIntegracion|TestIntegracionSagaFase2' ./... || test $? -eq 0
 
       - name: Validacion estatica
         run: go vet ./...

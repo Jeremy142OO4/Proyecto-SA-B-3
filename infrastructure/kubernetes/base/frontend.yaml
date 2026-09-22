@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: bank-usac/frontend:v2.0.0
+          image: docker.io/jeremy142004/bank-usac-frontend:v2.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - { name: http, containerPort: 80 }

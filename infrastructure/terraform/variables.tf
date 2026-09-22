@@ -44,3 +44,27 @@ variable "cloud_sql_authorized_networks" {
   type        = list(string)
   default     = ["0.0.0.0/0"]
 }
+
+variable "gke_cluster_name" {
+  description = "Nombre del cluster GKE administrado por Terraform."
+  type        = string
+  default     = "bank-usac-gke"
+}
+
+variable "gke_node_count" {
+  description = "Cantidad inicial de nodos del pool principal de GKE."
+  type        = number
+  default     = 2
+}
+
+variable "gke_machine_type" {
+  description = "Tipo de maquina para los nodos de GKE."
+  type        = string
+  default     = "e2-medium"
+}
+
+variable "gke_disk_size_gb" {
+  description = "Tamano del disco de cada nodo de GKE en GB."
+  type        = number
+  default     = 30
+}

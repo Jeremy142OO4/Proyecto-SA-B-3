@@ -13,3 +13,17 @@ resource "google_compute_subnetwork" "database" {
 
   private_ip_google_access = true
 }
+
+resource "google_compute_firewall" "frontend_nodeport" {
+  name    = "bank-usac-frontend-nodeport"
+  network = google_compute_network.bank_usac.name
+
+  direction     = "INGRESS"
+  source_ranges = ["0.0.0.0/0"]
+  target_tags   = ["bank-usac-gke"]
+
+  allow {
+    protocol = "tcp"
+    ports    = ["30080"]
+  }
+}
