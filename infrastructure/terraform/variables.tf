@@ -57,6 +57,12 @@ variable "gke_node_count" {
   default     = 2
 }
 
+variable "gke_max_node_count" {
+  description = "Cantidad maxima de nodos del pool principal cuando el cluster necesita capacidad adicional."
+  type        = number
+  default     = 4
+}
+
 variable "gke_machine_type" {
   description = "Tipo de maquina para los nodos de GKE."
   type        = string

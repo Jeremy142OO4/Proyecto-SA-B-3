@@ -25,6 +25,11 @@ resource "google_container_node_pool" "bank_usac" {
   cluster    = google_container_cluster.bank_usac.name
   node_count = var.gke_node_count
 
+  autoscaling {
+    min_node_count = var.gke_node_count
+    max_node_count = var.gke_max_node_count
+  }
+
   node_config {
     machine_type = var.gke_machine_type
     disk_type    = "pd-balanced"

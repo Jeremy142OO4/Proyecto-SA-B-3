@@ -24,6 +24,6 @@ resource "google_compute_firewall" "frontend_nodeport" {
 
   allow {
     protocol = "tcp"
-    ports    = ["30080"]
+    ports    = ["30080", "30081"]
   }
 }
