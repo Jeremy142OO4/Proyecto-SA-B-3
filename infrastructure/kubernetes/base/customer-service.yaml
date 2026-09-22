@@ -46,7 +46,7 @@ spec:
               valueFrom: { secretKeyRef: { name: bank-usac-secrets, key: URL_BASE_DATOS_CLIENTES } }
       containers:
         - name: customer-service
-          image: bank-usac/customer-service:v2.0.0
+          image: docker.io/jeremy142004/bank-usac-customer-service:v2.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - { name: http, containerPort: 8081 }

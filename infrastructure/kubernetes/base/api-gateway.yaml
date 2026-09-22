@@ -27,7 +27,7 @@ spec:
           command: [sh, -c, "until nc -z rabbitmq 5672; do sleep 2; done"]
       containers:
         - name: api-gateway
-          image: bank-usac/api-gateway:v2.0.0
+          image: docker.io/jeremy142004/bank-usac-api-gateway:v2.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - { name: http, containerPort: 8080 }

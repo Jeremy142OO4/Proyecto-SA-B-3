@@ -12,3 +12,11 @@ dist/
 *.tsbuildinfo
 frontend/bank-usac-web/vite.config.js
 frontend/bank-usac-web/vite.config.d.ts
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!terraform.tfvars.example
+crash.log
