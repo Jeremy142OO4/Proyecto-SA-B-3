@@ -23,6 +23,7 @@ func (r *notificationRepo) SaveNotificationLog(ctx context.Context, log *models.
 	query := `
 		INSERT INTO notification_logs (id, correlation_id, recipient, notification_type, subject, body_summary, status, error_detail, sent_at)
 		VALUES (:id, :correlation_id, :recipient, :notification_type, :subject, :body_summary, :status, :error_detail, :sent_at)
+		ON CONFLICT (id) DO NOTHING
 	`
 	_, err := r.db.NamedExecContext(ctx, query, log)
 	return err

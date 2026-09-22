@@ -101,6 +101,34 @@ func TestProcessEventStoresSeverityAndGeneratedNotification(t *testing.T) {
 	}
 }
 
+func TestProcessEventIsIdempotentAndKeepsCorrelation(t *testing.T) {
+	auditRepo := &fakeAuditRepository{}
+	notificationRepo := &fakeNotificationRepository{}
+	idempotencyRepo := &fakeIdempotencyRepository{processed: make(map[uuid.UUID]bool)}
+	service := NewAuditService(auditRepo, notificationRepo, idempotencyRepo, nil)
+	envelope := newTestEnvelope("transferencia.completada", map[string]string{"estado": "COMPLETADA"})
+
+	if err := service.ProcessEvent(context.Background(), envelope); err != nil {
+		t.Fatalf("primer procesamiento fallido: %v", err)
+	}
+	if err := service.ProcessEvent(context.Background(), envelope); err != nil {
+		t.Fatalf("reprocesamiento idempotente fallido: %v", err)
+	}
+	if len(auditRepo.logs) != 1 || len(notificationRepo.logs) != 1 {
+		t.Fatalf("el evento duplicado genero efectos adicionales: auditorias=%d notificaciones=%d", len(auditRepo.logs), len(notificationRepo.logs))
+	}
+	if auditRepo.logs[0].CorrelationID != envelope.CorrelationID || notificationRepo.logs[0].CorrelationID != envelope.CorrelationID {
+		t.Fatal("se perdio el CorrelationId en los registros")
+	}
+}
+
+func TestProcessEventRechazaSobreInvalido(t *testing.T) {
+	service := NewAuditService(&fakeAuditRepository{}, &fakeNotificationRepository{}, &fakeIdempotencyRepository{processed: make(map[uuid.UUID]bool)}, nil)
+	if err := service.ProcessEvent(context.Background(), &events.EventEnvelope{MessageID: uuid.New(), Type: "transferencia.completada"}); err == nil {
+		t.Fatal("se esperaba error para sobre sin CorrelationId")
+	}
+}
+
 func TestActivationEmailFailureIsRecorded(t *testing.T) {
 	notificationRepo := &fakeNotificationRepository{}
 	idempotencyRepo := &fakeIdempotencyRepository{processed: make(map[uuid.UUID]bool)}

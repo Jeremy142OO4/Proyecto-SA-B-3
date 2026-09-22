@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"github.com/Proyecto-SA-B-3/transaction-service/events"
 	"github.com/Proyecto-SA-B-3/transaction-service/models"
 	"github.com/google/uuid"
@@ -72,5 +73,25 @@ func TestRechazaRangoDeFechasInvalido(t *testing.T) {
 	})
 	if e == nil {
 		t.Fatal("debio rechazar un rango de fechas invertido")
+	}
+}
+
+func TestRechazaEventosSinIdentificadoresTransversales(t *testing.T) {
+	s := Nuevo(&repoFalso{})
+	_, err := s.Resultado(context.Background(), events.SobreMensaje{IDMensaje: uuid.New()}, events.ResultadoMovimiento{IDOperacion: uuid.New()})
+	if !errors.Is(err, ErrSolicitudInvalida) {
+		t.Fatalf("se esperaba rechazar evento sin CorrelationId: %v", err)
+	}
+	_, err = s.Historial(context.Background(), events.SobreMensaje{IDCorrelacion: uuid.New()}, events.SolicitudHistorial{IDCliente: uuid.New()})
+	if !errors.Is(err, ErrSolicitudInvalida) {
+		t.Fatalf("se esperaba rechazar consulta sin MessageId: %v", err)
+	}
+}
+
+func TestConsultaRechazaOperacionInvalidaAntesDelRepositorio(t *testing.T) {
+	s := Nuevo(&repoFalso{})
+	_, err := s.Consultar(context.Background(), events.SobreMensaje{IDMensaje: uuid.New(), IDCorrelacion: uuid.New()}, events.SolicitudConsulta{})
+	if !errors.Is(err, ErrSolicitudInvalida) {
+		t.Fatalf("se esperaba rechazar consulta sin id de transferencia: %v", err)
 	}
 }

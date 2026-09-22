@@ -21,6 +21,7 @@ func (r *auditRepo) SaveAuditLog(ctx context.Context, log *models.AuditLog) erro
 	query := `
 		INSERT INTO audit_logs (id, event_id, correlation_id, causation_id, event_type, severity, producer, version, payload, occurred_at, recorded_at)
 		VALUES (:id, :event_id, :correlation_id, :causation_id, :event_type, :severity, :producer, :version, :payload, :occurred_at, :recorded_at)
+		ON CONFLICT (id) DO NOTHING
 	`
 	_, err := r.db.NamedExecContext(ctx, query, log)
 	return err

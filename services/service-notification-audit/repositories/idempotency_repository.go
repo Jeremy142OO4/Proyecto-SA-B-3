@@ -22,7 +22,9 @@ func (r *idempotencyRepo) IsMessageProcessed(ctx context.Context, messageID uuid
 }
 
 func (r *idempotencyRepo) MarkMessageProcessed(ctx context.Context, messageID uuid.UUID, consumerName, ref string) error {
-	query := "INSERT INTO processed_messages (message_id, consumer_name, result_reference) VALUES ($1, $2, $3)"
+	query := `INSERT INTO processed_messages (message_id, consumer_name, result_reference)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (message_id) DO NOTHING`
 	_, err := r.db.ExecContext(ctx, query, messageID, consumerName, ref)
 	return err
 }

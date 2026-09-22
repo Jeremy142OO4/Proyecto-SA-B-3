@@ -186,3 +186,27 @@ func TestProcesarCreditoConstruyeMovimiento(t *testing.T) {
 		t.Fatalf("evento de salida inesperado: %s", repositorio.movimientoRecibido.TipoEventoExitoso)
 	}
 }
+
+func TestValidarTransferenciaRechazaCuentaNoActiva(t *testing.T) {
+	idCliente := uuid.New()
+	repositorio := &repositorioCuentasFalso{cuentaCreada: &models.Cuenta{
+		IDCuenta: uuid.New(), IDCliente: idCliente, TipoCuenta: models.TipoCuentaAhorro,
+		SaldoCentavos: 50000, Estado: models.EstadoCuentaInactiva,
+	}}
+	resultado := NuevoServicioCuentas(repositorio).ValidarTransferencia(context.Background(), events.SolicitudValidacionTransferencia{
+		IDOperacion: uuid.New(), IDCliente: idCliente, IDCuentaOrigen: repositorio.cuentaCreada.IDCuenta, MontoCentavos: 100,
+	})
+	if resultado.Valida || resultado.Codigo != "CUENTA_NO_ACTIVA" {
+		t.Fatalf("se esperaba rechazo por estado de cuenta: %+v", resultado)
+	}
+}
+
+func TestProcesarDebitoRechazaSobreSinIdentificadoresTransversales(t *testing.T) {
+	servicio := NuevoServicioCuentas(&repositorioCuentasFalso{})
+	err := servicio.ProcesarDebito(context.Background(), events.SobreMensaje{IDMensaje: uuid.New()}, events.SolicitudMovimiento{
+		IDCuenta: uuid.New(), IDOperacion: uuid.New(), MontoCentavos: 100,
+	})
+	if !errors.Is(err, ErrMensajeInvalido) {
+		t.Fatalf("se esperaba rechazar un CorrelationId ausente, se obtuvo %v", err)
+	}
+}
