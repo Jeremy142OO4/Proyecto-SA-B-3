@@ -23,10 +23,10 @@ spec:
       initContainers:
         - name: esperar-dependencias
           image: alpine:3.22
-          command: ["sh", "-c", "until nc -z rabbitmq 5672 && nc -z host.minikube.internal 5436; do sleep 2; done"]
+          command: ["sh", "-c", "until nc -z rabbitmq 5672; do sleep 2; done"]
       containers:
         - name: notification-audit-service
-          image: bank-usac/notification-audit-service:v2.0.0
+          image: docker.io/jeremy142004/bank-usac-notification-audit-service:v2.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

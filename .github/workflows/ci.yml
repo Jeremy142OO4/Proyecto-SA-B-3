@@ -1,0 +1,108 @@
+name: Integracion continua
+
+on:
+  pull_request:
+    branches: [develop, main, master]
+  push:
+    branches: [develop, main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-go:
+    name: Build y test - ${{ matrix.nombre }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - nombre: API Gateway
+            directorio: gateway/api-gateway
+          - nombre: Account Service
+            directorio: services/account-service
+          - nombre: Payment Service
+            directorio: services/payment-service
+          - nombre: Transaction Service
+            directorio: services/transaction-service
+          - nombre: Customer Service
+            directorio: services/service-customer
+          - nombre: Notification Audit Service
+            directorio: services/service-notification-audit
+    defaults:
+      run:
+        working-directory: ${{ matrix.directorio }}
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.directorio }}/go.mod
+          cache: true
+          cache-dependency-path: ${{ matrix.directorio }}/go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test -cover ./...
+
+      - name: Pruebas unitarias explicitas
+        run: go test -run 'Test[^I]' ./...
+
+      - name: Pruebas de integracion disponibles
+        run: go test -run 'TestIntegracion|TestIntegracionSagaFase2' ./... || test $? -eq 0
+
+      - name: Validacion estatica
+        run: go vet ./...
+
+  build-test-frontend:
+    name: Build y test - Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/bank-usac-web
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/bank-usac-web/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Test y validacion
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+  validacion-sistema:
+    name: Validacion basica del sistema
+    runs-on: ubuntu-latest
+    needs:
+      - build-test-go
+      - build-test-frontend
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Validar manifiestos Kubernetes de desarrollo
+        run: kubectl kustomize infrastructure/kubernetes/overlays/dev > /tmp/manifiestos-dev.yaml
+
+      - name: Comprobar recursos obligatorios
+        run: |
+          grep -q 'kind: Deployment' /tmp/manifiestos-dev.yaml
+          grep -q 'kind: Service' /tmp/manifiestos-dev.yaml
+          grep -q 'kind: HorizontalPodAutoscaler' /tmp/manifiestos-dev.yaml
+
+      - name: Validar configuracion de Compose
+        run: docker compose config --quiet

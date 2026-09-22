@@ -3,17 +3,24 @@ kind: Kustomization
 resources:
   - ../../base
 images:
-  - name: bank-usac/account-service
+  - name: docker.io/jeremy142004/bank-usac-account-service
+    newName: bank-usac/account-service
     newTag: dev
-  - name: bank-usac/api-gateway
+  - name: docker.io/jeremy142004/bank-usac-api-gateway
+    newName: bank-usac/api-gateway
     newTag: dev
-  - name: bank-usac/customer-service
+  - name: docker.io/jeremy142004/bank-usac-customer-service
+    newName: bank-usac/customer-service
     newTag: dev
-  - name: bank-usac/payment-service
+  - name: docker.io/jeremy142004/bank-usac-payment-service
+    newName: bank-usac/payment-service
     newTag: dev
-  - name: bank-usac/transaction-service
+  - name: docker.io/jeremy142004/bank-usac-transaction-service
+    newName: bank-usac/transaction-service
     newTag: dev
-  - name: bank-usac/notification-audit-service
+  - name: docker.io/jeremy142004/bank-usac-notification-audit-service
+    newName: bank-usac/notification-audit-service
     newTag: dev
-  - name: bank-usac/frontend
+  - name: docker.io/jeremy142004/bank-usac-frontend
+    newName: bank-usac/frontend
     newTag: dev
