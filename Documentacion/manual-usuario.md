@@ -49,11 +49,12 @@ No envíe varias veces el mismo formulario mientras la solicitud aparece como pe
 2. Seleccione la cuenta de origen.
 3. Escriba el identificador de la cuenta destino (UUID).
 4. Indique el monto y, opcionalmente, una descripción.
-5. Presione **Confirmar transferencia**.
+5. Para la demostración académica, seleccione el resultado externo: **Éxito**, **Fallo** o **Timeout**.
+6. Presione **Confirmar transferencia**.
 
 ![Nueva transferencia](Imagenes/manual-nueva-transferencia.png)
 
-Las transferencias se procesan de forma asíncrona mediante RabbitMQ. La respuesta inicial confirma que la solicitud fue recibida; el estado final puede consultarse desde el listado o detalle de operaciones. Una transferencia requiere una cuenta origen activa y saldo suficiente.
+Las transferencias se procesan de forma asíncrona mediante RabbitMQ. Antes de mover fondos, el sistema exige KYC `VERIFIED` y valida la propiedad, estado y tipo de las cuentas. La respuesta inicial confirma que la solicitud fue recibida; el estado final puede consultarse desde el listado o detalle. En los escenarios **Fallo** y **Timeout**, el débito se compensa automáticamente.
 
 ### 3.4 Registrar un pago
 
@@ -61,11 +62,12 @@ Las transferencias se procesan de forma asíncrona mediante RabbitMQ. La respues
 2. Seleccione la cuenta desde la que se debitará el dinero.
 3. Ingrese el beneficiario, el concepto y el monto.
 4. Seleccione el tipo de pago: **Interno** o **Externo**.
-5. Presione **Confirmar pago**.
+5. Para un pago externo, seleccione el resultado que desea simular: **Éxito**, **Fallo** o **Timeout**.
+6. Presione **Confirmar pago**.
 
 ![Nuevo pago](Imagenes/manual-nuevo-pago.png)
 
-El pago queda en estado de procesamiento mientras el servicio de pagos consume el evento. Consulte nuevamente la operación para confirmar si fue aprobada o rechazada.
+El pago queda en estado de procesamiento mientras el servicio consume los eventos. **Éxito** finaliza como `COMPLETADO`. **Fallo** y **Timeout** pasan por compensación, devuelven el monto debitado y finalizan como `RECHAZADO`. Esta selección existe para demostrar los comportamientos solicitados en el entorno académico y no representa una pasarela bancaria real.
 
 ### 3.5 Activar la cuenta por correo
 

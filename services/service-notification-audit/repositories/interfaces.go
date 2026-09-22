@@ -16,7 +16,7 @@ type AuditRepository interface {
 
 type NotificationRepository interface {
 	SaveNotificationLog(ctx context.Context, log *models.NotificationLog) error
-	GetNotificationLogs(ctx context.Context, limit int) ([]*models.NotificationLog, error)
+	GetNotificationLogs(ctx context.Context, filter models.NotificationFilter) ([]*models.NotificationLog, error)
 }
 
 type IdempotencyRepository interface {

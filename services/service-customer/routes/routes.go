@@ -28,4 +28,5 @@ func SetupRoutes(app *fiber.App, cc *controllers.CustomerController, cfg *config
 	adminOnly := middleware.AuthMiddleware(cfg.JWTSecret, "ADMIN")
 	api.Get("/", adminOnly, cc.ListCustomers)
 	api.Patch("/:id/status", adminOnly, cc.UpdateCustomerStatus)
+	api.Patch("/:id/kyc-status", adminOnly, cc.UpdateCustomerKYCStatus)
 }

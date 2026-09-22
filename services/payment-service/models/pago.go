@@ -14,27 +14,38 @@ const (
 
 type EstadoPago string
 
+type ResultadoSimulado string
+
 const (
-	EstadoPagoPendiente   EstadoPago = "PENDIENTE"
-	EstadoPagoProcesando  EstadoPago = "PROCESANDO"
-	EstadoPagoCompensando EstadoPago = "COMPENSANDO"
-	EstadoPagoCompletado  EstadoPago = "COMPLETADO"
-	EstadoPagoRechazado   EstadoPago = "RECHAZADO"
+	ResultadoExito   ResultadoSimulado = "EXITO"
+	ResultadoFallo   ResultadoSimulado = "FALLO"
+	ResultadoTimeout ResultadoSimulado = "TIMEOUT"
+)
+
+const (
+	EstadoPagoPendiente       EstadoPago = "PENDIENTE"
+	EstadoPagoValidandoKYC    EstadoPago = "VALIDANDO_KYC"
+	EstadoPagoValidandoCuenta EstadoPago = "VALIDANDO_CUENTA"
+	EstadoPagoProcesando      EstadoPago = "PROCESANDO"
+	EstadoPagoCompensando     EstadoPago = "COMPENSANDO"
+	EstadoPagoCompletado      EstadoPago = "COMPLETADO"
+	EstadoPagoRechazado       EstadoPago = "RECHAZADO"
 )
 
 type Pago struct {
-	IDPago             uuid.UUID  `json:"idPago"`
-	IDCliente          uuid.UUID  `json:"idCliente"`
-	IDCuentaOrigen     uuid.UUID  `json:"idCuentaOrigen"`
-	Beneficiario       string     `json:"beneficiario"`
-	Concepto           string     `json:"concepto"`
-	MontoCentavos      int64      `json:"montoCentavos"`
-	Moneda             string     `json:"moneda"`
-	TipoPago           TipoPago   `json:"tipoPago"`
-	Estado             EstadoPago `json:"estado"`
-	ReferenciaExterna  string     `json:"referenciaExterna,omitempty"`
-	IDCorrelacion      uuid.UUID  `json:"idCorrelacion"`
-	MotivoRechazo      string     `json:"motivoRechazo,omitempty"`
-	FechaCreacion      time.Time  `json:"fechaCreacion"`
-	FechaActualizacion time.Time  `json:"fechaActualizacion"`
+	IDPago             uuid.UUID         `json:"idPago"`
+	IDCliente          uuid.UUID         `json:"idCliente"`
+	IDCuentaOrigen     uuid.UUID         `json:"idCuentaOrigen"`
+	Beneficiario       string            `json:"beneficiario"`
+	Concepto           string            `json:"concepto"`
+	MontoCentavos      int64             `json:"montoCentavos"`
+	Moneda             string            `json:"moneda"`
+	TipoPago           TipoPago          `json:"tipoPago"`
+	ResultadoSimulado  ResultadoSimulado `json:"resultadoSimulado,omitempty"`
+	Estado             EstadoPago        `json:"estado"`
+	ReferenciaExterna  string            `json:"referenciaExterna,omitempty"`
+	IDCorrelacion      uuid.UUID         `json:"idCorrelacion"`
+	MotivoRechazo      string            `json:"motivoRechazo,omitempty"`
+	FechaCreacion      time.Time         `json:"fechaCreacion"`
+	FechaActualizacion time.Time         `json:"fechaActualizacion"`
 }

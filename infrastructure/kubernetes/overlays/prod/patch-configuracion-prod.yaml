@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bank-usac-config
+  namespace: bank-usac
+data:
+  ENTORNO: produccion
+  CORS_ORIGINS: "https://bank-usac.example.com"

@@ -12,3 +12,7 @@ El diagrama representa la estructura persistente administrada exclusivamente por
 - `mensajes_procesados` evita procesar dos veces el mismo mensaje.
 - `mensajes_salida` implementa el patrón Transactional Outbox.
 
+## Simulación de pagos externos
+
+La tabla `pagos` incluye el campo `resultado_simulado`, restringido a `EXITO`, `FALLO` o `TIMEOUT`. La tabla `intentos_pago` registra el resultado efectivo mediante `estado`, `codigo_respuesta`, `detalle_error`, `fecha_inicio` y `fecha_finalizacion`. Para instalaciones existentes, este campo se incorpora mediante la migración `000002_agregar_resultado_simulado` con `EXITO` como valor predeterminado.
+

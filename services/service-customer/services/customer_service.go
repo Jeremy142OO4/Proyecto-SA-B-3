@@ -29,7 +29,45 @@ type CustomerService interface {
 	GetProfile(ctx context.Context, customerID uuid.UUID) (*models.Customer, error)
 	UpdateCustomer(ctx context.Context, customerID uuid.UUID, req UpdateRequest, correlationID uuid.UUID) (*models.Customer, error)
 	ListCustomers(ctx context.Context, limit, offset int) ([]*models.Customer, error)
-	UpdateCustomerStatus(ctx context.Context, customerID uuid.UUID, status string) (*models.Customer, error)
+	UpdateCustomerStatus(ctx context.Context, customerID uuid.UUID, status string, correlationID uuid.UUID) (*models.Customer, error)
+	UpdateCustomerKYCStatus(ctx context.Context, customerID uuid.UUID, status string, correlationID uuid.UUID) (*models.Customer, error)
+}
+
+func (s *customerService) UpdateCustomerKYCStatus(ctx context.Context, customerID uuid.UUID, status string, correlationID uuid.UUID) (*models.Customer, error) {
+	estado := models.KYCStatus(strings.ToUpper(strings.TrimSpace(status)))
+	if estado != models.KYCPending && estado != models.KYCVerified && estado != models.KYCRejected {
+		return nil, errors.New("estado KYC invalido")
+	}
+	if correlationID == uuid.Nil {
+		correlationID = uuid.New()
+	}
+	envelope, err := events.NewEnvelope(
+		events.EventoKYCActualizado,
+		correlationID,
+		nil,
+		events.CustomerKYCUpdatedPayload{CustomerID: customerID, EstadoKYC: string(estado)},
+	)
+	if err != nil {
+		return nil, err
+	}
+	payload, err := json.Marshal(envelope)
+	if err != nil {
+		return nil, err
+	}
+	cliente, err := s.repo.UpdateKYCStatusWithOutbox(ctx, customerID, estado, &models.OutboxMessage{
+		ID:            uuid.New(),
+		EventType:     events.EventoKYCActualizado,
+		Payload:       payload,
+		CorrelationID: correlationID,
+		CreatedAt:     time.Now().UTC(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if cliente == nil {
+		return nil, errors.New("cliente no encontrado")
+	}
+	return cliente, nil
 }
 
 func (s *customerService) ListCustomers(ctx context.Context, limit, offset int) ([]*models.Customer, error) {
@@ -42,12 +80,34 @@ func (s *customerService) ListCustomers(ctx context.Context, limit, offset int) 
 	return s.repo.List(ctx, limit, offset)
 }
 
-func (s *customerService) UpdateCustomerStatus(ctx context.Context, customerID uuid.UUID, status string) (*models.Customer, error) {
+func (s *customerService) UpdateCustomerStatus(ctx context.Context, customerID uuid.UUID, status string, correlationID uuid.UUID) (*models.Customer, error) {
 	estado := models.CustomerStatus(strings.ToUpper(status))
 	if estado != models.StatusPendingActivation && estado != models.StatusActive && estado != models.StatusBlocked {
 		return nil, errors.New("estado de cliente invalido")
 	}
-	cliente, err := s.repo.UpdateStatus(ctx, customerID, estado)
+	if correlationID == uuid.Nil {
+		correlationID = uuid.New()
+	}
+	envelope, err := events.NewEnvelope(
+		events.EventoClienteEstadoActualizado,
+		correlationID,
+		nil,
+		events.CustomerStatusUpdatedPayload{CustomerID: customerID, Status: string(estado)},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error creando evento de estado: %w", err)
+	}
+	payload, err := json.Marshal(envelope)
+	if err != nil {
+		return nil, fmt.Errorf("error serializando evento de estado: %w", err)
+	}
+	cliente, err := s.repo.UpdateStatusWithOutbox(ctx, customerID, estado, &models.OutboxMessage{
+		ID:            uuid.New(),
+		EventType:     events.EventoClienteEstadoActualizado,
+		Payload:       payload,
+		CorrelationID: correlationID,
+		CreatedAt:     time.Now().UTC(),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -91,6 +151,9 @@ func NewCustomerService(repo repositories.CustomerRepository, cfg *config.Config
 }
 
 func (s *customerService) RegisterCustomer(ctx context.Context, req RegisterRequest, correlationID uuid.UUID) (*models.Customer, error) {
+	if correlationID == uuid.Nil {
+		correlationID = uuid.New()
+	}
 	if req.FirstName == "" || req.LastName == "" || req.DocumentID == "" || req.Email == "" || req.Password == "" {
 		return nil, errors.New("todos los campos obligatorios deben ser completados")
 	}
@@ -147,6 +210,7 @@ func (s *customerService) RegisterCustomer(ctx context.Context, req RegisterRequ
 		PasswordHash:     string(hash),
 		Role:             role,
 		Status:           models.StatusPendingActivation,
+		KYCStatus:        models.KYCPending,
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	}
@@ -173,8 +237,14 @@ func (s *customerService) RegisterCustomer(ctx context.Context, req RegisterRequ
 		Role:       string(customer.Role),
 		Status:     string(customer.Status),
 	}
-	envCust, _ := events.NewEnvelope(events.EventoClienteCreado, correlationID, nil, custPayload)
-	envCustBytes, _ := json.Marshal(envCust)
+	envCust, err := events.NewEnvelope(events.EventoClienteCreado, correlationID, nil, custPayload)
+	if err != nil {
+		return nil, fmt.Errorf("error creando evento de cliente: %w", err)
+	}
+	envCustBytes, err := json.Marshal(envCust)
+	if err != nil {
+		return nil, fmt.Errorf("error serializando evento de cliente: %w", err)
+	}
 
 	emailPayload := events.ActivationEmailRequestedPayload{
 		CustomerID:     customer.CustomerID,
@@ -183,8 +253,14 @@ func (s *customerService) RegisterCustomer(ctx context.Context, req RegisterRequ
 		ActivationLink: fmt.Sprintf("%s?token=%s", s.cfg.ActivationLinkBase, plainToken),
 		ExpiresAt:      activationToken.ExpiresAt,
 	}
-	envEmail, _ := events.NewEnvelope(events.EventoCorreoActivacion, correlationID, nil, emailPayload)
-	envEmailBytes, _ := json.Marshal(envEmail)
+	envEmail, err := events.NewEnvelope(events.EventoCorreoActivacion, correlationID, nil, emailPayload)
+	if err != nil {
+		return nil, fmt.Errorf("error creando evento de activación: %w", err)
+	}
+	envEmailBytes, err := json.Marshal(envEmail)
+	if err != nil {
+		return nil, fmt.Errorf("error serializando evento de activación: %w", err)
+	}
 
 	outbox := []*models.OutboxMessage{
 		{
@@ -230,8 +306,17 @@ func (s *customerService) ActivateCustomer(ctx context.Context, plainToken strin
 		CustomerID:  tokenRecord.CustomerID,
 		ActivatedAt: time.Now().UTC(),
 	}
-	env, _ := events.NewEnvelope(events.EventoClienteActivado, correlationID, nil, actPayload)
-	envBytes, _ := json.Marshal(env)
+	if correlationID == uuid.Nil {
+		correlationID = uuid.New()
+	}
+	env, err := events.NewEnvelope(events.EventoClienteActivado, correlationID, nil, actPayload)
+	if err != nil {
+		return fmt.Errorf("error creando evento de activación: %w", err)
+	}
+	envBytes, err := json.Marshal(env)
+	if err != nil {
+		return fmt.Errorf("error serializando evento de activación: %w", err)
+	}
 
 	outboxEvent := &models.OutboxMessage{
 		ID:            uuid.New(),
@@ -312,7 +397,29 @@ func (s *customerService) UpdateCustomer(ctx context.Context, customerID uuid.UU
 		cust.Email = req.Email
 	}
 
-	if err := s.repo.Update(ctx, cust); err != nil {
+	if correlationID == uuid.Nil {
+		correlationID = uuid.New()
+	}
+	envelope, err := events.NewEnvelope(
+		events.EventoClienteActualizado,
+		correlationID,
+		nil,
+		events.CustomerUpdatedPayload{CustomerID: cust.CustomerID, Address: cust.Address, Email: cust.Email},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error creando evento de actualización: %w", err)
+	}
+	payload, err := json.Marshal(envelope)
+	if err != nil {
+		return nil, fmt.Errorf("error serializando evento de actualización: %w", err)
+	}
+	if err := s.repo.UpdateWithOutbox(ctx, cust, &models.OutboxMessage{
+		ID:            uuid.New(),
+		EventType:     events.EventoClienteActualizado,
+		Payload:       payload,
+		CorrelationID: correlationID,
+		CreatedAt:     time.Now().UTC(),
+	}); err != nil {
 		return nil, err
 	}
 

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/Proyecto-SA-B-3/account-service/events"
 	"github.com/Proyecto-SA-B-3/account-service/models"
@@ -22,16 +23,20 @@ func (s *servicioCreacionCuentas) SolicitarCreacion(ctx context.Context, mensaje
 	if mensaje.IDMensaje == uuid.Nil || mensaje.IDCorrelacion == uuid.Nil || solicitud.IDSolicitud == uuid.Nil || solicitud.IDCliente == uuid.Nil {
 		return ErrMensajeInvalido
 	}
-	tipo := models.TipoCuenta(solicitud.TipoCuenta)
-	if tipo != models.TipoCuentaMonetaria && tipo != models.TipoCuentaAhorro {
+	tipo := models.TipoCuenta(strings.ToUpper(strings.TrimSpace(solicitud.TipoCuenta)))
+	if tipo != models.TipoCuentaMonetaria && tipo != models.TipoCuentaAhorro && tipo != models.TipoCuentaCorriente {
 		return ErrTipoCuentaInvalido
+	}
+	solicitud.TipoCuenta = string(tipo)
+	if solicitud.SaldoMinimoCentavos < 0 || solicitud.ComisionTransaccionCentavos < 0 {
+		return ErrReglaCuentaInvalida
 	}
 	_, err := s.repositorio.Iniciar(ctx, mensaje, solicitud)
 	return err
 }
 
 func (s *servicioCreacionCuentas) ProcesarValidacionCliente(ctx context.Context, mensaje events.SobreMensaje, resultado events.ResultadoValidacionCliente) error {
-	if resultado.IDSolicitud == uuid.Nil || resultado.IDCliente == uuid.Nil {
+	if mensaje.IDMensaje == uuid.Nil || mensaje.IDCorrelacion == uuid.Nil || resultado.IDSolicitud == uuid.Nil || resultado.IDCliente == uuid.Nil {
 		return ErrMensajeInvalido
 	}
 	if resultado.Activo && mensaje.Tipo == events.EventoClienteValidado {

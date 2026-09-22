@@ -41,6 +41,8 @@ const (
 	EventoClienteRechazado   = "cliente.rechazado"
 	EventoClienteCreado      = "cliente.creado"
 	EventoClienteActivado    = "cliente.activado"
+	EventoClienteActualizado = "cliente.actualizado"
+	EventoClienteEstadoActualizado = "cliente.estado.actualizado"
 	EventoCorreoActivacion   = "notificacion.correo-activacion.solicitado"
 	ComandoRegistrarCliente  = "cliente.registro.solicitado"
 	ComandoActivarCliente    = "cliente.activacion.solicitada"
@@ -49,6 +51,11 @@ const (
 	ComandoActualizarCliente = "cliente.actualizacion.solicitada"
 	ComandoListarClientes    = "cliente.listado.solicitado"
 	ComandoEstadoCliente     = "cliente.estado.solicitado"
+	ComandoValidarKYC        = "cliente.kyc.validacion.solicitada"
+	EventoKYCVerificado      = "cliente.kyc.verificado"
+	EventoKYCRechazado       = "cliente.kyc.rechazado"
+	ComandoEstadoKYC         = "cliente.kyc.estado.solicitado"
+	EventoKYCActualizado     = "cliente.kyc.estado.actualizado"
 )
 
 type SolicitudValidacionCliente struct {
@@ -61,6 +68,24 @@ type ResultadoValidacionCliente struct {
 	IDCliente   uuid.UUID `json:"idCliente"`
 	Activo      bool      `json:"activo"`
 	Motivo      string    `json:"motivo,omitempty"`
+}
+
+type SolicitudValidacionKYC struct {
+	IDOperacion uuid.UUID `json:"idOperacion"`
+	IDCliente   uuid.UUID `json:"idCliente"`
+}
+
+type ResultadoValidacionKYC struct {
+	IDOperacion uuid.UUID `json:"idOperacion"`
+	IDCliente   uuid.UUID `json:"idCliente"`
+	EstadoKYC   string    `json:"estadoKyc"`
+	Valido      bool      `json:"valido"`
+	Motivo      string    `json:"motivo,omitempty"`
+}
+
+type CustomerKYCUpdatedPayload struct {
+	CustomerID uuid.UUID `json:"idCliente"`
+	EstadoKYC  string    `json:"estadoKyc"`
 }
 
 type CustomerCreatedPayload struct {
@@ -90,4 +115,9 @@ type CustomerUpdatedPayload struct {
 	CustomerID uuid.UUID `json:"idCliente"`
 	Address    string    `json:"direccion"`
 	Email      string    `json:"correo"`
+}
+
+type CustomerStatusUpdatedPayload struct {
+	CustomerID uuid.UUID `json:"idCliente"`
+	Status     string    `json:"estado"`
 }

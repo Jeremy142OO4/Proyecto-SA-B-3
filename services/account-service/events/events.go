@@ -17,6 +17,8 @@ const (
 	EventoCuentaConsultada        = "cuenta.consultada"
 	EventoMovimientosConsultados  = "cuenta.movimientos.consultados"
 	EventoCuentasConsultadas      = "cuenta.historial.consultado"
+	EventoTransferenciaValidada   = "cuenta.transferencia.validada"
+	EventoTransferenciaRechazada  = "cuenta.transferencia.rechazada"
 )
 
 type ResultadoValidacionCliente struct {
@@ -24,4 +26,17 @@ type ResultadoValidacionCliente struct {
 	IDCliente   uuid.UUID `json:"idCliente"`
 	Activo      bool      `json:"activo"`
 	Motivo      string    `json:"motivo,omitempty"`
+}
+
+type ResultadoValidacionTransferencia struct {
+	IDOperacion       uuid.UUID `json:"idOperacion"`
+	IDCliente         uuid.UUID `json:"idCliente"`
+	Valida            bool      `json:"valida"`
+	TipoCuentaOrigen  string    `json:"tipoCuentaOrigen,omitempty"`
+	TipoCuentaDestino string    `json:"tipoCuentaDestino,omitempty"`
+	SaldoMinimoCentavos         int64 `json:"saldoMinimoCentavos,omitempty"`
+	ComisionTransaccionCentavos int64 `json:"comisionTransaccionCentavos,omitempty"`
+	MontoTotalCentavos          int64 `json:"montoTotalCentavos,omitempty"`
+	Codigo            string    `json:"codigo,omitempty"`
+	Motivo            string    `json:"motivo,omitempty"`
 }

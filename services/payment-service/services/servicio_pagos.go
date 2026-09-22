@@ -7,6 +7,7 @@ import (
 	"github.com/Proyecto-SA-B-3/payment-service/models"
 	"github.com/Proyecto-SA-B-3/payment-service/repositories"
 	"github.com/google/uuid"
+	"strings"
 )
 
 var (
@@ -16,6 +17,8 @@ var (
 
 type ServicioPagos interface {
 	Procesar(context.Context, events.SobreMensaje, events.SolicitudPago) error
+	ProcesarResultadoKYC(context.Context, events.SobreMensaje, events.ResultadoValidacionKYC) error
+	ProcesarResultadoValidacionCuenta(context.Context, events.SobreMensaje, events.ResultadoValidacionCuenta) error
 	ProcesarResultadoCuenta(context.Context, events.SobreMensaje, events.ResultadoMovimiento) error
 	Consultar(context.Context, uuid.UUID) (*models.Pago, error)
 	ListarCliente(context.Context, uuid.UUID, int, int) ([]models.Pago, error)
@@ -33,7 +36,35 @@ func (s *servicioPagos) Procesar(ctx context.Context, m events.SobreMensaje, p e
 	if models.TipoPago(p.TipoPago) != models.TipoPagoInterno && models.TipoPago(p.TipoPago) != models.TipoPagoExterno {
 		return ErrTipoPagoInvalido
 	}
+	p.ResultadoSimulado = strings.ToUpper(strings.TrimSpace(p.ResultadoSimulado))
+	if p.ResultadoSimulado == "" || models.TipoPago(p.TipoPago) == models.TipoPagoInterno {
+		p.ResultadoSimulado = string(models.ResultadoExito)
+	}
+	resultado := models.ResultadoSimulado(p.ResultadoSimulado)
+	if resultado != models.ResultadoExito && resultado != models.ResultadoFallo && resultado != models.ResultadoTimeout {
+		return ErrSolicitudInvalida
+	}
 	_, _, err := s.repositorio.Iniciar(ctx, m, p)
+	return err
+}
+func (s *servicioPagos) ProcesarResultadoKYC(ctx context.Context, m events.SobreMensaje, r events.ResultadoValidacionKYC) error {
+	if m.IDMensaje == uuid.Nil || m.IDCorrelacion == uuid.Nil || r.IDOperacion == uuid.Nil || r.IDCliente == uuid.Nil {
+		return ErrSolicitudInvalida
+	}
+	err := s.repositorio.ProcesarResultadoKYC(ctx, m, r)
+	if errors.Is(err, repositories.ErrPagoNoEncontrado) {
+		return nil
+	}
+	return err
+}
+func (s *servicioPagos) ProcesarResultadoValidacionCuenta(ctx context.Context, m events.SobreMensaje, r events.ResultadoValidacionCuenta) error {
+	if m.IDMensaje == uuid.Nil || m.IDCorrelacion == uuid.Nil || r.IDOperacion == uuid.Nil || r.IDCliente == uuid.Nil {
+		return ErrSolicitudInvalida
+	}
+	err := s.repositorio.ProcesarResultadoValidacionCuenta(ctx, m, r)
+	if errors.Is(err, repositories.ErrPagoNoEncontrado) {
+		return nil
+	}
 	return err
 }
 func (s *servicioPagos) ProcesarResultadoCuenta(ctx context.Context, m events.SobreMensaje, r events.ResultadoMovimiento) error {
@@ -49,9 +80,15 @@ func (s *servicioPagos) ProcesarResultadoCuenta(ctx context.Context, m events.So
 	return err
 }
 func (s *servicioPagos) Consultar(ctx context.Context, id uuid.UUID) (*models.Pago, error) {
+	if id == uuid.Nil {
+		return nil, ErrSolicitudInvalida
+	}
 	return s.repositorio.BuscarPorID(ctx, id)
 }
 func (s *servicioPagos) ListarCliente(ctx context.Context, id uuid.UUID, l, o int) ([]models.Pago, error) {
+	if id == uuid.Nil {
+		return nil, ErrSolicitudInvalida
+	}
 	if l <= 0 || l > 100 {
 		l = 25
 	}
@@ -62,6 +99,9 @@ func (s *servicioPagos) ListarCliente(ctx context.Context, id uuid.UUID, l, o in
 }
 
 func (s *servicioPagos) RegistrarRespuesta(ctx context.Context, mensaje events.SobreMensaje, tipo string, contenido any) error {
+	if mensaje.IDMensaje == uuid.Nil || mensaje.IDCorrelacion == uuid.Nil {
+		return ErrSolicitudInvalida
+	}
 	_, err := s.repositorio.RegistrarRespuesta(ctx, mensaje, tipo, contenido)
 	return err
 }

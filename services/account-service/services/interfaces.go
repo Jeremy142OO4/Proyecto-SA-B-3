@@ -9,6 +9,7 @@ import (
 )
 
 type ServicioCuentas interface {
+	ValidarTransferencia(ctx context.Context, solicitud events.SolicitudValidacionTransferencia) events.ResultadoValidacionTransferencia
 	CrearCuenta(ctx context.Context, solicitud events.SolicitudCrearCuenta) (*models.Cuenta, error)
 	ConsultarCuenta(ctx context.Context, idCuenta uuid.UUID) (*models.Cuenta, error)
 	ListarCuentas(ctx context.Context, idCliente uuid.UUID) ([]models.Cuenta, error)

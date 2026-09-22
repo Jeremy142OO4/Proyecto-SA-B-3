@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -63,7 +64,7 @@ func NewRabbitMQClient(url string, repo repositories.CustomerRepository, svc ser
 	if _, err := ch.QueueDeclare(colaComandosCliente, true, false, false, false, argumentos); err != nil {
 		return nil, err
 	}
-	for _, tipo := range []string{events.ComandoValidarCliente, events.ComandoRegistrarCliente, events.ComandoActivarCliente, events.ComandoLoginCliente, events.ComandoPerfilCliente, events.ComandoActualizarCliente, events.ComandoListarClientes, events.ComandoEstadoCliente} {
+	for _, tipo := range []string{events.ComandoValidarCliente, events.ComandoValidarKYC, events.ComandoRegistrarCliente, events.ComandoActivarCliente, events.ComandoLoginCliente, events.ComandoPerfilCliente, events.ComandoActualizarCliente, events.ComandoListarClientes, events.ComandoEstadoCliente, events.ComandoEstadoKYC} {
 		if err := ch.QueueBind(colaComandosCliente, tipo, intercambioComandos, false, nil); err != nil {
 			return nil, err
 		}
@@ -118,13 +119,52 @@ func (r *RabbitMQClient) procesarComando(ctx context.Context, sobre events.Event
 		}
 		return r.repo.RegistrarValidacionCliente(ctx, sobre.MessageID, sobre.CorrelationID, solicitud.IDSolicitud, solicitud.IDCliente)
 	}
+	if sobre.Type == events.ComandoValidarKYC {
+		var solicitud events.SolicitudValidacionKYC
+		if json.Unmarshal(sobre.Payload, &solicitud) != nil || solicitud.IDOperacion == uuid.Nil || solicitud.IDCliente == uuid.Nil {
+			return errors.New("solicitud de validacion KYC invalida")
+		}
+		return r.repo.RegistrarValidacionKYC(ctx, sobre.MessageID, sobre.CorrelationID, solicitud.IDOperacion, solicitud.IDCliente)
+	}
+
+	procesado, resultado, err := r.repo.GetProcessedMessageResult(ctx, sobre.MessageID)
+	if err != nil {
+		return fmt.Errorf("error verificando idempotencia del comando: %w", err)
+	}
+	if procesado {
+		var cache respuestaRPC
+		if err := json.Unmarshal([]byte(resultado), &cache); err != nil {
+			return fmt.Errorf("resultado idempotente inválido: %w", err)
+		}
+		return r.publicarRespuesta(ctx, sobre, cache.Estado, cache.Cuerpo)
+	}
+
 	estado, cuerpo := r.ejecutarRPC(ctx, sobre)
-	contenido, _ := json.Marshal(respuestaRPC{Estado: estado, Cuerpo: cuerpo})
+	if estado < 500 {
+		cache, err := json.Marshal(respuestaRPC{Estado: estado, Cuerpo: cuerpo})
+		if err != nil {
+			return fmt.Errorf("error serializando resultado idempotente: %w", err)
+		}
+		if err := r.repo.RecordProcessedMessage(ctx, sobre.MessageID, "customer-service.commands", string(cache)); err != nil {
+			return fmt.Errorf("error registrando comando procesado: %w", err)
+		}
+	}
+	return r.publicarRespuesta(ctx, sobre, estado, cuerpo)
+}
+
+func (r *RabbitMQClient) publicarRespuesta(ctx context.Context, sobre events.EventEnvelope, estado int, cuerpo json.RawMessage) error {
+	contenido, err := json.Marshal(respuestaRPC{Estado: estado, Cuerpo: cuerpo})
+	if err != nil {
+		return err
+	}
 	respuesta, err := events.NewEnvelope(strings.TrimSuffix(sobre.Type, ".solicitado")+".respondido", sobre.CorrelationID, &sobre.MessageID, json.RawMessage(contenido))
 	if err != nil {
 		return err
 	}
-	bytes, _ := json.Marshal(respuesta)
+	bytes, err := json.Marshal(respuesta)
+	if err != nil {
+		return err
+	}
 	return r.channel.PublishWithContext(ctx, intercambioRespuestas, respuesta.Type, false, false, amqp.Publishing{DeliveryMode: amqp.Persistent, ContentType: "application/json", CorrelationId: sobre.CorrelationID.String(), Body: bytes})
 }
 
@@ -216,7 +256,20 @@ func (r *RabbitMQClient) ejecutarRPC(ctx context.Context, sobre events.EventEnve
 		if err := json.Unmarshal(sobre.Payload, &req); err != nil {
 			return errorRespuesta(400, err)
 		}
-		cliente, err := r.svc.UpdateCustomerStatus(ctx, req.IDCliente, req.Estado)
+		cliente, err := r.svc.UpdateCustomerStatus(ctx, req.IDCliente, req.Estado, sobre.CorrelationID)
+		if err != nil {
+			return errorRespuesta(400, err)
+		}
+		return respuesta(200, cliente)
+	case events.ComandoEstadoKYC:
+		var req struct {
+			IDCliente uuid.UUID `json:"idCliente"`
+			EstadoKYC string    `json:"estadoKyc"`
+		}
+		if err := json.Unmarshal(sobre.Payload, &req); err != nil {
+			return errorRespuesta(400, err)
+		}
+		cliente, err := r.svc.UpdateCustomerKYCStatus(ctx, req.IDCliente, req.EstadoKYC, sobre.CorrelationID)
 		if err != nil {
 			return errorRespuesta(400, err)
 		}

@@ -10,12 +10,15 @@ const (
 	ComandoConsultarCuenta       = "cuenta.consulta.solicitada"
 	ComandoListarMovimientos     = "cuenta.movimientos.solicitados"
 	ComandoListarCuentas         = "cuenta.historial.solicitado"
+	ComandoValidarTransferencia  = "cuenta.transferencia.validacion.solicitada"
 )
 
 type SolicitudCrearCuenta struct {
-	IDSolicitud uuid.UUID `json:"idSolicitud"`
-	IDCliente   uuid.UUID `json:"idCliente"`
-	TipoCuenta  string    `json:"tipoCuenta"`
+	IDSolicitud                 uuid.UUID `json:"idSolicitud"`
+	IDCliente                   uuid.UUID `json:"idCliente"`
+	TipoCuenta                  string    `json:"tipoCuenta"`
+	SaldoMinimoCentavos         int64     `json:"saldoMinimoCentavos"`
+	ComisionTransaccionCentavos int64     `json:"comisionTransaccionCentavos"`
 }
 
 type SolicitudConsultarCuenta struct {
@@ -35,6 +38,14 @@ type SolicitudMovimiento struct {
 	IDCuenta      uuid.UUID `json:"idCuenta"`
 	IDOperacion   uuid.UUID `json:"idOperacion"`
 	MontoCentavos int64     `json:"montoCentavos"`
+}
+
+type SolicitudValidacionTransferencia struct {
+	IDOperacion     uuid.UUID `json:"idOperacion"`
+	IDCliente       uuid.UUID `json:"idCliente"`
+	IDCuentaOrigen  uuid.UUID `json:"idCuentaOrigen"`
+	IDCuentaDestino uuid.UUID `json:"idCuentaDestino"`
+	MontoCentavos   int64     `json:"montoCentavos"`
 }
 
 const ComandoValidarCliente = "cliente.validacion.solicitada"

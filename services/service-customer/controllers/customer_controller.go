@@ -34,7 +34,29 @@ func (cc *CustomerController) UpdateCustomerStatus(c *fiber.Ctx) error {
 	if c.BodyParser(&input) != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Cuerpo de solicitud invalido"})
 	}
-	customer, err := cc.svc.UpdateCustomerStatus(c.Context(), id, input.Status)
+	customer, err := cc.svc.UpdateCustomerStatus(c.Context(), id, input.Status, middleware.GetCorrelationID(c))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(customer)
+}
+
+func (cc *CustomerController) UpdateCustomerKYCStatus(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Identificador de cliente invalido"})
+	}
+	var input struct {
+		KYCStatus string `json:"kycStatus"`
+		Status    string `json:"status"`
+	}
+	if c.BodyParser(&input) != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Cuerpo de solicitud invalido"})
+	}
+	if input.KYCStatus == "" {
+		input.KYCStatus = input.Status
+	}
+	customer, err := cc.svc.UpdateCustomerKYCStatus(c.Context(), id, input.KYCStatus, middleware.GetCorrelationID(c))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}

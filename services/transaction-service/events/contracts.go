@@ -28,6 +28,12 @@ const (
 	EventoCompensacionFallida   = "transferencia.compensacion.fallida"
 	EventoConsultada            = "transferencia.consultada"
 	EventoHistorial             = "transferencia.historial.consultado"
+	ComandoValidarKYC           = "cliente.kyc.validacion.solicitada"
+	EventoKYCVerificado         = "cliente.kyc.verificado"
+	EventoKYCRechazado          = "cliente.kyc.rechazado"
+	ComandoValidarCuentas       = "cuenta.transferencia.validacion.solicitada"
+	EventoCuentasValidadas      = "cuenta.transferencia.validada"
+	EventoCuentasRechazadas     = "cuenta.transferencia.rechazada"
 )
 
 type SobreMensaje struct {
@@ -67,18 +73,50 @@ func DecodificarSobre(cuerpo []byte) (SobreMensaje, error) {
 }
 
 type SolicitudTransferencia struct {
-	IDTransferencia uuid.UUID `json:"idTransferencia"`
-	OperationID     uuid.UUID `json:"operationId"`
+	IDTransferencia          uuid.UUID `json:"idTransferencia"`
+	OperationID              uuid.UUID `json:"operationId"`
+	IDCliente                uuid.UUID `json:"idCliente"`
+	CustomerID               uuid.UUID `json:"customerId"`
+	IDCuentaOrigen           uuid.UUID `json:"idCuentaOrigen"`
+	SourceAccount            uuid.UUID `json:"sourceAccount"`
+	IDCuentaDestino          uuid.UUID `json:"idCuentaDestino"`
+	TargetAccount            uuid.UUID `json:"targetAccount"`
+	MontoCentavos            int64     `json:"montoCentavos"`
+	AmountCents              int64     `json:"amountCents"`
+	Descripcion              string    `json:"descripcion"`
+	Description              string    `json:"description"`
+	ResultadoExternoSimulado string    `json:"resultadoExternoSimulado,omitempty"`
+}
+
+type SolicitudValidacionKYC struct {
+	IDOperacion uuid.UUID `json:"idOperacion"`
+	IDCliente   uuid.UUID `json:"idCliente"`
+}
+
+type ResultadoValidacionKYC struct {
+	IDOperacion uuid.UUID `json:"idOperacion"`
+	IDCliente   uuid.UUID `json:"idCliente"`
+	EstadoKYC   string    `json:"estadoKyc"`
+	Valido      bool      `json:"valido"`
+	Motivo      string    `json:"motivo,omitempty"`
+}
+
+type SolicitudValidacionCuentas struct {
+	IDOperacion     uuid.UUID `json:"idOperacion"`
 	IDCliente       uuid.UUID `json:"idCliente"`
-	CustomerID      uuid.UUID `json:"customerId"`
 	IDCuentaOrigen  uuid.UUID `json:"idCuentaOrigen"`
-	SourceAccount   uuid.UUID `json:"sourceAccount"`
 	IDCuentaDestino uuid.UUID `json:"idCuentaDestino"`
-	TargetAccount   uuid.UUID `json:"targetAccount"`
 	MontoCentavos   int64     `json:"montoCentavos"`
-	AmountCents     int64     `json:"amountCents"`
-	Descripcion     string    `json:"descripcion"`
-	Description     string    `json:"description"`
+}
+
+type ResultadoValidacionCuentas struct {
+	IDOperacion       uuid.UUID `json:"idOperacion"`
+	IDCliente         uuid.UUID `json:"idCliente"`
+	Valida            bool      `json:"valida"`
+	TipoCuentaOrigen  string    `json:"tipoCuentaOrigen,omitempty"`
+	TipoCuentaDestino string    `json:"tipoCuentaDestino,omitempty"`
+	Codigo            string    `json:"codigo,omitempty"`
+	Motivo            string    `json:"motivo,omitempty"`
 }
 
 func (s SolicitudTransferencia) Normalizar() (uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, int64, string) {
@@ -125,7 +163,11 @@ type SolicitudConsulta struct {
 	IDTransferencia uuid.UUID `json:"idTransferencia"`
 }
 type SolicitudHistorial struct {
-	IDCliente      uuid.UUID `json:"idCliente"`
-	Limite         int       `json:"limite"`
-	Desplazamiento int       `json:"desplazamiento"`
+	IDCliente      uuid.UUID  `json:"idCliente"`
+	IDCuenta       *uuid.UUID `json:"idCuenta,omitempty"`
+	FechaDesde     string     `json:"fechaDesde,omitempty"`
+	FechaHasta     string     `json:"fechaHasta,omitempty"`
+	Estado         string     `json:"estado,omitempty"`
+	Limite         int        `json:"limite"`
+	Desplazamiento int        `json:"desplazamiento"`
 }

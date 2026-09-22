@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"bank-usac/service-notification-audit/events"
+	"bank-usac/service-notification-audit/models"
 	"bank-usac/service-notification-audit/services"
 
 	"github.com/google/uuid"
@@ -78,6 +79,12 @@ func NewRabbitMQConsumer(url string, auditSvc services.AuditService) (*RabbitMQC
 			return nil, err
 		}
 	}
+	if _, err := ch.QueueDeclare("notification-audit.dlq.q", true, false, false, false, nil); err != nil {
+		return nil, err
+	}
+	if err := ch.QueueBind("notification-audit.dlq.q", "notification-audit.dlq", "banco.fallidos", false, nil); err != nil {
+		return nil, err
+	}
 
 	return &RabbitMQConsumer{conn: conn, channel: ch, auditSvc: auditSvc}, nil
 }
@@ -99,6 +106,10 @@ func (r *RabbitMQConsumer) StartConsuming(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	dlq, err := r.channel.Consume("notification-audit.dlq.q", "notification-audit-dlq", false, false, false, false, nil)
+	if err != nil {
+		return err
+	}
 
 	go func() {
 		log.Println("[RabbitMQ] Consumidor de Notification & Audit iniciado. Escuchando eventos...")
@@ -111,6 +122,19 @@ func (r *RabbitMQConsumer) StartConsuming(ctx context.Context) error {
 					return
 				}
 				r.handleDelivery(ctx, msg)
+			}
+		}
+	}()
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg, ok := <-dlq:
+				if !ok {
+					return
+				}
+				r.handleDLQDelivery(ctx, msg)
 			}
 		}
 	}()
@@ -138,7 +162,7 @@ type respuestaRPC struct {
 
 func (r *RabbitMQConsumer) handleCommand(ctx context.Context, d amqp.Delivery) {
 	var sobre events.EventEnvelope
-	if err := json.Unmarshal(d.Body, &sobre); err != nil || sobre.MessageID == uuid.Nil || sobre.CorrelationID == uuid.Nil {
+	if err := json.Unmarshal(d.Body, &sobre); err != nil || sobre.MessageID == uuid.Nil || sobre.CorrelationID == uuid.Nil || strings.TrimSpace(sobre.Type) == "" {
 		_ = d.Nack(false, false)
 		return
 	}
@@ -161,7 +185,9 @@ func (r *RabbitMQConsumer) executeCommand(ctx context.Context, sobre events.Even
 		var req struct {
 			Limite int `json:"limite"`
 		}
-		_ = json.Unmarshal(sobre.Payload, &req)
+		if err := json.Unmarshal(sobre.Payload, &req); err != nil {
+			return responder(400, map[string]string{"error": "payload de auditoria invalido"})
+		}
 		registros, err := r.auditSvc.GetRecentAudits(ctx, req.Limite)
 		if err != nil {
 			return fallar(err)
@@ -181,10 +207,19 @@ func (r *RabbitMQConsumer) executeCommand(ctx context.Context, sobre events.Even
 		return responder(200, registros)
 	case events.ComandoNotificaciones:
 		var req struct {
-			Limite int `json:"limite"`
+			Limite       int    `json:"limite"`
+			Destinatario string `json:"destinatario"`
+			Estado       string `json:"estado"`
+			IDCorrelacion uuid.UUID `json:"idCorrelacion"`
 		}
-		_ = json.Unmarshal(sobre.Payload, &req)
-		notificaciones, err := r.auditSvc.GetRecentNotifications(ctx, req.Limite)
+		if err := json.Unmarshal(sobre.Payload, &req); err != nil {
+			return responder(400, map[string]string{"error": "payload de notificaciones invalido"})
+		}
+		filter := models.NotificationFilter{Limit: req.Limite, Recipient: req.Destinatario, Status: models.NotificationStatus(req.Estado)}
+		if req.IDCorrelacion != uuid.Nil {
+			filter.CorrelationID = &req.IDCorrelacion
+		}
+		notificaciones, err := r.auditSvc.GetNotifications(ctx, filter)
 		if err != nil {
 			return fallar(err)
 		}
@@ -196,7 +231,7 @@ func (r *RabbitMQConsumer) executeCommand(ctx context.Context, sobre events.Even
 
 func (r *RabbitMQConsumer) handleDelivery(ctx context.Context, d amqp.Delivery) {
 	var envelope events.EventEnvelope
-	if err := json.Unmarshal(d.Body, &envelope); err != nil {
+	if err := json.Unmarshal(d.Body, &envelope); err != nil || envelope.MessageID == uuid.Nil || envelope.CorrelationID == uuid.Nil || strings.TrimSpace(envelope.Type) == "" {
 		log.Printf("[RabbitMQ] Error deserializando sobre de mensaje: %v. Enviando a DLQ.", err)
 		_ = d.Nack(false, false) // Fallo permanente -> DLQ
 		return
@@ -210,6 +245,39 @@ func (r *RabbitMQConsumer) handleDelivery(ctx context.Context, d amqp.Delivery) 
 	}
 
 	// Confirmación manual de recepción exitosa
+	_ = d.Ack(false)
+}
+
+func (r *RabbitMQConsumer) handleDLQDelivery(ctx context.Context, d amqp.Delivery) {
+	var original events.EventEnvelope
+	if err := json.Unmarshal(d.Body, &original); err != nil || original.MessageID == uuid.Nil || original.CorrelationID == uuid.Nil {
+		_ = d.Ack(false)
+		return
+	}
+
+	payload, err := json.Marshal(map[string]any{
+		"mensajeOriginal": original.MessageID,
+		"tipoOriginal":    original.Type,
+		"productor":       original.Producer,
+	})
+	if err != nil {
+		_ = d.Nack(false, false)
+		return
+	}
+	failure := &events.EventEnvelope{
+		MessageID:     uuid.New(),
+		CorrelationID: original.CorrelationID,
+		CausationID:   &original.MessageID,
+		Type:          "notification-audit.dlq",
+		Version:       1,
+		OccurredAt:    time.Now().UTC(),
+		Producer:      "notification-audit-service",
+		Payload:       payload,
+	}
+	if err := r.auditSvc.ProcessEvent(ctx, failure); err != nil {
+		_ = d.Nack(false, false)
+		return
+	}
 	_ = d.Ack(false)
 }
 

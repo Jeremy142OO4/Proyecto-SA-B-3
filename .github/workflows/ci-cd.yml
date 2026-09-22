@@ -1,0 +1,360 @@
+name: CI/CD Bank USAC
+
+on:
+  push:
+    branches:
+      - "feature/**"
+      - develop
+      - "release/**"
+      - main
+      - master
+    tags:
+      - "v*.*.*"
+  pull_request:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAMESPACE: jeremy142004
+
+jobs:
+  build-test-go:
+    name: Build y test - ${{ matrix.nombre }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - nombre: API Gateway
+            directorio: gateway/api-gateway
+          - nombre: Account Service
+            directorio: services/account-service
+          - nombre: Payment Service
+            directorio: services/payment-service
+          - nombre: Transaction Service
+            directorio: services/transaction-service
+          - nombre: Customer Service
+            directorio: services/service-customer
+          - nombre: Notification Audit Service
+            directorio: services/service-notification-audit
+    defaults:
+      run:
+        working-directory: ${{ matrix.directorio }}
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.directorio }}/go.mod
+          cache: true
+          cache-dependency-path: ${{ matrix.directorio }}/go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test -cover ./...
+
+      - name: Pruebas unitarias explicitas
+        run: go test -run 'Test[^I]' ./...
+
+      - name: Pruebas de integracion disponibles
+        run: go test -run 'TestIntegracion|TestIntegracionSagaFase2' ./...
+
+      - name: Validacion estatica
+        run: go vet ./...
+
+  build-test-frontend:
+    name: Build y test - Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/bank-usac-web
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/bank-usac-web/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+  validacion-sistema:
+    name: Validacion basica del sistema
+    runs-on: ubuntu-latest
+    needs:
+      - build-test-go
+      - build-test-frontend
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Validar manifiestos Kubernetes
+        run: |
+          kubectl kustomize infrastructure/kubernetes/overlays/dev > /tmp/manifiestos-dev.yaml
+          kubectl kustomize infrastructure/kubernetes/overlays/cloud-dev > /tmp/manifiestos-cloud-dev.yaml
+          kubectl kustomize infrastructure/kubernetes/overlays/prod > /tmp/manifiestos-prod.yaml
+
+      - name: Comprobar recursos obligatorios
+        run: |
+          grep -q 'kind: Deployment' /tmp/manifiestos-dev.yaml
+          grep -q 'kind: Service' /tmp/manifiestos-dev.yaml
+          grep -q 'kind: HorizontalPodAutoscaler' /tmp/manifiestos-dev.yaml
+          ! grep -R 'image:.*:latest' infrastructure/kubernetes
+
+      - name: Validar configuracion de Compose
+        run: docker compose config --quiet
+
+  construir-publicar-imagenes:
+    name: Construir y publicar imagenes versionadas
+    runs-on: ubuntu-latest
+    needs: validacion-sistema
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/v'))
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - nombre: API Gateway
+            directorio: gateway/api-gateway
+            imagen: bank-usac-api-gateway
+          - nombre: Account Service
+            directorio: services/account-service
+            imagen: bank-usac-account-service
+          - nombre: Payment Service
+            directorio: services/payment-service
+            imagen: bank-usac-payment-service
+          - nombre: Transaction Service
+            directorio: services/transaction-service
+            imagen: bank-usac-transaction-service
+          - nombre: Customer Service
+            directorio: services/service-customer
+            imagen: bank-usac-customer-service
+          - nombre: Notification Audit Service
+            directorio: services/service-notification-audit
+            imagen: bank-usac-notification-audit-service
+          - nombre: Frontend
+            directorio: frontend/bank-usac-web
+            imagen: bank-usac-frontend
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Determinar version de imagen
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="$GITHUB_REF_NAME"
+          elif [[ "$GITHUB_REF" == refs/heads/release/* ]]; then
+            VERSION="${GITHUB_REF_NAME#release/}"
+          else
+            VERSION="$GITHUB_SHA"
+          fi
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Iniciar sesion en Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Configurar Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Construir y publicar imagen versionada
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.directorio }}
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.imagen }}:${{ steps.version.outputs.tag }}
+          cache-from: type=gha,scope=${{ matrix.imagen }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.imagen }}
+
+  desplegar-desarrollo:
+    name: Desplegar en Kubernetes dev
+    runs-on: ubuntu-latest
+    needs: construir-publicar-imagenes
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    environment: development
+    env:
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GKE_CLUSTER: ${{ secrets.GKE_CLUSTER }}
+      GKE_ZONE: ${{ secrets.GKE_ZONE }}
+      KUBE_NAMESPACE: bank-usac-dev
+      IMAGE_TAG: ${{ github.sha }}
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Autenticar en Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configurar gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Obtener credenciales de GKE
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GKE_ZONE }}
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Crear secretos del entorno dev
+        env:
+          URL_BASE_DATOS_CUENTAS: ${{ secrets.URL_BASE_DATOS_CUENTAS }}
+          URL_BASE_DATOS_PAGOS: ${{ secrets.URL_BASE_DATOS_PAGOS }}
+          URL_BASE_DATOS_TRANSACCIONES: ${{ secrets.URL_BASE_DATOS_TRANSACCIONES }}
+          URL_BASE_DATOS_CLIENTES: ${{ secrets.URL_BASE_DATOS_CLIENTES }}
+          URL_BASE_DATOS_AUDITORIA: ${{ secrets.URL_BASE_DATOS_AUDITORIA }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          URL_RABBITMQ: ${{ secrets.URL_RABBITMQ }}
+          RABBITMQ_USUARIO: ${{ secrets.RABBITMQ_USUARIO }}
+          RABBITMQ_CLAVE: ${{ secrets.RABBITMQ_CLAVE }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_APP_PASSWORD: ${{ secrets.SMTP_APP_PASSWORD }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+        run: |
+          kubectl create namespace "$KUBE_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n "$KUBE_NAMESPACE" create secret generic bank-usac-secrets \
+            --from-literal=URL_BASE_DATOS_CUENTAS="$URL_BASE_DATOS_CUENTAS" \
+            --from-literal=URL_BASE_DATOS_PAGOS="$URL_BASE_DATOS_PAGOS" \
+            --from-literal=URL_BASE_DATOS_TRANSACCIONES="$URL_BASE_DATOS_TRANSACCIONES" \
+            --from-literal=URL_BASE_DATOS_CLIENTES="$URL_BASE_DATOS_CLIENTES" \
+            --from-literal=URL_BASE_DATOS_AUDITORIA="$URL_BASE_DATOS_AUDITORIA" \
+            --from-literal=JWT_SECRET="$JWT_SECRET" \
+            --from-literal=URL_RABBITMQ="$URL_RABBITMQ" \
+            --from-literal=RABBITMQ_USUARIO="${RABBITMQ_USUARIO:-bank_usac}" \
+            --from-literal=RABBITMQ_CLAVE="${RABBITMQ_CLAVE:-bank_usac_local}" \
+            --from-literal=SMTP_HOST="${SMTP_HOST:-smtp.gmail.com}" \
+            --from-literal=SMTP_PORT="${SMTP_PORT:-587}" \
+            --from-literal=SMTP_USERNAME="$SMTP_USERNAME" \
+            --from-literal=SMTP_APP_PASSWORD="$SMTP_APP_PASSWORD" \
+            --from-literal=SMTP_FROM="$SMTP_FROM" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Aplicar manifiestos dev con rolling update
+        env:
+          PUBLIC_HOST: ${{ secrets.PUBLIC_HOST }}
+        run: |
+          kubectl kustomize infrastructure/kubernetes/overlays/cloud-dev \
+            | sed "s/:v2.0.0/:${IMAGE_TAG}/g; s/__PUBLIC_HOST__/${PUBLIC_HOST:-bank-usac.example.com}/g" \
+            | kubectl apply -f -
+          for despliegue in rabbitmq api-gateway customer-service account-service payment-service transaction-service notification-audit-service frontend; do
+            kubectl -n "$KUBE_NAMESPACE" rollout status "deployment/$despliegue" --timeout=180s
+          done
+
+  desplegar-produccion:
+    name: Desplegar en Kubernetes prod
+    runs-on: ubuntu-latest
+    needs: validacion-sistema
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    environment: production
+    env:
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GKE_CLUSTER: ${{ secrets.GKE_CLUSTER }}
+      GKE_ZONE: ${{ secrets.GKE_ZONE }}
+      KUBE_NAMESPACE: bank-usac
+    steps:
+      - name: Descargar codigo con historial y tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Obtener version publicada
+        id: version
+        shell: bash
+        run: |
+          VERSION="$(git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' --abbrev=0 2>/dev/null || true)"
+          if [ -z "$VERSION" ]; then
+            echo "No existe un tag de release vX.Y.Z alcanzable desde main/master."
+            exit 1
+          fi
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Autenticar en Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configurar gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Obtener credenciales de GKE
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GKE_ZONE }}
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Crear o actualizar secretos de produccion
+        env:
+          URL_BASE_DATOS_CUENTAS: ${{ secrets.URL_BASE_DATOS_CUENTAS }}
+          URL_BASE_DATOS_PAGOS: ${{ secrets.URL_BASE_DATOS_PAGOS }}
+          URL_BASE_DATOS_TRANSACCIONES: ${{ secrets.URL_BASE_DATOS_TRANSACCIONES }}
+          URL_BASE_DATOS_CLIENTES: ${{ secrets.URL_BASE_DATOS_CLIENTES }}
+          URL_BASE_DATOS_AUDITORIA: ${{ secrets.URL_BASE_DATOS_AUDITORIA }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          URL_RABBITMQ: ${{ secrets.URL_RABBITMQ }}
+          RABBITMQ_USUARIO: ${{ secrets.RABBITMQ_USUARIO }}
+          RABBITMQ_CLAVE: ${{ secrets.RABBITMQ_CLAVE }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_APP_PASSWORD: ${{ secrets.SMTP_APP_PASSWORD }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+        run: |
+          kubectl create namespace "$KUBE_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n "$KUBE_NAMESPACE" create secret generic bank-usac-secrets \
+            --from-literal=URL_BASE_DATOS_CUENTAS="$URL_BASE_DATOS_CUENTAS" \
+            --from-literal=URL_BASE_DATOS_PAGOS="$URL_BASE_DATOS_PAGOS" \
+            --from-literal=URL_BASE_DATOS_TRANSACCIONES="$URL_BASE_DATOS_TRANSACCIONES" \
+            --from-literal=URL_BASE_DATOS_CLIENTES="$URL_BASE_DATOS_CLIENTES" \
+            --from-literal=URL_BASE_DATOS_AUDITORIA="$URL_BASE_DATOS_AUDITORIA" \
+            --from-literal=JWT_SECRET="$JWT_SECRET" \
+            --from-literal=URL_RABBITMQ="$URL_RABBITMQ" \
+            --from-literal=RABBITMQ_USUARIO="${RABBITMQ_USUARIO:-bank_usac}" \
+            --from-literal=RABBITMQ_CLAVE="${RABBITMQ_CLAVE:-bank_usac_local}" \
+            --from-literal=SMTP_HOST="${SMTP_HOST:-smtp.gmail.com}" \
+            --from-literal=SMTP_PORT="${SMTP_PORT:-587}" \
+            --from-literal=SMTP_USERNAME="$SMTP_USERNAME" \
+            --from-literal=SMTP_APP_PASSWORD="$SMTP_APP_PASSWORD" \
+            --from-literal=SMTP_FROM="$SMTP_FROM" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Aplicar imagen publicada y rolling update
+        env:
+          PUBLIC_HOST: ${{ secrets.PUBLIC_HOST }}
+          IMAGE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          kubectl kustomize infrastructure/kubernetes/overlays/prod \
+            | sed "s/:v2.0.0/:${IMAGE_TAG}/g; s/__PUBLIC_HOST__/${PUBLIC_HOST:-bank-usac.example.com}/g" \
+            | kubectl apply -f -
+          for despliegue in rabbitmq api-gateway customer-service account-service payment-service transaction-service notification-audit-service frontend; do
+            kubectl -n "$KUBE_NAMESPACE" rollout status "deployment/$despliegue" --timeout=180s
+          done
+          kubectl -n "$KUBE_NAMESPACE" get deployments,services,hpa

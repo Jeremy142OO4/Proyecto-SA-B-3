@@ -2,9 +2,10 @@ import { useEffect, useState, type ChangeEvent } from 'react';
 import { EstadoCarga, EstadoError, EstadoVacio } from '../../../components/feedback/EstadoCarga';
 import type { EstadoCliente } from '../../auth/types/auth';
 import { servicioAdministracion } from '../services/servicioAdministracion';
-import type { ClienteAdministrado } from '../types/clienteAdministrado';
+import type { ClienteAdministrado, EstadoKYC } from '../types/clienteAdministrado';
 
 const estados: EstadoCliente[] = ['PENDIENTE_ACTIVACION', 'ACTIVO', 'BLOQUEADO'];
+const estadosKYC: EstadoKYC[] = ['PENDING', 'VERIFIED', 'REJECTED'];
 
 export function PaginaAdministracionClientes() {
   const [clientes, setClientes] = useState<ClienteAdministrado[]>([]);
@@ -28,6 +29,19 @@ export function PaginaAdministracionClientes() {
       setClientes(lista => lista.map(item => item.customerId === actualizado.customerId ? actualizado : item));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No fue posible cambiar el estado');
+    } finally {
+      setActualizando('');
+    }
+  }
+
+  async function cambiarKYC(cliente: ClienteAdministrado, estadoKYC: EstadoKYC) {
+    setActualizando(cliente.customerId);
+    setError('');
+    try {
+      const actualizado = await servicioAdministracion.cambiarEstadoKYC(cliente.customerId, estadoKYC);
+      setClientes(lista => lista.map(item => item.customerId === actualizado.customerId ? actualizado : item));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No fue posible cambiar el estado KYC');
     } finally {
       setActualizando('');
     }
@@ -64,6 +78,9 @@ export function PaginaAdministracionClientes() {
         </div>
         <label>Estado<select value={cliente.status} disabled={actualizando === cliente.customerId} onChange={(e: ChangeEvent<HTMLSelectElement>) => void cambiar(cliente, e.target.value as EstadoCliente)}>
           {estados.map(estado => <option key={estado}>{estado}</option>)}
+        </select></label>
+        <label>Estado KYC<select value={cliente.kycStatus} disabled={actualizando === cliente.customerId} onChange={(e: ChangeEvent<HTMLSelectElement>) => void cambiarKYC(cliente, e.target.value as EstadoKYC)}>
+          {estadosKYC.map(estado => <option key={estado}>{estado}</option>)}
         </select></label>
       </article>)}
     </div>}

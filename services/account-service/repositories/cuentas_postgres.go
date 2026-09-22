@@ -26,13 +26,15 @@ func (r *RepositorioCuentasPostgres) Crear(ctx context.Context, cuenta *models.C
 	const consulta = `
 		INSERT INTO cuentas (
 			id_cuenta, id_cliente, numero_cuenta, tipo_cuenta, saldo_centavos,
+			saldo_minimo_centavos, comision_transaccion_centavos,
 			moneda, estado, ultima_actividad, fecha_creacion, fecha_actualizacion, version
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
 
 	_, err := r.conexion.Exec(ctx, consulta,
 		cuenta.IDCuenta, cuenta.IDCliente, cuenta.NumeroCuenta, cuenta.TipoCuenta,
-		cuenta.SaldoCentavos, cuenta.Moneda, cuenta.Estado, cuenta.UltimaActividad,
-		cuenta.FechaCreacion, cuenta.FechaActualizacion, cuenta.Version,
+		cuenta.SaldoCentavos, cuenta.SaldoMinimoCentavos, cuenta.ComisionTransaccionCentavos,
+		cuenta.Moneda, cuenta.Estado, cuenta.UltimaActividad, cuenta.FechaCreacion,
+		cuenta.FechaActualizacion, cuenta.Version,
 	)
 	if err != nil {
 		return fmt.Errorf("crear cuenta: %w", err)
@@ -106,13 +108,17 @@ func (r *RepositorioCuentasPostgres) ProcesarMovimiento(ctx context.Context, sol
 	}
 
 	ahora := time.Now().UTC()
+	montoMovimiento := solicitud.MontoCentavos
+	if solicitud.TipoMovimiento == models.TipoMovimientoDebito {
+		montoMovimiento += cuenta.ComisionTransaccionCentavos
+	}
 	movimiento := models.MovimientoCuenta{
 		IDMovimiento:          uuid.New(),
 		IDCuenta:              solicitud.IDCuenta,
 		IDOperacion:           solicitud.IDOperacion,
 		IDCorrelacion:         solicitud.IDCorrelacion,
 		TipoMovimiento:        solicitud.TipoMovimiento,
-		MontoCentavos:         solicitud.MontoCentavos,
+		MontoCentavos:         montoMovimiento,
 		SaldoAnteriorCentavos: saldoAnterior,
 		SaldoNuevoCentavos:    saldoNuevo,
 		Descripcion:           solicitud.Descripcion,
@@ -180,7 +186,8 @@ func (r *RepositorioCuentasPostgres) DesactivarCuentasInactivas(ctx context.Cont
 }
 
 const columnasCuenta = `id_cuenta, id_cliente, numero_cuenta, tipo_cuenta, saldo_centavos,
-	moneda, estado, ultima_actividad, fecha_creacion, fecha_actualizacion, version`
+	saldo_minimo_centavos, comision_transaccion_centavos, moneda, estado, ultima_actividad,
+	fecha_creacion, fecha_actualizacion, version`
 
 type escaneador interface {
 	Scan(destinos ...any) error
@@ -198,8 +205,9 @@ func escanearCuenta(fila escaneador) (*models.Cuenta, error) {
 	var cuenta models.Cuenta
 	err := fila.Scan(
 		&cuenta.IDCuenta, &cuenta.IDCliente, &cuenta.NumeroCuenta, &cuenta.TipoCuenta,
-		&cuenta.SaldoCentavos, &cuenta.Moneda, &cuenta.Estado, &cuenta.UltimaActividad,
-		&cuenta.FechaCreacion, &cuenta.FechaActualizacion, &cuenta.Version,
+		&cuenta.SaldoCentavos, &cuenta.SaldoMinimoCentavos, &cuenta.ComisionTransaccionCentavos,
+		&cuenta.Moneda, &cuenta.Estado, &cuenta.UltimaActividad, &cuenta.FechaCreacion,
+		&cuenta.FechaActualizacion, &cuenta.Version,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("leer cuenta: %w", err)
@@ -232,10 +240,17 @@ func bloquearCuenta(ctx context.Context, tx pgx.Tx, idCuenta uuid.UUID) (models.
 func calcularSaldoNuevo(ctx context.Context, tx pgx.Tx, cuenta models.Cuenta, solicitud SolicitudMovimientoCuenta) (int64, error) {
 	switch solicitud.TipoMovimiento {
 	case models.TipoMovimientoDebito:
-		if cuenta.SaldoCentavos < solicitud.MontoCentavos {
+		montoTotal := solicitud.MontoCentavos + cuenta.ComisionTransaccionCentavos
+		if montoTotal < solicitud.MontoCentavos {
 			return 0, ErrFondosInsuficientes
 		}
-		return cuenta.SaldoCentavos - solicitud.MontoCentavos, nil
+		if cuenta.SaldoCentavos < montoTotal {
+			return 0, ErrFondosInsuficientes
+		}
+		if cuenta.SaldoCentavos-montoTotal < cuenta.SaldoMinimoCentavos {
+			return 0, ErrSaldoMinimo
+		}
+		return cuenta.SaldoCentavos - montoTotal, nil
 	case models.TipoMovimientoCredito:
 		return cuenta.SaldoCentavos + solicitud.MontoCentavos, nil
 	case models.TipoMovimientoCompensacion:

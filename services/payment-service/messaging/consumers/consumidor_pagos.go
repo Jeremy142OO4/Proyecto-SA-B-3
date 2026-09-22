@@ -110,6 +110,20 @@ func (c *ConsumidorPagos) procesar(ctx context.Context, d amqp.Delivery) error {
 		}
 		return c.servicio.RegistrarRespuesta(ctx, m, events.EventoHistorialConsultado, map[string]any{"idCliente": s.IDCliente, "pagos": lista})
 	}
+	if d.RoutingKey == events.EventoKYCVerificado || d.RoutingKey == events.EventoKYCRechazado {
+		var r events.ResultadoValidacionKYC
+		if e := json.Unmarshal(m.Contenido, &r); e != nil {
+			return e
+		}
+		return c.servicio.ProcesarResultadoKYC(ctx, m, r)
+	}
+	if d.RoutingKey == events.EventoCuentaValidada || d.RoutingKey == events.EventoCuentaRechazada {
+		var r events.ResultadoValidacionCuenta
+		if e := json.Unmarshal(m.Contenido, &r); e != nil {
+			return e
+		}
+		return c.servicio.ProcesarResultadoValidacionCuenta(ctx, m, r)
+	}
 	for _, tipo := range []string{events.EventoCuentaDebitada, events.EventoDebitoRechazado, events.EventoCuentaCompensada} {
 		if d.RoutingKey == tipo {
 			var r events.ResultadoMovimiento

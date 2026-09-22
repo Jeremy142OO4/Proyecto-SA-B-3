@@ -77,9 +77,11 @@ Estados admitidos:
 
 ### Pago
 
-Representa una instrucción de pago realizada desde una cuenta. Payment Service conserva el beneficiario, concepto, monto, moneda, tipo, referencia externa y estado del proceso.
+Representa una instrucción de pago realizada desde una cuenta. Payment Service conserva el beneficiario, concepto, monto, moneda, tipo, resultado externo simulado, referencia externa y estado del proceso.
 
 Los pagos pueden ser `INTERNO` o `EXTERNO` y pasan por estados como `PENDIENTE`, `PROCESANDO`, `COMPENSANDO`, `COMPLETADO` o `RECHAZADO`.
+
+En un pago externo, `resultadoSimulado` admite `EXITO`, `FALLO` y `TIMEOUT`. Un fallo o timeout posterior al débito obliga a compensar la cuenta antes de cerrar el pago como rechazado.
 
 ### Intento de pago
 
@@ -120,3 +122,6 @@ Además de las entidades del negocio, los servicios utilizan elementos técnicos
 - **Identificador de causación:** indica cuál mensaje o acción produjo un evento posterior.
 
 Estos elementos respaldan el dominio, pero no sustituyen las entidades bancarias principales.
+El estado de acceso (`PENDIENTE_ACTIVACION`, `ACTIVO`, `BLOQUEADO`) se conserva separado del estado KYC (`PENDING`, `VERIFIED`, `REJECTED`). Solamente un cliente activo con KYC `VERIFIED` puede avanzar en la Saga de transferencia.
+
+La fase 2 incorpora los estados `VALIDANDO_KYC` y `VALIDANDO_CUENTAS`. También conserva `resultadoExternoSimulado` para demostrar `EXITO`, `FALLO` y `TIMEOUT`; los dos últimos obligan a compensar cualquier débito ya aplicado.

@@ -97,6 +97,66 @@ func TestCrearCuentaRechazaTipoInvalido(t *testing.T) {
 	}
 }
 
+func TestCrearCuentaConReglasDeSaldoYComision(t *testing.T) {
+	repositorio := &repositorioCuentasFalso{}
+	servicio := NuevoServicioCuentas(repositorio)
+
+	cuenta, err := servicio.CrearCuenta(context.Background(), events.SolicitudCrearCuenta{
+		IDCliente:                   uuid.New(),
+		TipoCuenta:                  " ahorro ",
+		SaldoMinimoCentavos:         10000,
+		ComisionTransaccionCentavos: 250,
+	})
+	if err != nil {
+		t.Fatalf("no se esperaba error: %v", err)
+	}
+	if cuenta.TipoCuenta != models.TipoCuentaAhorro || cuenta.SaldoMinimoCentavos != 10000 || cuenta.ComisionTransaccionCentavos != 250 {
+		t.Fatalf("las reglas no se conservaron: %+v", cuenta)
+	}
+}
+
+func TestCrearCuentaRechazaReglasNegativas(t *testing.T) {
+	servicio := NuevoServicioCuentas(&repositorioCuentasFalso{})
+	_, err := servicio.CrearCuenta(context.Background(), events.SolicitudCrearCuenta{
+		IDCliente:           uuid.New(),
+		TipoCuenta:          string(models.TipoCuentaCorriente),
+		SaldoMinimoCentavos: -1,
+	})
+	if !errors.Is(err, ErrReglaCuentaInvalida) {
+		t.Fatalf("se esperaba ErrReglaCuentaInvalida, se obtuvo %v", err)
+	}
+}
+
+func TestValidarTransferenciaRespetaSaldoMinimoYComision(t *testing.T) {
+	idCliente := uuid.New()
+	repositorio := &repositorioCuentasFalso{cuentaCreada: &models.Cuenta{
+		IDCuenta:                      uuid.New(),
+		IDCliente:                     idCliente,
+		TipoCuenta:                    models.TipoCuentaAhorro,
+		SaldoCentavos:                 20000,
+		SaldoMinimoCentavos:           10000,
+		ComisionTransaccionCentavos:   500,
+		Estado:                        models.EstadoCuentaActiva,
+	}}
+	servicio := NuevoServicioCuentas(repositorio)
+
+	rechazada := servicio.ValidarTransferencia(context.Background(), events.SolicitudValidacionTransferencia{
+		IDOperacion: uuid.New(), IDCliente: idCliente, IDCuentaOrigen: repositorio.cuentaCreada.IDCuenta,
+		MontoCentavos: 10000,
+	})
+	if rechazada.Valida || rechazada.Codigo != "SALDO_MINIMO" {
+		t.Fatalf("se esperaba rechazo por saldo minimo: %+v", rechazada)
+	}
+
+	aceptada := servicio.ValidarTransferencia(context.Background(), events.SolicitudValidacionTransferencia{
+		IDOperacion: uuid.New(), IDCliente: idCliente, IDCuentaOrigen: repositorio.cuentaCreada.IDCuenta,
+		MontoCentavos: 9500,
+	})
+	if !aceptada.Valida {
+		t.Fatalf("la operacion debia respetar el saldo minimo despues de la comision: %+v", aceptada)
+	}
+}
+
 func TestProcesarDebitoValidaMonto(t *testing.T) {
 	repositorio := &repositorioCuentasFalso{}
 	servicio := NuevoServicioCuentas(repositorio)
@@ -124,5 +184,29 @@ func TestProcesarCreditoConstruyeMovimiento(t *testing.T) {
 	}
 	if repositorio.movimientoRecibido.TipoEventoExitoso != events.EventoCuentaAcreditada {
 		t.Fatalf("evento de salida inesperado: %s", repositorio.movimientoRecibido.TipoEventoExitoso)
+	}
+}
+
+func TestValidarTransferenciaRechazaCuentaNoActiva(t *testing.T) {
+	idCliente := uuid.New()
+	repositorio := &repositorioCuentasFalso{cuentaCreada: &models.Cuenta{
+		IDCuenta: uuid.New(), IDCliente: idCliente, TipoCuenta: models.TipoCuentaAhorro,
+		SaldoCentavos: 50000, Estado: models.EstadoCuentaInactiva,
+	}}
+	resultado := NuevoServicioCuentas(repositorio).ValidarTransferencia(context.Background(), events.SolicitudValidacionTransferencia{
+		IDOperacion: uuid.New(), IDCliente: idCliente, IDCuentaOrigen: repositorio.cuentaCreada.IDCuenta, MontoCentavos: 100,
+	})
+	if resultado.Valida || resultado.Codigo != "CUENTA_NO_ACTIVA" {
+		t.Fatalf("se esperaba rechazo por estado de cuenta: %+v", resultado)
+	}
+}
+
+func TestProcesarDebitoRechazaSobreSinIdentificadoresTransversales(t *testing.T) {
+	servicio := NuevoServicioCuentas(&repositorioCuentasFalso{})
+	err := servicio.ProcesarDebito(context.Background(), events.SobreMensaje{IDMensaje: uuid.New()}, events.SolicitudMovimiento{
+		IDCuenta: uuid.New(), IDOperacion: uuid.New(), MontoCentavos: 100,
+	})
+	if !errors.Is(err, ErrMensajeInvalido) {
+		t.Fatalf("se esperaba rechazar un CorrelationId ausente, se obtuvo %v", err)
 	}
 }

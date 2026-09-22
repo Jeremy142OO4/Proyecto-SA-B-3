@@ -39,9 +39,10 @@ func (r *RepositorioSolicitudesPostgres) Iniciar(ctx context.Context, mensaje ev
 	}
 
 	_, err = tx.Exec(ctx, `INSERT INTO solicitudes_creacion_cuenta
-		(id_solicitud,id_cliente,tipo_cuenta,estado,id_correlacion)
-		VALUES ($1,$2,$3,'PENDIENTE_VALIDACION',$4) ON CONFLICT DO NOTHING`,
-		solicitud.IDSolicitud, solicitud.IDCliente, solicitud.TipoCuenta, mensaje.IDCorrelacion)
+		(id_solicitud,id_cliente,tipo_cuenta,saldo_minimo_centavos,comision_transaccion_centavos,estado,id_correlacion)
+		VALUES ($1,$2,$3,$4,$5,'PENDIENTE_VALIDACION',$6) ON CONFLICT DO NOTHING`,
+		solicitud.IDSolicitud, solicitud.IDCliente, solicitud.TipoCuenta,
+		solicitud.SaldoMinimoCentavos, solicitud.ComisionTransaccionCentavos, mensaje.IDCorrelacion)
 	if err != nil {
 		return false, fmt.Errorf("guardar solicitud de cuenta: %w", err)
 	}
@@ -79,10 +80,12 @@ func (r *RepositorioSolicitudesPostgres) Completar(ctx context.Context, mensaje 
 	}
 
 	var solicitud models.SolicitudCreacionCuenta
-	err = tx.QueryRow(ctx, `SELECT id_solicitud,id_cliente,tipo_cuenta,estado,id_correlacion,
-		id_cuenta,COALESCE(motivo_rechazo,''),fecha_creacion,fecha_actualizacion
+	err = tx.QueryRow(ctx, `SELECT id_solicitud,id_cliente,tipo_cuenta,saldo_minimo_centavos,
+		comision_transaccion_centavos,estado,id_correlacion,id_cuenta,COALESCE(motivo_rechazo,''),
+		fecha_creacion,fecha_actualizacion
 		FROM solicitudes_creacion_cuenta WHERE id_solicitud=$1 FOR UPDATE`, resultado.IDSolicitud).Scan(
-		&solicitud.IDSolicitud, &solicitud.IDCliente, &solicitud.TipoCuenta, &solicitud.Estado,
+		&solicitud.IDSolicitud, &solicitud.IDCliente, &solicitud.TipoCuenta,
+		&solicitud.SaldoMinimoCentavos, &solicitud.ComisionTransaccionCentavos, &solicitud.Estado,
 		&solicitud.IDCorrelacion, &solicitud.IDCuenta, &solicitud.MotivoRechazo,
 		&solicitud.FechaCreacion, &solicitud.FechaActualizacion)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -101,11 +104,15 @@ func (r *RepositorioSolicitudesPostgres) Completar(ctx context.Context, mensaje 
 	}
 	ahora := time.Now().UTC()
 	cuenta := &models.Cuenta{IDCuenta: uuid.New(), IDCliente: solicitud.IDCliente, NumeroCuenta: numero,
-		TipoCuenta: solicitud.TipoCuenta, SaldoCentavos: 0, Moneda: "GTQ", Estado: models.EstadoCuentaActiva,
+		TipoCuenta: solicitud.TipoCuenta, SaldoCentavos: 0,
+		SaldoMinimoCentavos: solicitud.SaldoMinimoCentavos,
+		ComisionTransaccionCentavos: solicitud.ComisionTransaccionCentavos,
+		Moneda: "GTQ", Estado: models.EstadoCuentaActiva,
 		FechaCreacion: ahora, FechaActualizacion: ahora, Version: 1}
 	_, err = tx.Exec(ctx, `INSERT INTO cuentas
-		(id_cuenta,id_cliente,numero_cuenta,tipo_cuenta,saldo_centavos,moneda,estado,fecha_creacion,fecha_actualizacion,version)
-		VALUES ($1,$2,$3,$4,0,'GTQ','ACTIVA',$5,$5,1)`, cuenta.IDCuenta, cuenta.IDCliente, cuenta.NumeroCuenta, cuenta.TipoCuenta, ahora)
+		(id_cuenta,id_cliente,numero_cuenta,tipo_cuenta,saldo_centavos,saldo_minimo_centavos,comision_transaccion_centavos,moneda,estado,fecha_creacion,fecha_actualizacion,version)
+		VALUES ($1,$2,$3,$4,0,$5,$6,'GTQ','ACTIVA',$7,$7,1)`, cuenta.IDCuenta, cuenta.IDCliente, cuenta.NumeroCuenta,
+		cuenta.TipoCuenta, cuenta.SaldoMinimoCentavos, cuenta.ComisionTransaccionCentavos, ahora)
 	if err != nil {
 		return nil, false, fmt.Errorf("crear cuenta validada: %w", err)
 	}

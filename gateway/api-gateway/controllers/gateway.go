@@ -28,21 +28,25 @@ func NuevoGateway(p Publicador, o *operations.Store, r *responses.Gestor, t time
 }
 
 type entradaCuenta struct {
-	TipoCuenta string    `json:"tipoCuenta"`
-	IDCliente  uuid.UUID `json:"idCliente"`
+	TipoCuenta                  string    `json:"tipoCuenta"`
+	IDCliente                   uuid.UUID `json:"idCliente"`
+	SaldoMinimoCentavos         int64     `json:"saldoMinimoCentavos"`
+	ComisionTransaccionCentavos int64     `json:"comisionTransaccionCentavos"`
 }
 type entradaPago struct {
-	IDCuentaOrigen uuid.UUID `json:"idCuentaOrigen"`
-	Beneficiario   string    `json:"beneficiario"`
-	Concepto       string    `json:"concepto"`
-	MontoCentavos  int64     `json:"montoCentavos"`
-	TipoPago       string    `json:"tipoPago"`
+	IDCuentaOrigen    uuid.UUID `json:"idCuentaOrigen"`
+	Beneficiario      string    `json:"beneficiario"`
+	Concepto          string    `json:"concepto"`
+	MontoCentavos     int64     `json:"montoCentavos"`
+	TipoPago          string    `json:"tipoPago"`
+	ResultadoSimulado string    `json:"resultadoSimulado"`
 }
 type entradaTransferencia struct {
-	IDCuentaOrigen  uuid.UUID `json:"idCuentaOrigen"`
-	IDCuentaDestino uuid.UUID `json:"idCuentaDestino"`
-	MontoCentavos   int64     `json:"montoCentavos"`
-	Descripcion     string    `json:"descripcion"`
+	IDCuentaOrigen           uuid.UUID `json:"idCuentaOrigen"`
+	IDCuentaDestino          uuid.UUID `json:"idCuentaDestino"`
+	MontoCentavos            int64     `json:"montoCentavos"`
+	Descripcion              string    `json:"descripcion"`
+	ResultadoExternoSimulado string    `json:"resultadoExternoSimulado"`
 }
 
 func (g *Gateway) CrearCuenta(c *fiber.Ctx) error {
@@ -51,14 +55,21 @@ func (g *Gateway) CrearCuenta(c *fiber.Ctx) error {
 		return fiber.NewError(400, "JSON invalido")
 	}
 	tipo := strings.ToUpper(e.TipoCuenta)
-	if tipo != "MONETARIA" && tipo != "AHORRO" {
-		return fiber.NewError(422, "tipoCuenta debe ser MONETARIA o AHORRO")
+	if tipo != "MONETARIA" && tipo != "AHORRO" && tipo != "CORRIENTE" {
+		return fiber.NewError(422, "tipoCuenta debe ser MONETARIA, AHORRO o CORRIENTE")
 	}
 	if e.IDCliente == uuid.Nil {
 		return fiber.NewError(422, "idCliente es obligatorio")
 	}
+	if e.SaldoMinimoCentavos < 0 || e.ComisionTransaccionCentavos < 0 {
+		return fiber.NewError(422, "las reglas de cuenta no pueden ser negativas")
+	}
 	id := uuid.New()
-	return g.aceptar(c, events.ComandoCrearCuenta, id, events.SolicitudCrearCuenta{IDSolicitud: id, IDCliente: e.IDCliente, TipoCuenta: tipo})
+	return g.aceptar(c, events.ComandoCrearCuenta, id, events.SolicitudCrearCuenta{
+		IDSolicitud: id, IDCliente: e.IDCliente, TipoCuenta: tipo,
+		SaldoMinimoCentavos: e.SaldoMinimoCentavos,
+		ComisionTransaccionCentavos: e.ComisionTransaccionCentavos,
+	})
 }
 func (g *Gateway) CrearPago(c *fiber.Ctx) error {
 	var e entradaPago
@@ -66,14 +77,24 @@ func (g *Gateway) CrearPago(c *fiber.Ctx) error {
 		return fiber.NewError(400, "JSON invalido")
 	}
 	tipo := strings.ToUpper(e.TipoPago)
+	resultado := strings.ToUpper(strings.TrimSpace(e.ResultadoSimulado))
+	if resultado == "" {
+		resultado = "EXITO"
+	}
 	if e.IDCuentaOrigen == uuid.Nil || e.MontoCentavos <= 0 || strings.TrimSpace(e.Beneficiario) == "" || (tipo != "INTERNO" && tipo != "EXTERNO") {
 		return fiber.NewError(422, "datos del pago invalidos")
+	}
+	if tipo == "EXTERNO" && resultado != "EXITO" && resultado != "FALLO" && resultado != "TIMEOUT" {
+		return fiber.NewError(422, "resultadoSimulado debe ser EXITO, FALLO o TIMEOUT")
+	}
+	if tipo == "INTERNO" {
+		resultado = "EXITO"
 	}
 	if err := g.validarPropiedadCuenta(c, e.IDCuentaOrigen); err != nil {
 		return err
 	}
 	id := uuid.New()
-	return g.aceptar(c, events.ComandoProcesarPago, id, events.SolicitudPago{IDPago: id, IDCliente: idCliente(c), IDCuentaOrigen: e.IDCuentaOrigen, Beneficiario: strings.TrimSpace(e.Beneficiario), Concepto: strings.TrimSpace(e.Concepto), MontoCentavos: e.MontoCentavos, TipoPago: tipo})
+	return g.aceptar(c, events.ComandoProcesarPago, id, events.SolicitudPago{IDPago: id, IDCliente: idCliente(c), IDCuentaOrigen: e.IDCuentaOrigen, Beneficiario: strings.TrimSpace(e.Beneficiario), Concepto: strings.TrimSpace(e.Concepto), MontoCentavos: e.MontoCentavos, TipoPago: tipo, ResultadoSimulado: resultado})
 }
 
 func (g *Gateway) Depositar(c *fiber.Ctx) error {
@@ -103,11 +124,18 @@ func (g *Gateway) Transferir(c *fiber.Ctx) error {
 	if e.IDCuentaOrigen == uuid.Nil || e.IDCuentaDestino == uuid.Nil || e.IDCuentaOrigen == e.IDCuentaDestino || e.MontoCentavos <= 0 {
 		return fiber.NewError(422, "cuentas distintas y montoCentavos mayor que cero son obligatorios")
 	}
+	resultadoExterno := strings.ToUpper(strings.TrimSpace(e.ResultadoExternoSimulado))
+	if resultadoExterno == "" {
+		resultadoExterno = "EXITO"
+	}
+	if resultadoExterno != "EXITO" && resultadoExterno != "FALLO" && resultadoExterno != "TIMEOUT" {
+		return fiber.NewError(422, "resultadoExternoSimulado debe ser EXITO, FALLO o TIMEOUT")
+	}
 	if err := g.validarPropiedadCuenta(c, e.IDCuentaOrigen); err != nil {
 		return err
 	}
 	id := uuid.New()
-	return g.aceptar(c, events.ComandoTransferir, id, events.SolicitudTransferencia{IDTransferencia: id, IDCliente: idCliente(c), IDCuentaOrigen: e.IDCuentaOrigen, IDCuentaDestino: e.IDCuentaDestino, MontoCentavos: e.MontoCentavos, Descripcion: strings.TrimSpace(e.Descripcion)})
+	return g.aceptar(c, events.ComandoTransferir, id, events.SolicitudTransferencia{IDTransferencia: id, IDCliente: idCliente(c), IDCuentaOrigen: e.IDCuentaOrigen, IDCuentaDestino: e.IDCuentaDestino, MontoCentavos: e.MontoCentavos, Descripcion: strings.TrimSpace(e.Descripcion), ResultadoExternoSimulado: resultadoExterno})
 }
 func (g *Gateway) ListarCuentas(c *fiber.Ctx) error {
 	return g.consultar(c, events.ComandoListarCuentas, events.EventoCuentasConsultadas, events.SolicitudHistorial{IDCliente: idCliente(c), Limite: limite(c), Desplazamiento: desplazamiento(c)}, func(b json.RawMessage) (any, error) {
@@ -177,7 +205,26 @@ func (g *Gateway) ConsultarPago(c *fiber.Ctx) error {
 	return g.consultar(c, events.ComandoConsultarPago, events.EventoPagoConsultado, events.SolicitudConsultarPago{IDPago: id}, propietario(c))
 }
 func (g *Gateway) ListarTransferencias(c *fiber.Ctx) error {
-	return g.consultarLista(c, events.ComandoHistorialTransferencias, events.EventoHistorialTransferencias, "transferencias")
+	solicitud := events.SolicitudHistorial{IDCliente: idCliente(c), Limite: limite(c), Desplazamiento: desplazamiento(c), Estado: strings.TrimSpace(c.Query("estado")), FechaDesde: strings.TrimSpace(c.Query("fechaDesde")), FechaHasta: strings.TrimSpace(c.Query("fechaHasta"))}
+	if valor := strings.TrimSpace(c.Query("idCuenta")); valor != "" {
+		id, e := uuid.Parse(valor)
+		if e != nil || id == uuid.Nil {
+			return fiber.NewError(400, "idCuenta invalido")
+		}
+		solicitud.IDCuenta = &id
+	}
+	return g.consultar(c, events.ComandoHistorialTransferencias, events.EventoHistorialTransferencias, solicitud, func(b json.RawMessage) (any, error) {
+		var x map[string]json.RawMessage
+		if e := json.Unmarshal(b, &x); e != nil {
+			return nil, e
+		}
+		var id uuid.UUID
+		if e := json.Unmarshal(x["idCliente"], &id); e != nil || id != idCliente(c) {
+			return nil, fiber.ErrForbidden
+		}
+		var lista any
+		return lista, json.Unmarshal(x["transferencias"], &lista)
+	})
 }
 func (g *Gateway) ConsultarTransferencia(c *fiber.Ctx) error {
 	id, e := uuid.Parse(c.Params("idTransferencia"))

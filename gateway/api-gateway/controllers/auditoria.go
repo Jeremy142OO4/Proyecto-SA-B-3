@@ -35,7 +35,21 @@ func (ca *ControladorAuditoria) Notificaciones(c *fiber.Ctx) error {
 	if limite < 1 || limite > 100 {
 		limite = 50
 	}
-	return ca.enviar(c, events.ComandoAuditoriaNotificaciones, map[string]int{"limite": limite})
+
+	consulta := map[string]any{
+		"limite":       limite,
+		"destinatario": c.Query("destinatario"),
+		"estado":       c.Query("estado"),
+	}
+	if valor := c.Query("idCorrelacion"); valor != "" {
+		idCorrelacion, err := uuid.Parse(valor)
+		if err != nil {
+			return fiber.NewError(fiber.StatusBadRequest, "idCorrelacion invalido")
+		}
+		consulta["idCorrelacion"] = idCorrelacion
+	}
+
+	return ca.enviar(c, events.ComandoAuditoriaNotificaciones, consulta)
 }
 
 func (ca *ControladorAuditoria) enviar(c *fiber.Ctx, tipo string, contenido any) error {

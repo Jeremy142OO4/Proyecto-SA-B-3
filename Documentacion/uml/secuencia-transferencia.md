@@ -4,8 +4,16 @@ Flujo de transferencia, Saga, fallos y compensaciones.
 
 ![Diagrama de secuencia transferencia](../Imagenes/secuencia-transaferencia.png)
 
-La transferencia utiliza una Saga por coreografía, por lo que no existe un coordinador central ni llamadas directas entre microservicios. Cada servicio ejecuta su parte del proceso y publica el evento que activa el siguiente paso.
-El cliente ingresa la cuenta de origen, la cuenta de destino y el monto. La interfaz envía la solicitud al API Gateway, que publica TransferRequested con el correlationId y la idempotencyKey.
-Transaction Service consume la solicitud y crea una transacción con estado PENDING. Después publica PaymentValidationRequested. Payment Service consume este evento, valida y registra la operación financiera y, si es aceptada, publica PaymentValidated.
-Account Service consume la validación, comprueba los fondos disponibles y debita la cuenta de origen utilizando controles de idempotencia y concurrencia. Cuando el débito se completa, publica SourceDebited. El mismo servicio consume posteriormente este evento y acredita el monto en la cuenta de destino, publicando TargetCredited.
-Transaction Service consume TargetCredited, actualiza la transacción al estado COMPLETED y publica TransferCompleted. Notification & Audit Service registra el resultado y notifica al cliente. Finalmente, el Gateway consume el evento correlacionado y la interfaz muestra el comprobante.
+La transferencia utiliza una Saga coordinada lógicamente por Transaction Service y ejecutada con eventos asíncronos; no existen llamadas HTTP entre microservicios.
+
+El cliente ingresa las cuentas y el monto. API Gateway publica `transferencia.solicitada` con el `idCorrelacion`.
+
+Transaction Service registra `VALIDANDO_KYC` y publica `cliente.kyc.validacion.solicitada`. Customer Service responde `cliente.kyc.verificado` o `cliente.kyc.rechazado`.
+
+Con KYC aprobado, Transaction Service registra `VALIDANDO_CUENTAS` y publica `cuenta.transferencia.validacion.solicitada`. Account Service valida propiedad, estado, tipo y fondos preliminares, y responde `cuenta.transferencia.validada` o `cuenta.transferencia.rechazada`.
+
+Con ambas validaciones aprobadas, Transaction Service cambia a `PENDIENTE` y solicita `cuenta.debito.solicitado`. Account Service publica `cuenta.debitada` o `cuenta.debito.rechazado`.
+
+Para `EXITO`, Transaction Service pasa a `PROCESANDO`, solicita el crédito y finaliza como `COMPLETADA` al recibir `cuenta.acreditada`. Para `FALLO` o `TIMEOUT`, registra `COMPENSANDO`, solicita `cuenta.compensacion.solicitada` y finaliza como `COMPENSADA` o `COMPENSACION_FALLIDA`.
+
+Notification & Audit Service registra cada evento y genera la notificación final. El historial de transiciones y la auditoría permiten reconstruir la operación completa.

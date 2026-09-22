@@ -28,15 +28,18 @@ const (
 	ComandoActualizarCliente       = "cliente.actualizacion.solicitada"
 	ComandoListarClientes          = "cliente.listado.solicitado"
 	ComandoEstadoCliente           = "cliente.estado.solicitado"
+	ComandoEstadoKYC               = "cliente.kyc.estado.solicitado"
 	ComandoAuditoriaRegistros      = "auditoria.registros.solicitados"
 	ComandoAuditoriaTraza          = "auditoria.traza.solicitada"
 	ComandoAuditoriaNotificaciones = "auditoria.notificaciones.solicitadas"
 )
 
 type SolicitudCrearCuenta struct {
-	IDSolicitud uuid.UUID `json:"idSolicitud"`
-	IDCliente   uuid.UUID `json:"idCliente"`
-	TipoCuenta  string    `json:"tipoCuenta"`
+	IDSolicitud                 uuid.UUID `json:"idSolicitud"`
+	IDCliente                   uuid.UUID `json:"idCliente"`
+	TipoCuenta                  string    `json:"tipoCuenta"`
+	SaldoMinimoCentavos         int64     `json:"saldoMinimoCentavos"`
+	ComisionTransaccionCentavos int64     `json:"comisionTransaccionCentavos"`
 }
 type SolicitudConsultarCuenta struct {
 	IDCuenta uuid.UUID `json:"idCuenta"`
@@ -52,29 +55,35 @@ type SolicitudDeposito struct {
 	MontoCentavos int64     `json:"montoCentavos"`
 }
 type SolicitudPago struct {
-	IDPago         uuid.UUID `json:"idPago"`
-	IDCliente      uuid.UUID `json:"idCliente"`
-	IDCuentaOrigen uuid.UUID `json:"idCuentaOrigen"`
-	Beneficiario   string    `json:"beneficiario"`
-	Concepto       string    `json:"concepto"`
-	MontoCentavos  int64     `json:"montoCentavos"`
-	TipoPago       string    `json:"tipoPago"`
+	IDPago            uuid.UUID `json:"idPago"`
+	IDCliente         uuid.UUID `json:"idCliente"`
+	IDCuentaOrigen    uuid.UUID `json:"idCuentaOrigen"`
+	Beneficiario      string    `json:"beneficiario"`
+	Concepto          string    `json:"concepto"`
+	MontoCentavos     int64     `json:"montoCentavos"`
+	TipoPago          string    `json:"tipoPago"`
+	ResultadoSimulado string    `json:"resultadoSimulado,omitempty"`
 }
 type SolicitudConsultarPago struct {
 	IDPago uuid.UUID `json:"idPago"`
 }
 type SolicitudHistorial struct {
-	IDCliente      uuid.UUID `json:"idCliente"`
-	Limite         int       `json:"limite"`
-	Desplazamiento int       `json:"desplazamiento"`
+	IDCliente      uuid.UUID  `json:"idCliente"`
+	IDCuenta       *uuid.UUID `json:"idCuenta,omitempty"`
+	FechaDesde     string     `json:"fechaDesde,omitempty"`
+	FechaHasta     string     `json:"fechaHasta,omitempty"`
+	Estado         string     `json:"estado,omitempty"`
+	Limite         int        `json:"limite"`
+	Desplazamiento int        `json:"desplazamiento"`
 }
 type SolicitudTransferencia struct {
-	IDTransferencia uuid.UUID `json:"idTransferencia"`
-	IDCliente       uuid.UUID `json:"idCliente"`
-	IDCuentaOrigen  uuid.UUID `json:"idCuentaOrigen"`
-	IDCuentaDestino uuid.UUID `json:"idCuentaDestino"`
-	MontoCentavos   int64     `json:"montoCentavos"`
-	Descripcion     string    `json:"descripcion,omitempty"`
+	IDTransferencia          uuid.UUID `json:"idTransferencia"`
+	IDCliente                uuid.UUID `json:"idCliente"`
+	IDCuentaOrigen           uuid.UUID `json:"idCuentaOrigen"`
+	IDCuentaDestino          uuid.UUID `json:"idCuentaDestino"`
+	MontoCentavos            int64     `json:"montoCentavos"`
+	Descripcion              string    `json:"descripcion,omitempty"`
+	ResultadoExternoSimulado string    `json:"resultadoExternoSimulado,omitempty"`
 }
 type SolicitudConsultarTransferencia struct {
 	IDTransferencia uuid.UUID `json:"idTransferencia"`

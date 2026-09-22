@@ -1,15 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: customer-service-config
+  namespace: bank-usac
+data:
+  PORT: "8081"
+  JWT_EXPIRATION_HOURS: "24"
+  ACTIVATION_LINK_BASE: "http://localhost:3000/activar"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: api-gateway
+  name: customer-service
   namespace: bank-usac
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
-    matchLabels: { app: api-gateway }
+    matchLabels: { app: customer-service }
   template:
     metadata:
-      labels: { app: api-gateway }
+      labels: { app: customer-service }
     spec:
       securityContext:
         runAsNonRoot: true
@@ -20,36 +35,44 @@ spec:
         - name: esperar-rabbitmq
           image: alpine:3.22
           command: [sh, -c, "until nc -z rabbitmq 5672; do sleep 2; done"]
-      containers:
-        - name: api-gateway
-          image: bank-usac/api-gateway:local
-          imagePullPolicy: Never
-          ports:
-            - { name: http, containerPort: 8080 }
-          envFrom:
-            - configMapRef: { name: bank-usac-config }
+        - name: esperar-postgres-clientes
+          image: postgres:17-alpine
+          command:
+            - sh
+            - -c
+            - until pg_isready -d "$DATABASE_URL"; do sleep 2; done
           env:
-            - { name: PUERTO_HTTP, value: "8080" }
-            - name: URL_RABBITMQ
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: bank-usac-secrets, key: URL_BASE_DATOS_CLIENTES } }
+      containers:
+        - name: customer-service
+          image: docker.io/jeremy142004/bank-usac-customer-service:v2.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 8081 }
+          envFrom:
+            - configMapRef: { name: customer-service-config }
+          env:
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: bank-usac-secrets, key: URL_BASE_DATOS_CLIENTES } }
+            - name: RABBITMQ_URL
               valueFrom: { secretKeyRef: { name: bank-usac-secrets, key: URL_RABBITMQ } }
             - name: JWT_SECRET
               valueFrom: { secretKeyRef: { name: bank-usac-secrets, key: JWT_SECRET } }
+          startupProbe:
+            httpGet: { path: /health/live, port: http }
+            periodSeconds: 2
+            failureThreshold: 30
           readinessProbe:
             httpGet: { path: /health/ready, port: http }
-            initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 2
             failureThreshold: 3
           livenessProbe:
             httpGet: { path: /health/live, port: http }
-            initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 2
             failureThreshold: 3
-          startupProbe:
-            httpGet: { path: /health/live, port: http }
-            periodSeconds: 2
-            failureThreshold: 30
           resources:
             requests: { cpu: 50m, memory: 64Mi }
             limits: { cpu: 300m, memory: 256Mi }
@@ -62,9 +85,9 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: api-gateway
+  name: customer-service
   namespace: bank-usac
 spec:
-  selector: { app: api-gateway }
+  selector: { app: customer-service }
   ports:
-    - { name: http, port: 8080, targetPort: http }
+    - { name: http, port: 8081, targetPort: http }

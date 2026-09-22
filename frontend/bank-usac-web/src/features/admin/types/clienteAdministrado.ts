@@ -7,5 +7,8 @@ export interface ClienteAdministrado {
   username: string;
   role: Rol;
   status: EstadoCliente;
+  kycStatus: EstadoKYC;
   createdAt: string;
 }
+
+export type EstadoKYC = 'PENDING' | 'VERIFIED' | 'REJECTED';

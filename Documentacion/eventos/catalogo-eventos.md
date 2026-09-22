@@ -11,6 +11,17 @@ Este catálogo describe los mensajes intercambiados mediante RabbitMQ por los co
 - Cada mensaje utiliza el sobre común definido en [Contratos de eventos](contratos-eventos.md).
 - Todos los mensajes de una misma operación conservan el mismo `idCorrelacion`.
 
+## Eventos incorporados en la fase 2
+
+| Capacidad | Comandos o eventos |
+|---|---|
+| KYC | `cliente.kyc.estado.solicitado`, `cliente.kyc.validacion.solicitada`, `cliente.kyc.verificado`, `cliente.kyc.rechazado` |
+| Tipos y reglas de cuenta | `cuenta.transferencia.validacion.solicitada`, `cuenta.transferencia.validada`, `cuenta.transferencia.rechazada` |
+| Historial filtrado | `transferencia.historial.solicitado`, `transferencia.historial.consultado` con filtros opcionales |
+| Fallos externos | `pago.procesamiento.solicitado` y `transferencia.solicitada` incorporan el escenario simulado; los resultados terminales usan los eventos existentes de completado, rechazo y compensación. |
+
+Los eventos exitosos se clasifican como `INFO`; rechazos recuperables y compensaciones como `WARNING`; timeouts, DLQ y compensaciones fallidas como `ERROR`. Esta clasificación es utilizada por Notification & Audit Service sin cambiar la routing key original.
+
 ## Customer Service
 
 | Routing key | Clasificación | Productor principal | Consumidor principal | Propósito |
@@ -22,9 +33,15 @@ Este catálogo describe los mensajes intercambiados mediante RabbitMQ por los co
 | `cliente.actualizacion.solicitada` | Comando | API Gateway | Customer Service | Actualizar los datos permitidos de un cliente. |
 | `cliente.listado.solicitado` | Comando de consulta | API Gateway | Customer Service | Consultar clientes registrados. |
 | `cliente.estado.solicitado` | Comando | API Gateway | Customer Service | Cambiar el estado de un usuario. |
+| `cliente.kyc.estado.solicitado` | Comando Fase 2 | API Gateway | Customer Service | Cambiar KYC a `PENDING`, `VERIFIED` o `REJECTED`. |
+| `cliente.kyc.validacion.solicitada` | Comando Fase 2 | Transaction Service | Customer Service | Validar KYC antes de una transferencia. |
+| `cliente.kyc.verificado` | Evento Fase 2 | Customer Service | Transaction Service | Autorizar la continuación de la Saga. |
+| `cliente.kyc.rechazado` | Evento Fase 2 | Customer Service | Transaction Service | Detener la Saga antes de mover fondos. |
 | `cliente.validacion.solicitada` | Comando | Account Service | Customer Service | Validar que un cliente exista y esté activo. |
 | `cliente.creado` | Evento | Customer Service | Notification & Audit Service | Informar el registro exitoso del cliente. |
 | `cliente.activado` | Evento | Customer Service | Notification & Audit Service | Informar que el usuario fue activado. |
+| `cliente.actualizado` | Evento | Customer Service | Notification & Audit Service | Informar la actualización del perfil del cliente. |
+| `cliente.estado.actualizado` | Evento | Customer Service | Notification & Audit Service | Informar el cambio de estado del cliente. |
 | `cliente.validado` | Evento de respuesta | Customer Service | Account Service | Confirmar que el cliente es válido y está activo. |
 | `cliente.rechazado` | Evento de respuesta | Customer Service | Account Service | Rechazar la validación del cliente e indicar el motivo. |
 | `notificacion.correo-activacion.solicitado` | Evento/solicitud | Customer Service | Notification & Audit Service | Solicitar el envío del correo de activación. |
@@ -40,6 +57,9 @@ Este catálogo describe los mensajes intercambiados mediante RabbitMQ por los co
 | `cuenta.debito.solicitado` | Comando financiero | Transaction o Payment Service | Account Service | Debitar una cuenta si está habilitada y tiene fondos. |
 | `cuenta.credito.solicitado` | Comando financiero | Transaction Service | Account Service | Acreditar fondos en la cuenta destino. |
 | `cuenta.compensacion.solicitada` | Comando financiero | Transaction o Payment Service | Account Service | Revertir un débito previamente aplicado. |
+| `cuenta.transferencia.validacion.solicitada` | Comando Fase 2 | Transaction Service | Account Service | Validar propiedad, estado y tipos de las cuentas. |
+| `cuenta.transferencia.validada` | Evento Fase 2 | Account Service | Transaction Service | Autorizar el débito después de validar las cuentas. |
+| `cuenta.transferencia.rechazada` | Evento Fase 2 | Account Service | Transaction Service | Rechazar la operación antes del débito. |
 | `cuenta.creada` | Evento | Account Service | API Gateway y Notification & Audit Service | Informar la creación exitosa de una cuenta. |
 | `cuenta.creacion.rechazada` | Evento | Account Service | API Gateway y Notification & Audit Service | Informar que la cuenta no pudo crearse. |
 | `cuenta.debitada` | Evento | Account Service | Transaction o Payment Service | Confirmar el débito. |
@@ -77,14 +97,18 @@ Transaction Service también produce `cuenta.debito.solicitado`, `cuenta.credito
 | Routing key | Clasificación | Productor principal | Consumidor principal | Propósito |
 |---|---|---|---|---|
 | `pago.procesamiento.solicitado` | Comando | API Gateway | Payment Service | Registrar e iniciar un pago. |
+| `cliente.kyc.validacion.solicitada` | Comando Fase 2 | Payment Service | Customer Service | Validar KYC del cliente antes de debitar un pago. |
+| `cuenta.transferencia.validacion.solicitada` | Comando Fase 2 | Payment Service | Account Service | Validar propiedad, estado, tipo y fondos de la cuenta de pago. |
 | `pago.consulta.solicitada` | Comando de consulta | API Gateway | Payment Service | Consultar un pago. |
 | `pago.historial.solicitado` | Comando de consulta | API Gateway | Payment Service | Consultar los pagos de un cliente. |
 | `pago.completado` | Evento | Payment Service | API Gateway y Notification & Audit Service | Informar la finalización exitosa de un pago. |
 | `pago.rechazado` | Evento | Payment Service | API Gateway y Notification & Audit Service | Informar el rechazo o compensación del pago. |
 | `pago.consultado` | Respuesta asíncrona | Payment Service | API Gateway | Entregar el detalle de un pago. |
 | `pago.historial.consultado` | Respuesta asíncrona | Payment Service | API Gateway | Entregar el historial de pagos. |
+| `cliente.kyc.verificado` / `cliente.kyc.rechazado` | Evento de respuesta | Customer Service | Payment Service | Autorizar o rechazar el pago según el estado KYC. |
+| `cuenta.transferencia.validada` / `cuenta.transferencia.rechazada` | Evento de respuesta | Account Service | Payment Service | Autorizar o rechazar el débito del pago según las reglas de cuenta. |
 
-Payment Service produce comandos de débito y compensación para Account Service y consume `cuenta.debitada`, `cuenta.debito.rechazado` y `cuenta.compensada`.
+Payment Service primero consume las respuestas de KYC y de reglas de cuenta; sólo cuando ambas son válidas produce el comando de débito. También produce comandos de compensación y consume `cuenta.debitada`, `cuenta.debito.rechazado` y `cuenta.compensada`.
 
 ## Notification & Audit Service
 
