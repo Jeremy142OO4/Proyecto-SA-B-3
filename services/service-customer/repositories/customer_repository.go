@@ -96,7 +96,13 @@ func (r *customerRepo) GetByDocumentID(ctx context.Context, docID string) (*mode
 	return &c, err
 }
 
-func (r *customerRepo) Update(ctx context.Context, customer *models.Customer) error {
+func (r *customerRepo) UpdateWithOutbox(ctx context.Context, customer *models.Customer, outboxEvent *models.OutboxMessage) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
 	customer.UpdatedAt = time.Now().UTC()
 	query := `
 		UPDATE customers 
@@ -105,8 +111,17 @@ func (r *customerRepo) Update(ctx context.Context, customer *models.Customer) er
 		    status = :status, updated_at = :updated_at
 		WHERE customer_id = :customer_id
 	`
-	_, err := r.db.NamedExecContext(ctx, query, customer)
-	return err
+	if _, err = tx.NamedExecContext(ctx, query, customer); err != nil {
+		return err
+	}
+	if outboxEvent != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO outbox_messages
+			(id,event_type,payload,correlation_id,causation_id,created_at)
+			VALUES($1,$2,$3,$4,$5,$6)`, outboxEvent.ID, outboxEvent.EventType, outboxEvent.Payload, outboxEvent.CorrelationID, outboxEvent.CausationID, outboxEvent.CreatedAt); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (r *customerRepo) FindActivationToken(ctx context.Context, tokenHash string) (*models.ActivationToken, error) {
@@ -155,12 +170,29 @@ func (r *customerRepo) IsMessageProcessed(ctx context.Context, messageID uuid.UU
 }
 
 func (r *customerRepo) MarkMessageProcessed(ctx context.Context, tx *sqlx.Tx, messageID uuid.UUID, consumerName, ref string) error {
-	query := "INSERT INTO processed_messages (message_id, consumer_name, result_reference) VALUES ($1, $2, $3)"
+	query := `INSERT INTO processed_messages (message_id, consumer_name, result_reference)
+		VALUES ($1, $2, $3) ON CONFLICT (message_id) DO NOTHING`
 	if tx != nil {
 		_, err := tx.ExecContext(ctx, query, messageID, consumerName, ref)
 		return err
 	}
 	_, err := r.db.ExecContext(ctx, query, messageID, consumerName, ref)
+	return err
+}
+
+func (r *customerRepo) GetProcessedMessageResult(ctx context.Context, messageID uuid.UUID) (bool, string, error) {
+	var result string
+	err := r.db.GetContext(ctx, &result, "SELECT result_reference FROM processed_messages WHERE message_id = $1", messageID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, "", nil
+	}
+	return err == nil, result, err
+}
+
+func (r *customerRepo) RecordProcessedMessage(ctx context.Context, messageID uuid.UUID, consumerName, ref string) error {
+	_, err := r.db.ExecContext(ctx, `INSERT INTO processed_messages
+		(message_id, consumer_name, result_reference) VALUES ($1,$2,$3)
+		ON CONFLICT (message_id) DO NOTHING`, messageID, consumerName, ref)
 	return err
 }
 
@@ -188,13 +220,32 @@ func (r *customerRepo) List(ctx context.Context, limit, offset int) ([]*models.C
 	return customers, err
 }
 
-func (r *customerRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status models.CustomerStatus) (*models.Customer, error) {
+func (r *customerRepo) UpdateStatusWithOutbox(ctx context.Context, id uuid.UUID, status models.CustomerStatus, outboxEvent *models.OutboxMessage) (*models.Customer, error) {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
 	var customer models.Customer
-	err := r.db.GetContext(ctx, &customer, `UPDATE customers SET status=$1,updated_at=NOW() WHERE customer_id=$2 RETURNING *`, status, id)
+	err = tx.GetContext(ctx, &customer, `UPDATE customers SET status=$1,updated_at=NOW() WHERE customer_id=$2 RETURNING *`, status, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
-	return &customer, err
+	if err != nil {
+		return nil, err
+	}
+	if outboxEvent != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO outbox_messages
+			(id,event_type,payload,correlation_id,causation_id,created_at)
+			VALUES($1,$2,$3,$4,$5,$6)`, outboxEvent.ID, outboxEvent.EventType, outboxEvent.Payload, outboxEvent.CorrelationID, outboxEvent.CausationID, outboxEvent.CreatedAt); err != nil {
+			return nil, err
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return &customer, nil
 }
 
 func (r *customerRepo) UpdateKYCStatusWithOutbox(ctx context.Context, id uuid.UUID, status models.KYCStatus, outboxEvent *models.OutboxMessage) (*models.Customer, error) {
@@ -271,7 +322,8 @@ func (r *customerRepo) RegistrarValidacionCliente(ctx context.Context, mensajeID
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO processed_messages
-		(message_id,consumer_name,result_reference) VALUES($1,$2,$3)`, mensajeID, "customer-service.validacion-cliente", solicitudID.String()); err != nil {
+		(message_id,consumer_name,result_reference) VALUES($1,$2,$3)
+		ON CONFLICT (message_id) DO NOTHING`, mensajeID, "customer-service.validacion-cliente", solicitudID.String()); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -320,7 +372,8 @@ func (r *customerRepo) RegistrarValidacionKYC(ctx context.Context, mensajeID, co
 	if _, err = tx.ExecContext(ctx, `INSERT INTO outbox_messages(id,event_type,payload,correlation_id,causation_id,created_at) VALUES($1,$2,$3,$4,$5,$6)`, uuid.New(), tipo, contenido, correlacionID, mensajeID, time.Now().UTC()); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO processed_messages(message_id,consumer_name,result_reference) VALUES($1,'customer-service.validacion-kyc',$2)`, mensajeID, operacionID.String()); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO processed_messages(message_id,consumer_name,result_reference) VALUES($1,'customer-service.validacion-kyc',$2)
+		ON CONFLICT (message_id) DO NOTHING`, mensajeID, operacionID.String()); err != nil {
 		return err
 	}
 	return tx.Commit()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -125,13 +126,45 @@ func (r *RabbitMQClient) procesarComando(ctx context.Context, sobre events.Event
 		}
 		return r.repo.RegistrarValidacionKYC(ctx, sobre.MessageID, sobre.CorrelationID, solicitud.IDOperacion, solicitud.IDCliente)
 	}
+
+	procesado, resultado, err := r.repo.GetProcessedMessageResult(ctx, sobre.MessageID)
+	if err != nil {
+		return fmt.Errorf("error verificando idempotencia del comando: %w", err)
+	}
+	if procesado {
+		var cache respuestaRPC
+		if err := json.Unmarshal([]byte(resultado), &cache); err != nil {
+			return fmt.Errorf("resultado idempotente inválido: %w", err)
+		}
+		return r.publicarRespuesta(ctx, sobre, cache.Estado, cache.Cuerpo)
+	}
+
 	estado, cuerpo := r.ejecutarRPC(ctx, sobre)
-	contenido, _ := json.Marshal(respuestaRPC{Estado: estado, Cuerpo: cuerpo})
+	if estado < 500 {
+		cache, err := json.Marshal(respuestaRPC{Estado: estado, Cuerpo: cuerpo})
+		if err != nil {
+			return fmt.Errorf("error serializando resultado idempotente: %w", err)
+		}
+		if err := r.repo.RecordProcessedMessage(ctx, sobre.MessageID, "customer-service.commands", string(cache)); err != nil {
+			return fmt.Errorf("error registrando comando procesado: %w", err)
+		}
+	}
+	return r.publicarRespuesta(ctx, sobre, estado, cuerpo)
+}
+
+func (r *RabbitMQClient) publicarRespuesta(ctx context.Context, sobre events.EventEnvelope, estado int, cuerpo json.RawMessage) error {
+	contenido, err := json.Marshal(respuestaRPC{Estado: estado, Cuerpo: cuerpo})
+	if err != nil {
+		return err
+	}
 	respuesta, err := events.NewEnvelope(strings.TrimSuffix(sobre.Type, ".solicitado")+".respondido", sobre.CorrelationID, &sobre.MessageID, json.RawMessage(contenido))
 	if err != nil {
 		return err
 	}
-	bytes, _ := json.Marshal(respuesta)
+	bytes, err := json.Marshal(respuesta)
+	if err != nil {
+		return err
+	}
 	return r.channel.PublishWithContext(ctx, intercambioRespuestas, respuesta.Type, false, false, amqp.Publishing{DeliveryMode: amqp.Persistent, ContentType: "application/json", CorrelationId: sobre.CorrelationID.String(), Body: bytes})
 }
 
@@ -223,7 +256,7 @@ func (r *RabbitMQClient) ejecutarRPC(ctx context.Context, sobre events.EventEnve
 		if err := json.Unmarshal(sobre.Payload, &req); err != nil {
 			return errorRespuesta(400, err)
 		}
-		cliente, err := r.svc.UpdateCustomerStatus(ctx, req.IDCliente, req.Estado)
+		cliente, err := r.svc.UpdateCustomerStatus(ctx, req.IDCliente, req.Estado, sobre.CorrelationID)
 		if err != nil {
 			return errorRespuesta(400, err)
 		}

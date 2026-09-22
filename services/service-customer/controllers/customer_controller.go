@@ -34,7 +34,7 @@ func (cc *CustomerController) UpdateCustomerStatus(c *fiber.Ctx) error {
 	if c.BodyParser(&input) != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Cuerpo de solicitud invalido"})
 	}
-	customer, err := cc.svc.UpdateCustomerStatus(c.Context(), id, input.Status)
+	customer, err := cc.svc.UpdateCustomerStatus(c.Context(), id, input.Status, middleware.GetCorrelationID(c))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}

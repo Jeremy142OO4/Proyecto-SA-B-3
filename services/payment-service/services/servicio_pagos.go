@@ -48,6 +48,9 @@ func (s *servicioPagos) Procesar(ctx context.Context, m events.SobreMensaje, p e
 	return err
 }
 func (s *servicioPagos) ProcesarResultadoKYC(ctx context.Context, m events.SobreMensaje, r events.ResultadoValidacionKYC) error {
+	if m.IDMensaje == uuid.Nil || m.IDCorrelacion == uuid.Nil || r.IDOperacion == uuid.Nil || r.IDCliente == uuid.Nil {
+		return ErrSolicitudInvalida
+	}
 	err := s.repositorio.ProcesarResultadoKYC(ctx, m, r)
 	if errors.Is(err, repositories.ErrPagoNoEncontrado) {
 		return nil
@@ -55,6 +58,9 @@ func (s *servicioPagos) ProcesarResultadoKYC(ctx context.Context, m events.Sobre
 	return err
 }
 func (s *servicioPagos) ProcesarResultadoValidacionCuenta(ctx context.Context, m events.SobreMensaje, r events.ResultadoValidacionCuenta) error {
+	if m.IDMensaje == uuid.Nil || m.IDCorrelacion == uuid.Nil || r.IDOperacion == uuid.Nil || r.IDCliente == uuid.Nil {
+		return ErrSolicitudInvalida
+	}
 	err := s.repositorio.ProcesarResultadoValidacionCuenta(ctx, m, r)
 	if errors.Is(err, repositories.ErrPagoNoEncontrado) {
 		return nil
@@ -74,9 +80,15 @@ func (s *servicioPagos) ProcesarResultadoCuenta(ctx context.Context, m events.So
 	return err
 }
 func (s *servicioPagos) Consultar(ctx context.Context, id uuid.UUID) (*models.Pago, error) {
+	if id == uuid.Nil {
+		return nil, ErrSolicitudInvalida
+	}
 	return s.repositorio.BuscarPorID(ctx, id)
 }
 func (s *servicioPagos) ListarCliente(ctx context.Context, id uuid.UUID, l, o int) ([]models.Pago, error) {
+	if id == uuid.Nil {
+		return nil, ErrSolicitudInvalida
+	}
 	if l <= 0 || l > 100 {
 		l = 25
 	}
@@ -87,6 +99,9 @@ func (s *servicioPagos) ListarCliente(ctx context.Context, id uuid.UUID, l, o in
 }
 
 func (s *servicioPagos) RegistrarRespuesta(ctx context.Context, mensaje events.SobreMensaje, tipo string, contenido any) error {
+	if mensaje.IDMensaje == uuid.Nil || mensaje.IDCorrelacion == uuid.Nil {
+		return ErrSolicitudInvalida
+	}
 	_, err := s.repositorio.RegistrarRespuesta(ctx, mensaje, tipo, contenido)
 	return err
 }

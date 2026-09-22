@@ -56,6 +56,9 @@ func (s *Servicio) Resultado(ctx context.Context, m events.SobreMensaje, p event
 	return s.repo.ProcesarResultado(ctx, m, p)
 }
 func (s *Servicio) Consultar(ctx context.Context, m events.SobreMensaje, p events.SolicitudConsulta) (bool, error) {
+	if m.IDMensaje == uuid.Nil || m.IDCorrelacion == uuid.Nil || p.IDTransferencia == uuid.Nil {
+		return false, ErrSolicitudInvalida
+	}
 	t, e := s.repo.Consultar(ctx, p.IDTransferencia)
 	if e != nil {
 		return false, e
@@ -63,6 +66,9 @@ func (s *Servicio) Consultar(ctx context.Context, m events.SobreMensaje, p event
 	return s.repo.ResponderConsulta(ctx, m, events.EventoConsultada, t)
 }
 func (s *Servicio) Historial(ctx context.Context, m events.SobreMensaje, p events.SolicitudHistorial) (bool, error) {
+	if m.IDMensaje == uuid.Nil || m.IDCorrelacion == uuid.Nil {
+		return false, ErrSolicitudInvalida
+	}
 	if e := validarHistorial(p); e != nil {
 		return false, e
 	}

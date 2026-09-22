@@ -88,3 +88,28 @@ func TestRechazaEscenarioSimuladoDesconocido(t *testing.T) {
 		t.Fatalf("se esperaba solicitud invalida, se obtuvo: %v", err)
 	}
 }
+
+func TestRechazaResultadosSinIdentificadoresTransversales(t *testing.T) {
+	s := NuevoServicioPagos(&repoFalso{})
+	err := s.ProcesarResultadoKYC(context.Background(), events.SobreMensaje{IDMensaje: uuid.New()}, events.ResultadoValidacionKYC{IDOperacion: uuid.New(), IDCliente: uuid.New()})
+	if !errors.Is(err, ErrSolicitudInvalida) {
+		t.Fatalf("se esperaba rechazar KYC sin CorrelationId: %v", err)
+	}
+	err = s.ProcesarResultadoCuenta(context.Background(), events.SobreMensaje{IDCorrelacion: uuid.New()}, events.ResultadoMovimiento{IDOperacion: uuid.New()})
+	if !errors.Is(err, ErrSolicitudInvalida) {
+		t.Fatalf("se esperaba rechazar evento de cuenta sin MessageId: %v", err)
+	}
+}
+
+func TestConsultasRechazanIdentificadoresNulos(t *testing.T) {
+	s := NuevoServicioPagos(&repoFalso{})
+	if _, err := s.Consultar(context.Background(), uuid.Nil); !errors.Is(err, ErrSolicitudInvalida) {
+		t.Fatalf("se esperaba rechazar pago sin id: %v", err)
+	}
+	if _, err := s.ListarCliente(context.Background(), uuid.Nil, 25, 0); !errors.Is(err, ErrSolicitudInvalida) {
+		t.Fatalf("se esperaba rechazar cliente sin id: %v", err)
+	}
+	if err := s.RegistrarRespuesta(context.Background(), events.SobreMensaje{IDMensaje: uuid.New()}, events.EventoPagoConsultado, map[string]string{}); !errors.Is(err, ErrSolicitudInvalida) {
+		t.Fatalf("se esperaba rechazar respuesta sin CorrelationId: %v", err)
+	}
+}

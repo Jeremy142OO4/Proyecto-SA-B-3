@@ -40,6 +40,8 @@ Los eventos exitosos se clasifican como `INFO`; rechazos recuperables y compensa
 | `cliente.validacion.solicitada` | Comando | Account Service | Customer Service | Validar que un cliente exista y esté activo. |
 | `cliente.creado` | Evento | Customer Service | Notification & Audit Service | Informar el registro exitoso del cliente. |
 | `cliente.activado` | Evento | Customer Service | Notification & Audit Service | Informar que el usuario fue activado. |
+| `cliente.actualizado` | Evento | Customer Service | Notification & Audit Service | Informar la actualización del perfil del cliente. |
+| `cliente.estado.actualizado` | Evento | Customer Service | Notification & Audit Service | Informar el cambio de estado del cliente. |
 | `cliente.validado` | Evento de respuesta | Customer Service | Account Service | Confirmar que el cliente es válido y está activo. |
 | `cliente.rechazado` | Evento de respuesta | Customer Service | Account Service | Rechazar la validación del cliente e indicar el motivo. |
 | `notificacion.correo-activacion.solicitado` | Evento/solicitud | Customer Service | Notification & Audit Service | Solicitar el envío del correo de activación. |

@@ -36,7 +36,7 @@ func (s *servicioCreacionCuentas) SolicitarCreacion(ctx context.Context, mensaje
 }
 
 func (s *servicioCreacionCuentas) ProcesarValidacionCliente(ctx context.Context, mensaje events.SobreMensaje, resultado events.ResultadoValidacionCliente) error {
-	if resultado.IDSolicitud == uuid.Nil || resultado.IDCliente == uuid.Nil {
+	if mensaje.IDMensaje == uuid.Nil || mensaje.IDCorrelacion == uuid.Nil || resultado.IDSolicitud == uuid.Nil || resultado.IDCliente == uuid.Nil {
 		return ErrMensajeInvalido
 	}
 	if resultado.Activo && mensaje.Tipo == events.EventoClienteValidado {

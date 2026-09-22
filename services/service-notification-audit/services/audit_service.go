@@ -44,6 +44,10 @@ func NewAuditService(
 }
 
 func (s *auditService) ProcessEvent(ctx context.Context, envelope *events.EventEnvelope) error {
+	if envelope == nil || envelope.MessageID == uuid.Nil || envelope.CorrelationID == uuid.Nil || strings.TrimSpace(envelope.Type) == "" {
+		return fmt.Errorf("sobre de evento inválido: messageId, correlationId y tipo son obligatorios")
+	}
+
 	processed, err := s.idempotencyRepo.IsMessageProcessed(ctx, envelope.MessageID)
 	if err != nil {
 		return fmt.Errorf("error verificando idempotencia: %w", err)
@@ -59,7 +63,7 @@ func (s *auditService) ProcessEvent(ctx context.Context, envelope *events.EventE
 	}
 
 	auditLog := &models.AuditLog{
-		ID:            uuid.New(),
+		ID:            idempotentID("audit", envelope.MessageID),
 		EventID:       envelope.MessageID,
 		CorrelationID: envelope.CorrelationID,
 		CausationID:   envelope.CausationID,
@@ -76,8 +80,9 @@ func (s *auditService) ProcessEvent(ctx context.Context, envelope *events.EventE
 		return fmt.Errorf("error guardando audit log: %w", err)
 	}
 
-	// Un error de notificación no revierte ni bloquea el evento de negocio.
-	s.handleNotificationDispatch(ctx, envelope)
+	if err := s.handleNotificationDispatch(ctx, envelope); err != nil {
+		return fmt.Errorf("error procesando notificación: %w", err)
+	}
 
 	if err := s.idempotencyRepo.MarkMessageProcessed(
 		ctx,
@@ -94,22 +99,24 @@ func (s *auditService) ProcessEvent(ctx context.Context, envelope *events.EventE
 func (s *auditService) handleNotificationDispatch(
 	ctx context.Context,
 	envelope *events.EventEnvelope,
-) {
+) error {
 	switch envelope.Type {
 	case "notificacion.correo-activacion.solicitado":
-		s.sendActivationEmail(ctx, envelope)
+		return s.sendActivationEmail(ctx, envelope)
 	default:
 		rule, ok := notificationRuleFor(envelope.Type)
 		if !ok {
-			return
+			return nil
 		}
 
 		recipient := extractRecipient(envelope.Payload, rule.defaultRecipient)
 		status := models.NotificationSent
 		if err := s.saveGeneratedNotification(ctx, envelope, rule, recipient, status, ""); err != nil {
 			log.Printf("[notification-audit-service] error registrando notificacion: correlationId=%s error=%v", envelope.CorrelationID, err)
+			return err
 		}
 	}
+	return nil
 }
 
 type notificationRule struct {
@@ -123,6 +130,8 @@ func notificationRuleFor(eventType string) (notificationRule, bool) {
 	rules := map[string]notificationRule{
 		"cliente.creado":                    {"CLIENT_CREATED", "Registro de cliente recibido", "El cliente fue registrado correctamente.", "customer"},
 		"cliente.activado":                  {"CLIENT_ACTIVATED", "Cliente activado", "El cliente fue activado correctamente.", "customer"},
+		"cliente.actualizado":               {"CLIENT_UPDATED", "Perfil actualizado", "El perfil del cliente fue actualizado.", "customer"},
+		"cliente.estado.actualizado":        {"CLIENT_STATUS_UPDATED", "Estado de cliente actualizado", "El estado del cliente fue actualizado.", "customer"},
 		"cliente.rechazado":                 {"CLIENT_VALIDATION_REJECTED", "Validación de cliente rechazada", "El cliente no pudo validarse para la operación solicitada.", "customer"},
 		"cliente.kyc.verificado":            {"KYC_VERIFIED", "Validación KYC aprobada", "La validación KYC fue aprobada.", "customer"},
 		"cliente.kyc.rechazado":             {"KYC_REJECTED", "Validación KYC rechazada", "La validación KYC fue rechazada.", "customer"},
@@ -170,7 +179,7 @@ func (s *auditService) saveGeneratedNotification(
 	errorDetail string,
 ) error {
 	return s.notificationRepo.SaveNotificationLog(ctx, &models.NotificationLog{
-		ID:               uuid.New(),
+		ID:               idempotentID("notification", envelope.MessageID),
 		CorrelationID:    envelope.CorrelationID,
 		Recipient:        recipient,
 		NotificationType: rule.notificationType,
@@ -187,6 +196,10 @@ func optionalString(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+func idempotentID(prefix string, messageID uuid.UUID) uuid.UUID {
+	return uuid.NewSHA1(uuid.Nil, []byte(prefix+":"+messageID.String()))
 }
 
 // ClassifyEvent follows the project convention: successful and in-progress
@@ -206,7 +219,7 @@ func ClassifyEvent(eventType string) models.EventSeverity {
 func (s *auditService) sendActivationEmail(
 	ctx context.Context,
 	envelope *events.EventEnvelope,
-) {
+) error {
 	var payload events.ActivationEmailPayload
 
 	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
@@ -218,7 +231,7 @@ func (s *auditService) sendActivationEmail(
 		)
 		detail := "payload inválido para correo de activación"
 		if saveErr := s.notificationRepo.SaveNotificationLog(ctx, &models.NotificationLog{
-			ID:               uuid.New(),
+			ID:               idempotentID("notification", envelope.MessageID),
 			CorrelationID:    envelope.CorrelationID,
 			Recipient:        "unknown",
 			NotificationType: "ACTIVATION_EMAIL",
@@ -229,8 +242,9 @@ func (s *auditService) sendActivationEmail(
 			SentAt:           time.Now().UTC(),
 		}); saveErr != nil {
 			log.Printf("[notification-audit-service] no se pudo registrar payload inválido: correlationId=%s error=%v", envelope.CorrelationID, saveErr)
+			return saveErr
 		}
-		return
+		return nil
 	}
 
 	subject := "Activa tu cuenta en Bank USAC"
@@ -265,7 +279,7 @@ func (s *auditService) sendActivationEmail(
 	}
 
 	if err := s.notificationRepo.SaveNotificationLog(ctx, &models.NotificationLog{
-		ID:               uuid.New(),
+		ID:               idempotentID("notification", envelope.MessageID),
 		CorrelationID:    envelope.CorrelationID,
 		Recipient:        payload.Email,
 		NotificationType: "ACTIVATION_EMAIL",
@@ -280,11 +294,13 @@ func (s *auditService) sendActivationEmail(
 			envelope.CorrelationID,
 			err,
 		)
+		return err
 	}
 
 	if status == models.NotificationSent {
 		log.Printf("[notification-audit-service] correo de activación enviado: messageId=%s correlationId=%s recipient=%s", envelope.MessageID, envelope.CorrelationID, payload.Email)
 	}
+	return nil
 }
 
 func (s *auditService) GetAuditByCorrelation(

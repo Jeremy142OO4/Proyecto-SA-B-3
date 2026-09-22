@@ -41,6 +41,8 @@ const (
 	EventoClienteRechazado   = "cliente.rechazado"
 	EventoClienteCreado      = "cliente.creado"
 	EventoClienteActivado    = "cliente.activado"
+	EventoClienteActualizado = "cliente.actualizado"
+	EventoClienteEstadoActualizado = "cliente.estado.actualizado"
 	EventoCorreoActivacion   = "notificacion.correo-activacion.solicitado"
 	ComandoRegistrarCliente  = "cliente.registro.solicitado"
 	ComandoActivarCliente    = "cliente.activacion.solicitada"
@@ -113,4 +115,9 @@ type CustomerUpdatedPayload struct {
 	CustomerID uuid.UUID `json:"idCliente"`
 	Address    string    `json:"direccion"`
 	Email      string    `json:"correo"`
+}
+
+type CustomerStatusUpdatedPayload struct {
+	CustomerID uuid.UUID `json:"idCliente"`
+	Status     string    `json:"estado"`
 }
