@@ -79,36 +79,70 @@ func (p *Publicador) Publicar(ctx context.Context, m events.SobreMensaje) error 
 }
 func (p *Publicador) Cerrar() error { return p.canal.Close() }
 func ConsumirRespuestas(c *amqp.Connection, ops *operations.Store, gestor *responses.Gestor) error {
-	ch, e := c.Channel()
-	if e != nil {
-		return e
+	if c == nil || c.IsClosed() {
+		return fmt.Errorf("conexion RabbitMQ cerrada")
 	}
-	if e = ch.Qos(20, 0, false); e != nil {
-		return e
-	}
-	ds, e := ch.Consume(ColaRespuestas, "api-gateway", false, false, false, false, nil)
-	if e != nil {
-		return e
-	}
+	// El consumidor se supervisa en segundo plano. Si RabbitMQ cierra el
+	// canal (reinicio, failover o una desconexion temporal), se vuelve a crear
+	// el canal y el consumidor sin tener que reiniciar el API Gateway.
 	go func() {
-		defer ch.Close()
-		for d := range ds {
-			m, e := events.Decodificar(d.Body)
+		const esperaReconectar = 2 * time.Second
+		for {
+			if c.IsClosed() {
+				log.Printf("RabbitMQ cerrado; consumidor de respuestas detenido")
+				return
+			}
+			ch, e := c.Channel()
 			if e != nil {
-				log.Printf("respuesta invalida: %v", e)
-				d.Nack(false, false)
+				log.Printf("abrir canal de respuestas: %v; reintentando", e)
+				time.Sleep(esperaReconectar)
 				continue
 			}
-			gestor.Entregar(m)
-			estado := estadoOperacion(m.Tipo)
-			if estado != "" {
-				var detalle struct {
-					Codigo string `json:"codigo"`
-				}
-				_ = json.Unmarshal(m.Contenido, &detalle)
-				ops.Actualizar(m.IDCorrelacion.String(), estado, detalle.Codigo)
+			if e = ch.Qos(20, 0, false); e != nil {
+				_ = ch.Close()
+				log.Printf("configurar QoS de respuestas: %v; reintentando", e)
+				time.Sleep(esperaReconectar)
+				continue
 			}
-			d.Ack(false)
+			// Exchanges, cola y bindings son idempotentes; declararlos al
+			// reconectar también cubre una recreacion de RabbitMQ.
+			if e = DeclararTopologia(ch); e != nil {
+				_ = ch.Close()
+				log.Printf("declarar topologia de respuestas: %v; reintentando", e)
+				time.Sleep(esperaReconectar)
+				continue
+			}
+			ds, e := ch.Consume(ColaRespuestas, "api-gateway", false, false, false, false, nil)
+			if e != nil {
+				_ = ch.Close()
+				log.Printf("consumir respuestas: %v; reintentando", e)
+				time.Sleep(esperaReconectar)
+				continue
+			}
+
+			for d := range ds {
+				m, e := events.Decodificar(d.Body)
+				if e != nil {
+					log.Printf("respuesta invalida: %v", e)
+					_ = d.Nack(false, false)
+					continue
+				}
+				gestor.Entregar(m)
+				estado := estadoOperacion(m.Tipo)
+				if estado != "" {
+					var detalle struct {
+						Codigo string `json:"codigo"`
+					}
+					_ = json.Unmarshal(m.Contenido, &detalle)
+					ops.Actualizar(m.IDCorrelacion.String(), estado, detalle.Codigo)
+				}
+				if e = d.Ack(false); e != nil {
+					log.Printf("confirmar respuesta %s: %v", m.IDCorrelacion, e)
+				}
+			}
+			_ = ch.Close()
+			log.Printf("canal de respuestas cerrado; reconectando")
+			time.Sleep(esperaReconectar)
 		}
 	}()
 	return nil
