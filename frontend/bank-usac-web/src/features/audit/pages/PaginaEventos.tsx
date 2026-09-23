@@ -12,6 +12,12 @@ const severidades: Array<{ valor: FiltroSeveridad; etiqueta: string }> = [
   { valor: 'ERROR', etiqueta: 'Errores' },
 ];
 
+const iconosSeveridad: Record<RegistroAuditoria['severity'], string> = {
+  INFO: 'ℹ️',
+  WARNING: '⚠️',
+  ERROR: '❌',
+};
+
 export function PaginaEventos() {
   const [registros, setRegistros] = useState<RegistroAuditoria[]>([]);
   const [filtro, setFiltro] = useState<FiltroSeveridad>('TODOS');
@@ -19,7 +25,7 @@ export function PaginaEventos() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    servicioAuditoria.listar()
+    servicioAuditoria.listar(100)
       .then(setRegistros)
       .catch(e => setError(e instanceof Error ? e.message : 'No fue posible consultar los eventos'))
       .finally(() => setCargando(false));
@@ -48,7 +54,7 @@ export function PaginaEventos() {
     {!visibles.length ? <EstadoVacio mensaje="No hay eventos para la clasificación seleccionada." /> : <div className="lista-eventos">
       {visibles.map(registro => <article className={`evento evento-${registro.severity.toLowerCase()}`} key={registro.id}>
         <div className="evento-indicador" aria-hidden="true" />
-        <div className="evento-contenido"><div className="evento-cabecera"><strong>{registro.eventType}</strong><span className={`severidad severidad-${registro.severity.toLowerCase()}`}>{registro.severity}</span></div>
+        <div className="evento-contenido"><div className="evento-cabecera"><strong>{registro.eventType}</strong><span className={`severidad severidad-${registro.severity.toLowerCase()}`}>{iconosSeveridad[registro.severity]} {registro.severity}</span></div>
           <small>{registro.producer} · {new Date(registro.occurredAt).toLocaleString('es-GT')}</small><span className="evento-correlacion">CorrelationId: {registro.correlationId}</span>
         </div>
       </article>)}

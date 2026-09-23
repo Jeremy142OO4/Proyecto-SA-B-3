@@ -7,6 +7,7 @@ import './styles/global.css';
 import './styles/transferencias.css';
 import './styles/modal-kyc.css';
 import './styles/eventos.css';
+import './styles/eventos-scroll.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

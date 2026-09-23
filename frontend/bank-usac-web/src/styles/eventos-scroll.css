@@ -1,0 +1,19 @@
+.lista-eventos {
+  max-height: 520px;
+  overflow-y: auto;
+  padding-right: 0.45rem;
+}
+
+.lista-eventos::-webkit-scrollbar {
+  width: 8px;
+}
+
+.lista-eventos::-webkit-scrollbar-thumb {
+  background: #b7c8d5;
+  border-radius: 10px;
+}
+
+.lista-eventos::-webkit-scrollbar-track {
+  background: #edf3f7;
+  border-radius: 10px;
+}

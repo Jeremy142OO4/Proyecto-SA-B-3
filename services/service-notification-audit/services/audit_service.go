@@ -234,6 +234,9 @@ func (s *auditService) sendEventEmail(
 	fullName string,
 	errorDetail string,
 ) error {
+	severity := ClassifyEvent(envelope.Type)
+	icon, greeting, subject := notificationPresentation(severity)
+	rule.subject = subject
 	status := models.NotificationSent
 	if strings.TrimSpace(errorDetail) != "" {
 		status = models.NotificationFailed
@@ -241,8 +244,8 @@ func (s *auditService) sendEventEmail(
 		status = models.NotificationFailed
 		errorDetail = "SMTP no configurado"
 	} else {
-		body := fmt.Sprintf("Hola %s,\n\nBank USAC registró el siguiente evento en tu cuenta:\n%s\n\n%s\n\nIdentificador de seguimiento: %s\n\nBank USAC", fullName, envelope.Type, rule.bodySummary, envelope.CorrelationID)
-		if err := s.emailSender.Send(recipient, rule.subject, body); err != nil {
+		body := fmt.Sprintf("%s %s\n\nHola %s,\n\n%s\n\n%s\n\nBank USAC", icon, subject, fullName, greeting, rule.bodySummary)
+		if err := s.emailSender.Send(recipient, subject, body); err != nil {
 			status = models.NotificationFailed
 			errorDetail = err.Error()
 			log.Printf("[notification-audit-service] fallo al enviar correo: event=%s correlationId=%s recipient=%s error=%v", envelope.Type, envelope.CorrelationID, recipient, err)
@@ -253,6 +256,17 @@ func (s *auditService) sendEventEmail(
 		return err
 	}
 	return nil
+}
+
+func notificationPresentation(severity models.EventSeverity) (icon, greeting, subject string) {
+	switch severity {
+	case models.EventError:
+		return "❌", "Ha ocurrido un problema con una operación de tu cuenta.", "Problema con una operación de Bank USAC"
+	case models.EventWarning:
+		return "⚠️", "Hay una situación de tu cuenta que requiere tu atención.", "Aviso importante de Bank USAC"
+	default:
+		return "ℹ️", "Te informamos que una operación de tu cuenta fue procesada.", "Información de tu cuenta en Bank USAC"
+	}
 }
 
 func (s *auditService) saveGeneratedNotification(
