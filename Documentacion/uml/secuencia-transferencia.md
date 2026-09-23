@@ -2,7 +2,7 @@
 
 Flujo de transferencia, Saga, fallos y compensaciones.
 
-![Diagrama de secuencia transferencia](../Imagenes/secuencia-transaferencia.png)
+![Diagrama de secuencia transferencia](../Imagenes/secuencia%20transferencia.png)
 
 La transferencia utiliza una Saga coordinada lógicamente por Transaction Service y ejecutada con eventos asíncronos; no existen llamadas HTTP entre microservicios.
 

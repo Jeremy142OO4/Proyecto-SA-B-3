@@ -460,3 +460,93 @@ Las relaciones con otros microservicios se representan como sistemas externos al
 #### Diagrama de flujo — CDU-NOT-02
 
 ![Caso Expandido TRX-01](../Imagenes/Diagrama%20-%20NOT02.png)
+
+---
+
+### Caso de Uso: Gestionar Estado KYC del Cliente
+
+![Caso Expandido CUS-KYC](./Imagenes/CDU-CUS-KYC_%20Gestionar%20Estado%20KYC%20del%20Cliente.drawio.png)
+
+
+| Campo | Descripción |
+|---|---|
+| **ID Caso de Uso** | CDU-CUS-KYC |
+| **Nombre** | Gestionar estado KYC del cliente |
+| **Módulo al que pertenece** | Customer Service |
+| **Actor Principal** | Administrador / Sistema |
+| **RF cubiertos** | RF-41, RF-42 y RF-43 |
+| **Precondiciones** | - El cliente debe estar registrado en el sistema con estado activo.<br>- El Administrador debe haber iniciado sesión y poseer los permisos correspondientes.<br>- El cliente debe tener el campo `kyc_status` en estado PENDING o REJECTED. |
+| **Postcondiciones** | - El estado KYC del cliente (`kyc_status`) queda actualizado a VERIFIED o REJECTED.<br>- El campo `kyc_updated_at` refleja la fecha y hora de la última modificación.<br>- Si el resultado es VERIFIED, el cliente queda habilitado para realizar transferencias.<br>- Si el resultado es REJECTED, las operaciones de alto valor quedan bloqueadas para el cliente.<br>- El evento `customer.kyc.updated` es publicado hacia el broker de mensajería. |
+| **Escenario Principal** | 1. El Administrador selecciona la opción **Gestionar KYC de clientes**.<br>2. El sistema muestra los clientes con `kyc_status` en PENDING.<br>3. El Administrador selecciona un cliente y revisa su documentación.<br>4. El Administrador elige la acción: **Aprobar** o **Rechazar**.<br>5. El sistema solicita confirmación de la acción.<br>6. El Administrador confirma la decisión.<br>7. Customer Service actualiza `kyc_status` al valor correspondiente.<br>8. Customer Service actualiza el campo `kyc_updated_at` con la fecha actual.<br>9. Customer Service publica el evento `customer.kyc.updated`.<br>10. El sistema informa que el estado KYC fue actualizado correctamente. |
+| **Escenario Alternativo** | **1. Cliente no encontrado:** El sistema informa que el cliente no existe y cancela la operación.<br><br>**2. Estado KYC no elegible:** Si el cliente ya tiene `kyc_status = VERIFIED`, el sistema rechaza una nueva aprobación redundante.<br><br>**3. Acción cancelada por el Administrador:** El estado KYC permanece sin cambios.<br><br>**4. Error durante la actualización:** Customer Service conserva el estado anterior y el evento no es publicado.<br><br>**5. Sistema automatizado:** El proceso puede ser iniciado por un sistema externo de validación documental que publique el resultado como evento; Customer Service consume dicho evento y aplica el mismo flujo a partir del paso 7. |
+| **Requerimientos** | - Customer Service debe almacenar el estado KYC (`kyc_status`) para cada cliente.<br>- Los valores válidos de `kyc_status` son: PENDING, VERIFIED, REJECTED.<br>- Solo un Administrador autorizado o un sistema externo de validación puede modificar el estado KYC.<br>- La actualización debe ser atómica y registrar la fecha de modificación.<br>- El evento `customer.kyc.updated` debe publicarse tras cada cambio exitoso.<br>- Las operaciones de alto valor deben verificar `kyc_status = VERIFIED` antes de ejecutarse. |
+
+![Flujo CUS-KYC](./Imagenes/CDU-CUS-KYC_%20Flujo%20de%20Gestión%20de%20Estado%20KYC.drawio.png)
+
+---
+
+### Caso de Uso: Consultar Historial de Transacciones Filtrado
+
+![Caso Expandido TRX-05](./Imagenes/CDU-TRX-05_%20Consultar%20Historial%20de%20Transacciones%20Filtrado.drawio.png)
+
+
+| Campo | Descripción |
+|---|---|
+| **ID Caso de Uso** | CDU-TRX-05 |
+| **Nombre** | Consultar historial de transacciones filtrado |
+| **Módulo al que pertenece** | Transaction Service |
+| **Actor Principal** | Cliente / Cajero Receptor |
+| **RF cubiertos** | RF-46, RF-47 y RF-48 |
+| **Precondiciones** | - El actor debe haber iniciado sesión.<br>- Debe existir al menos una cuenta asociada al actor.<br>- Transaction Service debe tener acceso a los registros históricos de transacciones. |
+| **Postcondiciones** | - El sistema devuelve el listado de transacciones que cumplen los criterios de filtrado aplicados.<br>- La respuesta incluye: fecha, tipo, monto, cuenta origen, cuenta destino y estado de cada transacción.<br>- Si no hay resultados, el sistema informa que no se encontraron registros para los filtros aplicados. |
+| **Escenario Principal** | 1. El Cliente o Cajero Receptor selecciona **Consultar historial de transacciones**.<br>2. El sistema solicita los parámetros de filtrado disponibles: rango de fechas, tipo de transacción, estado y monto.<br>3. El actor aplica uno o más filtros.<br>4. El sistema valida que los parámetros ingresados sean coherentes (fechas válidas, montos positivos).<br>5. Transaction Service ejecuta la consulta con los filtros aplicados.<br>6. El sistema devuelve los resultados paginados.<br>7. El actor puede navegar entre páginas o exportar el resultado.<br>8. El sistema confirma la finalización de la consulta. |
+| **Escenario Alternativo** | **1. Parámetros inválidos:** El sistema informa el error y solicita corregir los filtros antes de ejecutar la consulta.<br><br>**2. Sin resultados:** El sistema informa que no se encontraron transacciones para los criterios aplicados.<br><br>**3. Error durante la consulta:** El sistema informa el fallo y permite reintentar la operación.<br><br>**4. Consulta sin filtros:** El sistema devuelve el historial completo paginado, comenzando por las transacciones más recientes. |
+| **Requerimientos** | - Transaction Service debe permitir consultar el historial de transacciones con filtros combinables.<br>- Los filtros soportados incluyen: rango de fechas, tipo de transacción, estado y monto mínimo/máximo.<br>- La consulta debe devolver resultados paginados.<br>- Transaction Service no debe consultar directamente bases de datos de otros microservicios.<br>- La operación debe ser de solo lectura; no puede modificar ningún registro. |
+
+![Flujo TRX-05](./Imagenes/CDU-TRX-05_%20Flujo%20de%20Consulta%20de%20Historial%20Filtrado.drawio.png)
+
+---
+
+### Caso de Uso: Procesar Pago Externo Simulado
+
+![Caso Expandido PAY-03](./Imagenes/CDU-PAY-03_%20Procesar%20Pago%20Externo%20Simulado.drawio.png)
+
+
+| Campo | Descripción |
+|---|---|
+| **ID Caso de Uso** | CDU-PAY-03 |
+| **Nombre** | Procesar pago externo simulado |
+| **Módulo al que pertenece** | Transaction Service / Payment Gateway (simulado) |
+| **Actor Principal** | Sistema |
+| **RF cubiertos** | RF-49 y RF-50 |
+| **Precondiciones** | - La cuenta origen debe estar activa y con saldo suficiente para cubrir el monto más la comisión aplicable.<br>- El cliente debe tener `kyc_status = VERIFIED`.<br>- Debe existir un identificador de pago externo (`externalPaymentId`) provisto por el solicitante.<br>- El servicio de simulación de pasarela de pago debe estar disponible. |
+| **Postcondiciones** | - El pago queda registrado en Transaction Service con su `transactionId` único.<br>- La cuenta origen refleja el débito correspondiente al monto más la comisión.<br>- El evento `payment.processed` o `payment.failed` es publicado en el broker.<br>- El resultado del pago es notificado al cliente mediante Notification & Audit Service. |
+| **Escenario Principal** | 1. El sistema recibe una solicitud de pago externo con `externalPaymentId`, `accountId`, monto y referencia.<br>2. Transaction Service valida que el `externalPaymentId` no haya sido procesado anteriormente (idempotencia).<br>3. Transaction Service verifica que la cuenta origen está activa y que el cliente tiene KYC verificado.<br>4. Transaction Service verifica que el saldo disponible cubre el monto más la comisión aplicable.<br>5. Transaction Service invoca el servicio de simulación de pasarela de pago.<br>6. La pasarela simulada devuelve el resultado: APPROVED o REJECTED.<br>7. Si el resultado es APPROVED, Transaction Service aplica el débito sobre la cuenta mediante Account Service.<br>8. Transaction Service registra la transacción con el estado correspondiente.<br>9. Transaction Service publica el evento resultante en el broker.<br>10. Notification & Audit Service procesa el evento y notifica al cliente. |
+| **Escenario Alternativo** | **1. Pago duplicado:** Si el `externalPaymentId` ya existe, el sistema retorna el resultado original sin reprocesar.<br><br>**2. KYC no verificado:** El pago es rechazado y se registra el motivo; el evento `payment.failed` es publicado.<br><br>**3. Saldo insuficiente:** El sistema rechaza el pago, registra el fallo y publica `payment.failed`.<br><br>**4. Pasarela rechaza el pago:** El sistema registra el estado REJECTED y publica `payment.failed`.<br><br>**5. Fallo en Account Service:** Transaction Service aplica la compensación correspondiente y registra el error. |
+| **Requerimientos** | - Transaction Service debe validar idempotencia usando `externalPaymentId`.<br>- Debe verificar KYC del cliente antes de procesar el pago.<br>- La pasarela de pago externa es simulada; debe retornar APPROVED o REJECTED de forma configurable.<br>- La comisión aplicable debe descontarse junto con el monto principal.<br>- El resultado debe publicarse como evento asíncrono en el broker.<br>- El fallo no debe dejar la cuenta en estado inconsistente (compensación obligatoria). |
+
+![Flujo PAY-03](./Imagenes/CDU-PAY-03_%20Flujo%20de%20Procesamiento%20de%20Pago%20Externo%20Simulado.drawio.png)
+
+---
+
+### Caso de Uso: Clasificar y Registrar Evento por Severidad
+
+![Caso Expandido NOT-03](./Imagenes/CDU-NOT-03_%20Clasificar%20y%20Registrar%20Evento%20por%20Severidad.drawio.png)
+
+
+| Campo | Descripción |
+|---|---|
+| **ID Caso de Uso** ng| CDU-NOT-03 |
+| **Nombre** | Clasificar y registrar evento por severidad |
+| **Módulo al que pertenece** | Notification & Audit Service |
+| **Actor Principal** | Sistema |
+| **RF cubiertos** | RF-51 y RF-52 |
+| **Precondiciones** | - Debe haberse recibido un evento de auditoría válido (procesado por CDU-NOT-02).<br>- El evento debe incluir un campo `severity` o ser clasificable según las reglas de negocio definidas.<br>- La tabla de bitácora de auditoría debe estar disponible para escritura. |
+| **Postcondiciones** | - El evento queda registrado con su nivel de severidad asignado: INFO, WARNING o ERROR.<br>- Los eventos con severidad ERROR generan una alerta adicional hacia el canal de monitoreo configurado.<br>- El historial de eventos queda consultable por nivel de severidad. |
+| **Escenario Principal** | 1. Notification & Audit Service recibe el evento de auditoría procesado por CDU-NOT-02.<br>2. El servicio evalúa el campo `severity` incluido en el evento.<br>3. Si el campo `severity` no está presente, el servicio aplica las reglas de clasificación automática según el tipo de evento.<br>4. El servicio asigna el nivel de severidad correspondiente: INFO, WARNING o ERROR.<br>5. El evento es persistido en la bitácora con el nivel de severidad asignado.<br>6. Si el nivel es ERROR, el sistema publica una alerta hacia el canal de monitoreo (cola o webhook configurado).<br>7. El servicio confirma el registro exitoso del evento clasificado. |
+| **Escenario Alternativo** | **1. Severidad no reconocida:** Si el valor de `severity` no corresponde a INFO, WARNING o ERROR, el servicio asigna INFO por defecto y registra una advertencia de clasificación.<br><br>**2. Error al publicar alerta:** Si falla la publicación hacia el canal de monitoreo, el evento permanece registrado en la bitácora; el fallo en la alerta no revierte el registro.<br><br>**3. Error de persistencia:** El servicio registra el fallo y el evento es reencolado para reintento posterior.<br><br>**4. Eventos en cascada ERROR:** Si múltiples eventos ERROR llegan en un intervalo corto, el sistema los agrupa para evitar saturar el canal de monitoreo. |
+| **Requerimientos** | - Notification & Audit Service debe soportar tres niveles de severidad: INFO, WARNING y ERROR.<br>- Debe aplicar reglas automáticas de clasificación cuando el campo `severity` no está presente en el evento.<br>- Los eventos con severidad ERROR deben generar notificación adicional hacia el canal de monitoreo.<br>- El registro de severidad debe ser parte del registro inmutable de auditoría.<br>- La operación de clasificación no debe bloquear el registro del evento si la alerta falla. |
+
+![Flujo NOT-03](./Imagenes/CDU-NOT-03_%20Flujo%20de%20Clasificación%20y%20Registro%20por%20Severidad.drawio.png)
+
+

@@ -8,7 +8,7 @@ El diagrama representa la estructura persistente administrada exclusivamente por
 
 ### `customers`
 
-Almacena la información de identidad, contacto, autenticación y estado de cada cliente o usuario del sistema.
+Almacena la información de identidad, contacto, autenticación, estado de acceso y estado KYC de cada cliente o usuario del sistema.
 
 - `customer_id`: identificador único del cliente; clave primaria.
 - `first_name`, `last_name` y `full_name`: nombres del cliente.
@@ -20,10 +20,16 @@ Almacena la información de identidad, contacto, autenticación y estado de cada
 - `username`: nombre de usuario único.
 - `password_hash`: hash de la contraseña; nunca debe almacenar la contraseña en texto plano.
 - `role`: rol del usuario, limitado a `ADMIN`, `TELLER` o `CLIENTE`.
-- `status`: estado del usuario, limitado a `PENDIENTE_ACTIVACION`, `ACTIVO` o `BLOQUEADO`.
+- `status`: estado de acceso del usuario, limitado a `PENDIENTE_ACTIVACION`, `ACTIVO` o `BLOQUEADO`.
+- `kyc_status`: estado de validación KYC del cliente (**Fase 2**); valores permitidos: `PENDING`, `VERIFIED`, `REJECTED`. Valor por defecto: `PENDING`. No puede ser nulo.
+- `kyc_updated_at`: fecha y hora de la última actualización del estado KYC (**Fase 2**). Permite auditar cuándo cambió el estado.
 - `created_at` y `updated_at`: fechas de creación y última actualización.
 
-Los índices sobre `email`, `username` y `document_id` apoyan las validaciones de unicidad y las consultas frecuentes de autenticación, registro y búsqueda de clientes.
+Los índices sobre `email`, `username` y `document_id` apoyan las validaciones de unicidad y las consultas frecuentes de autenticación, registro y búsqueda de clientes. El índice sobre `kyc_status` agiliza las validaciones en la Saga de transferencia.
+
+#### Restricción de negocio (Fase 2)
+
+El campo `kyc_status` es independiente del campo `status`. Un cliente puede estar `ACTIVO` (acceso habilitado) pero tener `kyc_status = PENDING` o `REJECTED`, lo que le impide realizar transferencias. La validación KYC se realiza siempre antes de iniciar la Saga, mediante el evento `cliente.kyc.validacion.solicitada`.
 
 ### `activation_tokens`
 

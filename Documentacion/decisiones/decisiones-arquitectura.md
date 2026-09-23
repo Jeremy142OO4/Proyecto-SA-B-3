@@ -18,6 +18,11 @@ Este documento registra las decisiones arquitectónicas adoptadas para **Bank US
 | ADR-10 | Representar montos monetarios en centavos enteros | Aceptada |
 | ADR-11 | Mantener trazabilidad mediante `correlationId` | Aceptada |
 | ADR-12 | Organizar el proyecto como monorepo | Aceptada |
+| ADR-13 | Desplegar en Google Cloud Platform (GKE) como proveedor de nube | Aceptada |
+| ADR-14 | Provisionar toda la infraestructura con Terraform | Aceptada |
+| ADR-15 | Implementar pipeline CI/CD con GitHub Actions (feature → develop → release → main) | Aceptada |
+| ADR-16 | Escalar microservicios horizontalmente con HPA al 80 % de CPU | Aceptada |
+| ADR-17 | Alojar las bases de datos en máquinas virtuales independientes fuera del clúster | Aceptada |
 
 ## ADR-01 — División del dominio en cinco microservicios
 
@@ -337,6 +342,183 @@ Mantener todos los componentes en un único repositorio, separados en directorio
 - Los cambios que afectan varios componentes pueden coordinarse en una sola versión.
 - Es necesario mantener límites claros para evitar dependencias accidentales entre servicios.
 - El repositorio aumenta de tamaño conforme se incorporan imágenes y documentación.
+
+## ADR-08 — Revisión para Fase 2
+
+**Estado anterior:** ADR-08 describía el despliegue en Minikube local con Docker Compose para las bases de datos. Esta decisión ha sido reemplazada por ADR-13 y ADR-17.
+
+---
+
+## ADR-13 — Google Cloud Platform (GKE) como proveedor de nube
+
+**Estado:** Aceptada.
+
+### Contexto
+
+La Fase 2 exige desplegar el sistema en un proveedor de nube real. Se evaluaron los tres principales proveedores: AWS (EKS), GCP (GKE) y Azure (AKS).
+
+### Decisión
+
+Utilizar **Google Cloud Platform** y **Google Kubernetes Engine (GKE)** como plataforma de despliegue de los microservicios. El clúster se provisiona con Terraform y gestiona los namespaces `dev` y `prod`.
+
+### Alternativas consideradas
+
+- **AWS con EKS:** Amplia adopción, pero mayor complejidad en configuración de red (VPC, IAM) para este proyecto.
+- **Azure con AKS:** Integración favorable con herramientas Microsoft, pero menos familiar para el equipo.
+- **GCP con GKE:** Kubernetes nativo en la plataforma que lo creó; buena documentación y capa gratuita accesible para proyectos académicos.
+
+### Consecuencias
+
+- El clúster GKE está administrado; Google gestiona el plano de control.
+- La configuración de red, roles y recursos es reproducible mediante Terraform.
+- El equipo debe manejar credenciales de GCP de forma segura, preferiblemente mediante Workload Identity o secretos de GitHub Actions.
+- La facturación en nube es un factor a monitorear durante el período del proyecto.
+
+---
+
+## ADR-14 — Terraform para el provisionamiento de infraestructura
+
+**Estado:** Aceptada.
+
+### Contexto
+
+El proyecto exige que la infraestructura sea reproducible. Los recursos manuales en la consola de la nube son frágiles, no versionables y difíciles de compartir entre miembros del equipo.
+
+### Decisión
+
+Utilizar **Terraform** para provisionar y gestionar todos los recursos en nube: red virtual, clúster Kubernetes, máquinas virtuales para las bases de datos y el registry de contenedores. El código de infraestructura reside en `infra/terraform/` dentro del monorepo.
+
+La ejecución sigue el flujo estándar:
+
+```
+terraform init
+terraform plan
+terraform apply
+```
+
+Los valores sensibles (contraseñas de base de datos, claves de servicio) se gestionan mediante secretos de GitHub Actions y no se almacenan en el repositorio.
+
+### Alternativas consideradas
+
+- Configuración manual mediante la consola de la nube.
+- Pulumi (IaC con lenguajes de propósito general).
+- Scripts de shell con `gcloud` / `kubectl`.
+
+### Consecuencias
+
+- La infraestructura puede reproducirse en cualquier momento aplicando el mismo plan.
+- Los cambios de infraestructura quedan versionados en el repositorio junto al código.
+- El estado de Terraform debe almacenarse de forma compartida (por ejemplo, en un bucket de GCS) para que todos los miembros del equipo trabajen sobre el mismo estado.
+- Una destrucción accidental (`terraform destroy`) eliminaría todos los recursos; se deben usar mecanismos de protección.
+
+---
+
+## ADR-15 — Pipeline CI/CD con GitHub Actions
+
+**Estado:** Aceptada.
+
+### Contexto
+
+El proyecto exige integración y entrega continua con etapas bien definidas. Cada cambio debe pasar por Build, Test y validación antes de llegar a producción.
+
+### Decisión
+
+Implementar el pipeline en **GitHub Actions** siguiendo el flujo de ramas:
+
+| Rama | Evento | Acciones del pipeline |
+|---|---|---|
+| `feature/*` | `push` | Build, Test, Validación básica |
+| `develop` | `merge` / `push` | Build, Test, Build Docker, Deploy en namespace `dev` |
+| `release/*` o tag `vX.X.X` | `push` | Generación de versión, Build Docker final, Publicación en registry |
+| `main` | `merge` | Deploy en namespace `prod` con rolling update |
+
+Las imágenes se etiquetan siempre con la versión (`vX.X.X`). El uso de `latest` está prohibido. Si cualquier etapa falla, el pipeline se detiene.
+
+### Alternativas consideradas
+
+- GitLab CI/CD (no utilizado porque el repositorio está en GitHub).
+- Jenkins (mayor complejidad operativa para un proyecto académico).
+- Circle CI / Travis CI (menor adopción actual).
+
+### Consecuencias
+
+- Cada funcionalidad se integra y valida de forma automática antes de llegar a `develop`.
+- La promoción a producción es controlada y trazable mediante el historial de GitHub.
+- El equipo debe mantener los secretos del pipeline (credenciales GCP, usuario del registry) configurados en GitHub Secrets.
+- No se permiten despliegues manuales directamente sobre los namespaces del clúster.
+
+---
+
+## ADR-16 — Autoescalado horizontal (HPA) al 80 % de CPU
+
+**Estado:** Aceptada.
+
+### Contexto
+
+Los microservicios deben responder ante aumentos de carga sin intervención manual. El sistema bancario puede experimentar picos de actividad que superen la capacidad de una réplica inicial.
+
+### Decisión
+
+Configurar un **Horizontal Pod Autoscaler (HPA)** para cada microservicio con el siguiente umbral:
+
+- **Métrica:** uso de CPU.
+- **Umbral de escalado:** 80 % del límite de CPU configurado para el pod.
+- **Réplicas mínimas:** 1 por microservicio.
+- **Réplicas máximas:** 3 por microservicio (ajustable por servicio).
+
+Cuando el uso de CPU supera el 80 %, Kubernetes crea automáticamente un nuevo pod. Cuando la carga disminuye, los pods adicionales se eliminan hasta volver al mínimo.
+
+### Alternativas consideradas
+
+- Escalar manualmente ajustando el número de réplicas.
+- Usar KEDA para escalar basado en métricas personalizadas (longitud de cola RabbitMQ).
+- Escalar basado en memoria en lugar de CPU.
+
+### Consecuencias
+
+- El sistema absorbe picos de carga sin intervención del equipo.
+- Kubernetes requiere el servidor de métricas (`metrics-server`) habilitado en el clúster.
+- Los pods adicionales deben poder conectarse a la VM de la base de datos; la VM no escala automáticamente.
+- El diseño sin estado de los microservicios (sin sesión local) es un requisito previo para el escalado horizontal (RNF-12).
+
+---
+
+## ADR-17 — Bases de datos en máquinas virtuales fuera del clúster
+
+**Estado:** Aceptada.
+
+### Contexto
+
+El proyecto exige explícitamente que las bases de datos no se ejecuten dentro del clúster de Kubernetes. Esta restricción favorece la separación de ciclos de vida y evita la pérdida de datos ante reinicios del clúster.
+
+### Decisión
+
+Desplegar cada base de datos PostgreSQL en una **máquina virtual independiente** provisionada con Terraform. Las cinco VMs se encuentran en la misma red virtual que el clúster GKE pero no tienen acceso público.
+
+| Servicio | VM | Base de datos |
+|---|---|---|
+| `customer-service` | `vm-customer-db` | `customer_db` |
+| `account-service` | `vm-account-db` | `account_db` |
+| `transaction-service` | `vm-transaction-db` | `transaction_db` |
+| `payment-service` | `vm-payment-db` | `payment_db` |
+| `notification-audit-service` | `vm-audit-db` | `audit_db` |
+
+Las cadenas de conexión se configuran en los pods mediante Secrets de Kubernetes, no mediante variables en el código fuente.
+
+### Alternativas consideradas
+
+- Bases de datos como pods dentro del clúster (descartado por requisito del proyecto).
+- Servicios gestionados de base de datos en la nube (Cloud SQL, RDS), que también son externos al clúster pero no usan VMs propias.
+- Una sola VM con múltiples instancias PostgreSQL (descartado: rompe el aislamiento de datos).
+
+### Consecuencias
+
+- Cada base de datos tiene un ciclo de vida completamente separado del clúster.
+- Los datos persisten aunque el clúster o un namespace sean eliminados.
+- Las VMs deben estar en funcionamiento antes de que los microservicios puedan conectarse; el orden de arranque del pipeline debe garantizarlo.
+- El acceso desde el clúster a las VMs requiere reglas de firewall correctamente configuradas en la red virtual.
+
+---
 
 ## Criterio de actualización
 

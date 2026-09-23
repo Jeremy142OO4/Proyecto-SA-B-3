@@ -9,7 +9,7 @@ Este documento presenta una vista conceptual. Los diagramas entidad-relación de
 
 ### Cliente
 
-Representa a una persona o usuario registrado en el banco. Customer Service es responsable de su identidad, información personal, credenciales, rol y estado.
+Representa a una persona o usuario registrado en el banco. Customer Service es responsable de su identidad, información personal, credenciales, rol, estado y estado KYC.
 
 Roles admitidos:
 
@@ -17,13 +17,19 @@ Roles admitidos:
 - `TELLER`: Cajero Receptor.
 - `CLIENTE`: Cliente bancario.
 
-Estados admitidos:
+Estados de acceso admitidos:
 
 - `PENDIENTE_ACTIVACION`.
 - `ACTIVO`.
 - `BLOQUEADO`.
 
-El documento de identificación, correo y username deben ser únicos. La contraseña nunca se almacena en texto plano, sino como un hash.
+Estados KYC admitidos (Fase 2):
+
+- `PENDING`: el cliente aún no ha completado el proceso de validación KYC.
+- `VERIFIED`: el cliente ha sido verificado y puede realizar transferencias.
+- `REJECTED`: la validación KYC fue rechazada; el cliente no puede transferir.
+
+El estado de acceso y el estado KYC son independientes. Solamente un cliente con estado `ACTIVO` y KYC `VERIFIED` puede avanzar en la Saga de transferencia. El documento de identificación, correo y username deben ser únicos. La contraseña nunca se almacena en texto plano, sino como un hash.
 
 ### Token de activación
 
@@ -31,12 +37,12 @@ Representa el enlace de un solo uso enviado durante la activación del usuario. 
 
 ### Cuenta
 
-Representa una cuenta bancaria asociada lógicamente con un cliente. Account Service es propietario de su número, tipo, saldo, moneda, estado y actividad financiera.
+Representa una cuenta bancaria asociada lógicamente con un cliente. Account Service es propietario de su número, tipo, reglas de negocio, saldo, moneda, estado y actividad financiera.
 
-Tipos admitidos:
+Tipos admitidos (Fase 2 extiende el modelo):
 
-- `MONETARIA`.
-- `AHORRO`.
+- `AHORRO`: cuenta de ahorro; aplica límite de saldo mínimo. No permite quedar por debajo del saldo mínimo configurado.
+- `CORRIENTE`: cuenta corriente; puede aplicar comisión opcional por transacción. Mayor flexibilidad operativa.
 
 Estados admitidos:
 
@@ -45,7 +51,12 @@ Estados admitidos:
 - `BLOQUEADA`.
 - `CERRADA`.
 
-El saldo se expresa en centavos y no puede quedar negativo. La versión permite proteger las actualizaciones concurrentes.
+Reglas de negocio por tipo (Fase 2):
+
+- `min_balance`: saldo mínimo requerido, expresado en centavos. Se aplica a cuentas de tipo `AHORRO`.
+- `transaction_fee`: comisión por transacción en centavos (opcional). Se aplica a cuentas de tipo `CORRIENTE` cuando está configurada.
+
+El saldo se expresa en centavos y no puede quedar negativo ni por debajo del saldo mínimo del tipo de cuenta. La versión permite proteger las actualizaciones concurrentes.
 
 ### Movimiento de cuenta
 
@@ -65,15 +76,20 @@ Representa el proceso asíncrono utilizado para crear una cuenta después de com
 
 Representa el traslado de fondos entre dos cuentas diferentes. Transaction Service conserva el estado general de la operación y coordina la Saga necesaria para ejecutar el débito, el crédito y una eventual compensación.
 
-Estados admitidos:
+Estados admitidos (Fase 2 incorpora estados intermedios):
 
-- `PENDIENTE`.
-- `PROCESANDO`.
-- `COMPLETADA`.
-- `RECHAZADA`.
-- `COMPENSANDO`.
-- `COMPENSADA`.
-- `COMPENSACION_FALLIDA`.
+- `PENDING`: la solicitud fue recibida y registrada.
+- `PENDIENTE`: estado inicial de la Saga antes de iniciar validaciones.
+- `VALIDANDO_KYC`: se está verificando el estado KYC del cliente origen (Fase 2).
+- `VALIDANDO_CUENTAS`: se está verificando el tipo y reglas de las cuentas involucradas (Fase 2).
+- `PROCESANDO`: la Saga está ejecutando el débito y el crédito.
+- `APPROVED`: la transferencia fue aprobada y completada exitosamente (Fase 2).
+- `FAILED`: la transferencia falló en alguna etapa (Fase 2).
+- `COMPLETADA`: el proceso finalizó correctamente.
+- `RECHAZADA`: la Saga determinó que la operación no puede ejecutarse.
+- `COMPENSANDO`: se está revirtiendo un débito ya aplicado.
+- `COMPENSADA`: la compensación se aplicó correctamente.
+- `COMPENSACION_FALLIDA`: el intento de compensación no pudo completarse.
 
 ### Pago
 
@@ -91,9 +107,19 @@ Representa cada intento de procesar un pago. Permite conservar el número de int
 
 Es una copia inmutable de un evento relevante ocurrido en cualquier dominio. Conserva el identificador del evento, productor, tipo, versión, payload y fechas. El `idCorrelacion` permite reconstruir una operación distribuida completa.
 
+Clasificación de severidad (Fase 2):
+
+- `INFO`: operaciones exitosas y flujos normales (por ejemplo, transferencia completada, pago procesado).
+- `WARNING`: rechazos recuperables, compensaciones ejecutadas o reintentos (por ejemplo, KYC rechazado, pago con fallo externo y compensado).
+- `ERROR`: fallos no recuperables, timeouts sin compensación posible o mensajes en DLQ.
+
+La clasificación es asignada por Notification & Audit Service al consumir cada evento; no modifica la routing key original del evento.
+
 ### Notificación
 
-Representa el historial de una comunicación dirigida a un usuario. Conserva el destinatario, tipo, asunto, resumen seguro del contenido y resultado del envío. Sus estados son `PENDING`, `SENT` y `FAILED`.
+Representa el historial de una comunicación dirigida a un usuario. Conserva el destinatario, tipo, asunto, resumen seguro del contenido, severidad del evento que la originó y resultado del envío. Sus estados son `PENDING`, `SENT` y `FAILED`.
+
+La generación de la notificación se adapta según la severidad del evento: los eventos `INFO` generan notificaciones informativas, los `WARNING` generan alertas y los `ERROR` generan notificaciones de error que pueden requerir acción del usuario o del administrador.
 
 ## Reglas e invariantes del dominio
 
@@ -111,6 +137,11 @@ Representa el historial de una comunicación dirigida a un usuario. Conserva el 
 12. Un mensaje repetido no debe volver a aplicar una operación financiera.
 13. Los eventos relacionados con una misma operación conservan el mismo `idCorrelacion`.
 14. Los datos sensibles, credenciales y tokens completos no forman parte de logs ni payloads de auditoría.
+15. Solamente un cliente con estado KYC `VERIFIED` puede avanzar en la Saga de transferencia (Fase 2).
+16. Un débito sobre una cuenta `AHORRO` no puede dejar el saldo por debajo del `min_balance` configurado (Fase 2).
+17. Si el tipo de cuenta `CORRIENTE` tiene `transaction_fee` configurada, la comisión se descuenta del saldo origen en la misma operación del débito (Fase 2).
+18. Todo evento procesado por Notification & Audit Service debe clasificarse como `INFO`, `WARNING` o `ERROR` antes de generar la notificación (Fase 2).
+19. Un pago externo simulado con resultado `FALLO` o `TIMEOUT` que ya aplicó un débito debe compensar la cuenta antes de cerrar el pago como rechazado (Fase 2).
 
 ## Elementos técnicos de soporte
 

@@ -1,15 +1,25 @@
 # C4 - Componentes
+Este documento extiende la vista de componentes C4 (Nivel 3). La Fase 1 documentó la arquitectura interna de Transaction Service. La Fase 2 agrega la arquitectura interna de los cuatro servicios que incorporaron nuevas capacidades: Customer Service (KYC), Account Service (tipos de cuenta), Payment Service (pagos externos) y Notification & Audit Service (severidad). Transaction Service se muestra actualizado con los componentes de historial.
 
-El diagrama de componentes C4 Nivel 3 muestra la estructura interna del microservicio Transaction Service, implementado en Go, encargado de coordinar el flujo de transferencias bancarias de forma asíncrona.
+---
+
+## Transaction Service — Componentes (actualizado Fase 2)
+
+El Transaction Service coordina el flujo de transferencias bancarias de forma asíncrona mediante una Saga de coreografía. En la Fase 2 se extiende con componentes de historial y trazabilidad.
 
 
-![Diagrama entidad-relación de Transaction Service](../Imagenes/Diagrama%20-%20C4-Nivel-3-Componentes.png)
+![Diagrama entidad-relación de Transaction Service](../Imagenes/componentes.drawio%20(1).png)
 
+### Componentes de Transaction Service
 
-El Transfer Event Handler consume los eventos provenientes del broker RabbitMQ y valida la información de correlación. Posteriormente, envía la operación al Transfer Application Service, encargado de coordinar el caso de uso de transferencia.
+| Componente | Responsabilidad |
+|---|---|
+| Transfer Event Handler | Consume mensajes AMQP; valida `correlationId`; enruta al Application Service |
+| Transfer Application Service | Coordina el caso de uso; orquesta idempotencia, dominio y persistencia |
+| Idempotency & Correlation | Valida claves de idempotencia; evita procesamiento duplicado |
+| Transfer Domain Service | Estados de la Saga (`PENDING → APPROVED / FAILED`); lógica de compensación; **registro de historial ★** |
+| Transaction Repository | CRUD sobre la tabla `transfers` en `transacciones_db` |
+| History Repository ★ | Consultas de historial por cuenta; filtros por fecha y estado (`transfer_events`) |
+| Outbox / Event Publisher | Publica eventos de dominio a RabbitMQ de forma confiable mediante patrón Outbox |
 
-El Transfer Application Service utiliza el componente Idempotency & Correlation para validar claves de idempotencia y trazabilidad, evitando el procesamiento duplicado de mensajes. Además, delega las reglas de negocio al Transfer Domain Service, donde se administran los estados y la lógica asociada al flujo Saga.
-
-La persistencia de las transferencias es gestionada por Transaction Repository, el cual es el único componente que accede a la base de datos Transaction DB PostgreSQL para consultar y almacenar la información correspondiente.
-
-Para la comunicación con otros microservicios, el Outbox / Event Publisher se encarga de publicar de forma confiable los eventos generados por el servicio hacia RabbitMQ, manteniendo una arquitectura desacoplada y basada en eventos.
+---
