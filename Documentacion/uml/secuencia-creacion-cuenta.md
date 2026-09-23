@@ -3,7 +3,7 @@
 Flujo asíncrono para crear una cuenta y validar al cliente mediante RabbitMQ.
 
 
-![Diagrama de secuencia creacion de cuenta](../Imagenes/secuencia-creacion-cuenta.png)
+![Diagrama de secuencia creacion de cuenta](../Imagenes/secuencia%20creacion_cuenta.png)
 
 
 El flujo comienza cuando el cliente solicita crear una cuenta monetaria o de ahorro desde la interfaz web. La interfaz envía la solicitud autenticada mediante JWT al API Gateway, que funciona únicamente como punto de entrada.
