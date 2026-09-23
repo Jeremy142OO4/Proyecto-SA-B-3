@@ -39,7 +39,7 @@ func TestIntegracionCustomerService(t *testing.T) {
 			b, e := json.Marshal(events.ResultadoValidacionKYC{IDOperacion: operacion, IDCliente: cliente, EstadoKYC: "VERIFIED", Valido: true})
 			return e == nil && len(b) > 0
 		}},
-		{"KYC rechazado", func() bool {
+		{"KYC rechazado publica resultado", func() bool {
 			b, e := json.Marshal(events.ResultadoValidacionKYC{IDOperacion: operacion, IDCliente: cliente, EstadoKYC: "REJECTED", Valido: false})
 			return e == nil && len(b) > 0
 		}},
