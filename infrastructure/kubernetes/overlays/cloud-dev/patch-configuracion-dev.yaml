@@ -24,6 +24,7 @@ spec:
   type: LoadBalancer
   loadBalancerIP: "__PUBLIC_HOST__"
   ports:
-    - name: http
+    - $patch: replace
+      name: http
       port: 80
       targetPort: http
