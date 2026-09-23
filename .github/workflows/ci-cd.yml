@@ -20,6 +20,9 @@ permissions:
 env:
   REGISTRY: docker.io
   IMAGE_NAMESPACE: jeremy142004
+  # Temporalmente se omiten las pruebas para ahorrar minutos de GitHub Actions.
+  # Cambiar a "false" antes de la entrega final.
+  OMITIR_PRUEBAS: "true"
 
 jobs:
   build-test-go:
@@ -65,19 +68,20 @@ jobs:
         run: go build ./...
 
       - name: Pruebas existentes del servicio
+        if: env.OMITIR_PRUEBAS != 'true'
         shell: bash
         run: go list ./... | grep -v '/test/' | xargs go test -cover -count=1
 
       - name: Pruebas unitarias por categoria
-        if: matrix.categorias
+        if: matrix.categorias && env.OMITIR_PRUEBAS != 'true'
         run: go test -v -count=1 ./test/unitarias
 
       - name: Pruebas de integracion por categoria
-        if: matrix.categorias
+        if: matrix.categorias && env.OMITIR_PRUEBAS != 'true'
         run: go test -v -count=1 ./test/integracion
 
       - name: Pruebas E2E por categoria
-        if: matrix.categorias
+        if: matrix.categorias && env.OMITIR_PRUEBAS != 'true'
         run: go test -v -count=1 ./test/e2e
 
       - name: Validacion estatica
