@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import MedicalInformationOutlinedIcon from '@mui/icons-material/MedicalInformationOutlined';
+import PriorityHighIcon from '@mui/icons-material/PriorityHigh';
+import ReportProblemOutlinedIcon from '@mui/icons-material/ReportProblemOutlined';
 import { EstadoCarga, EstadoError, EstadoVacio } from '../../../components/feedback/EstadoCarga';
 import { servicioAuditoria } from '../services/servicioAuditoria';
 import type { RegistroAuditoria } from '../types/auditoria';
@@ -12,10 +15,10 @@ const severidades: Array<{ valor: FiltroSeveridad; etiqueta: string }> = [
   { valor: 'ERROR', etiqueta: 'Errores' },
 ];
 
-const iconosSeveridad: Record<RegistroAuditoria['severity'], string> = {
-  INFO: 'ℹ️',
-  WARNING: '⚠️',
-  ERROR: '❌',
+const iconosSeveridad = {
+  INFO: MedicalInformationOutlinedIcon,
+  WARNING: ReportProblemOutlinedIcon,
+  ERROR: PriorityHighIcon,
 };
 
 export function PaginaEventos() {
@@ -31,12 +34,26 @@ export function PaginaEventos() {
       .finally(() => setCargando(false));
   }, []);
 
-  const visibles = useMemo(
-    () => filtro === 'TODOS' ? registros : registros.filter(registro => registro.severity === filtro),
-    [filtro, registros],
-  );
+  const ultimosPorSeveridad = useMemo(() => ({
+    INFO: registros.filter(registro => registro.severity === 'INFO').slice(0, 50),
+    WARNING: registros.filter(registro => registro.severity === 'WARNING').slice(0, 50),
+    ERROR: registros.filter(registro => registro.severity === 'ERROR').slice(0, 50),
+  }), [registros]);
+
+  const visibles = useMemo(() => {
+    if (filtro !== 'TODOS') return ultimosPorSeveridad[filtro];
+    const idsVisibles = new Set([
+      ...ultimosPorSeveridad.INFO,
+      ...ultimosPorSeveridad.WARNING,
+      ...ultimosPorSeveridad.ERROR,
+    ].map(registro => registro.id));
+    return registros.filter(registro => idsVisibles.has(registro.id));
+  }, [filtro, registros, ultimosPorSeveridad]);
+
   const totalPorSeveridad = (severidad: FiltroSeveridad) =>
-    severidad === 'TODOS' ? registros.length : registros.filter(registro => registro.severity === severidad).length;
+    severidad === 'TODOS'
+      ? ultimosPorSeveridad.INFO.length + ultimosPorSeveridad.WARNING.length + ultimosPorSeveridad.ERROR.length
+      : ultimosPorSeveridad[severidad].length;
 
   if (cargando) return <EstadoCarga />;
   if (error) return <EstadoError mensaje={error} />;
@@ -54,7 +71,7 @@ export function PaginaEventos() {
     {!visibles.length ? <EstadoVacio mensaje="No hay eventos para la clasificación seleccionada." /> : <div className="lista-eventos">
       {visibles.map(registro => <article className={`evento evento-${registro.severity.toLowerCase()}`} key={registro.id}>
         <div className="evento-indicador" aria-hidden="true" />
-        <div className="evento-contenido"><div className="evento-cabecera"><strong>{registro.eventType}</strong><span className={`severidad severidad-${registro.severity.toLowerCase()}`}>{iconosSeveridad[registro.severity]} {registro.severity}</span></div>
+        <div className="evento-contenido"><div className="evento-cabecera"><strong>{registro.eventType}</strong><span className={`severidad severidad-${registro.severity.toLowerCase()}`}><span className="icono-severidad" aria-hidden="true">{(() => { const Icono = iconosSeveridad[registro.severity]; return <Icono fontSize="small" />; })()}</span>{registro.severity}</span></div>
           <small>{registro.producer} · {new Date(registro.occurredAt).toLocaleString('es-GT')}</small><span className="evento-correlacion">CorrelationId: {registro.correlationId}</span>
         </div>
       </article>)}
