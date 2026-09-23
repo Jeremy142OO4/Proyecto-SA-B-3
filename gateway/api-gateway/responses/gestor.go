@@ -1,6 +1,8 @@
 package responses
 
 import (
+	"log/slog"
+
 	"github.com/Proyecto-SA-B-3/api-gateway/events"
 	"github.com/google/uuid"
 	"sync"
@@ -28,5 +30,7 @@ func (g *Gestor) Entregar(m events.SobreMensaje) {
 		case ch <- m:
 		default:
 		}
+		return
 	}
+	slog.Warn("respuesta sin solicitud activa", "tipo", m.Tipo, "correlacion", m.IDCorrelacion)
 }
