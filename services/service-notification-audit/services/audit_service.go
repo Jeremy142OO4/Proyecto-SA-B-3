@@ -236,6 +236,7 @@ func (s *auditService) sendEventEmail(
 ) error {
 	severity := ClassifyEvent(envelope.Type)
 	icon, greeting, subject := notificationPresentation(severity)
+	subject = asuntoCorreo(envelope.Type, subject)
 	rule.subject = subject
 	status := models.NotificationSent
 	if strings.TrimSpace(errorDetail) != "" {
@@ -244,7 +245,7 @@ func (s *auditService) sendEventEmail(
 		status = models.NotificationFailed
 		errorDetail = "SMTP no configurado"
 	} else {
-		body := fmt.Sprintf("%s %s\n\nHola %s,\n\n%s\n\n%s\n\nBank USAC", icon, subject, fullName, greeting, rule.bodySummary)
+		body := construirCorreoOperacion(envelope, rule, fullName, icon, subject, greeting)
 		if err := s.emailSender.Send(recipient, subject, body); err != nil {
 			status = models.NotificationFailed
 			errorDetail = err.Error()
@@ -267,6 +268,156 @@ func notificationPresentation(severity models.EventSeverity) (icon, greeting, su
 	default:
 		return "ℹ️", "Te informamos que una operación de tu cuenta fue procesada.", "Información de tu cuenta en Bank USAC"
 	}
+}
+
+func construirCorreoOperacion(envelope *events.EventEnvelope, rule notificationRule, fullName, icon, subject, greeting string) string {
+	campos := map[string]any{}
+	_ = json.Unmarshal(envelope.Payload, &campos)
+	estado := valorCorreo(campos, "estado")
+	if estado == "" {
+		estado = estadoCorreo(envelope.Type, ClassifyEvent(envelope.Type))
+	}
+
+	var cuerpo strings.Builder
+	fmt.Fprintf(&cuerpo, "%s %s\n\n", icon, subject)
+	fmt.Fprintf(&cuerpo, "Hola %s,\n\n%s\n\n", nombreCorreo(fullName), greeting)
+	cuerpo.WriteString("╔══════════════════════════════════════════════════╗\n")
+	cuerpo.WriteString("║              COMPROBANTE DE OPERACIÓN            ║\n")
+	cuerpo.WriteString("╚══════════════════════════════════════════════════╝\n\n")
+	agregarLineaCorreo(&cuerpo, "Operación", tipoOperacionCorreo(envelope.Type))
+	agregarLineaCorreo(&cuerpo, "Estado", estado)
+	agregarLineaCorreo(&cuerpo, "Realizado por", nombreCorreo(fullName))
+
+	switch {
+	case strings.HasPrefix(envelope.Type, "transferencia."):
+		agregarLineaCorreo(&cuerpo, "Cuenta origen", valorCorreo(campos, "idCuentaOrigen"))
+		agregarLineaCorreo(&cuerpo, "Cuenta destino", valorCorreo(campos, "idCuentaDestino"))
+		agregarMontoCorreo(&cuerpo, "Monto enviado", campos, "montoCentavos", "montoTotalCentavos")
+		agregarLineaCorreo(&cuerpo, "Descripción", valorCorreo(campos, "descripcion"))
+	case strings.HasPrefix(envelope.Type, "pago."):
+		agregarLineaCorreo(&cuerpo, "Cuenta origen", valorCorreo(campos, "idCuentaOrigen"))
+		agregarLineaCorreo(&cuerpo, "Beneficiario", valorCorreo(campos, "beneficiario"))
+		agregarLineaCorreo(&cuerpo, "Tipo de pago", valorCorreo(campos, "tipoPago"))
+		agregarLineaCorreo(&cuerpo, "Concepto", valorCorreo(campos, "concepto"))
+		agregarMontoCorreo(&cuerpo, "Monto", campos, "montoCentavos")
+		agregarLineaCorreo(&cuerpo, "Referencia externa", valorCorreo(campos, "referenciaExterna"))
+	default:
+		agregarLineaCorreo(&cuerpo, "Cuenta", valorCorreo(campos, "idCuenta"))
+		agregarMontoCorreo(&cuerpo, "Monto", campos, "montoCentavos", "saldoCentavos")
+	}
+
+	agregarLineaCorreo(&cuerpo, "Código", valorCorreo(campos, "codigo", "codigoError"))
+	agregarLineaCorreo(&cuerpo, "Motivo", valorCorreo(campos, "motivo", "motivoRechazo"))
+	agregarLineaCorreo(&cuerpo, "Fecha", envelope.OccurredAt.Local().Format("02/01/2006 15:04"))
+	agregarLineaCorreo(&cuerpo, "CorrelationId", envelope.CorrelationID.String())
+	cuerpo.WriteString("\nResumen: ")
+	cuerpo.WriteString(rule.bodySummary)
+	cuerpo.WriteString("\n\nGracias por utilizar Bank USAC.\n")
+	cuerpo.WriteString("Este correo es un comprobante informativo; conserva el CorrelationId para cualquier consulta.\n")
+	cuerpo.WriteString("\nBank USAC")
+	return cuerpo.String()
+}
+
+func agregarLineaCorreo(cuerpo *strings.Builder, etiqueta, valor string) {
+	if strings.TrimSpace(valor) == "" {
+		return
+	}
+	fmt.Fprintf(cuerpo, "%-20s: %s\n", etiqueta, valor)
+}
+
+func agregarMontoCorreo(cuerpo *strings.Builder, etiqueta string, campos map[string]any, claves ...string) {
+	for _, clave := range claves {
+		if monto, ok := numeroCorreo(campos[clave]); ok {
+			agregarLineaCorreo(cuerpo, etiqueta, fmt.Sprintf("Q %.2f", monto/100))
+			return
+		}
+	}
+}
+
+func valorCorreo(campos map[string]any, claves ...string) string {
+	for _, clave := range claves {
+		if valor, ok := campos[clave]; ok && valor != nil {
+			texto := strings.TrimSpace(fmt.Sprint(valor))
+			if texto != "" && texto != "<nil>" {
+				return texto
+			}
+		}
+	}
+	return ""
+}
+
+func numeroCorreo(valor any) (float64, bool) {
+	switch numero := valor.(type) {
+	case float64:
+		return numero, true
+	case float32:
+		return float64(numero), true
+	case int:
+		return float64(numero), true
+	case int64:
+		return float64(numero), true
+	case json.Number:
+		resultado, err := numero.Float64()
+		return resultado, err == nil
+	default:
+		return 0, false
+	}
+}
+
+func nombreCorreo(nombre string) string {
+	if strings.TrimSpace(nombre) == "" {
+		return "cliente"
+	}
+	return strings.TrimSpace(nombre)
+}
+
+func tipoOperacionCorreo(eventType string) string {
+	switch {
+	case strings.HasPrefix(eventType, "transferencia."):
+		return "Transferencia bancaria"
+	case strings.HasPrefix(eventType, "pago."):
+		return "Pago"
+	case strings.HasPrefix(eventType, "cuenta."):
+		return "Operación de cuenta"
+	default:
+		return "Operación bancaria"
+	}
+}
+
+func asuntoCorreo(eventType, fallback string) string {
+	switch {
+	case strings.HasPrefix(eventType, "transferencia."):
+		if strings.Contains(eventType, "rechaz") || strings.Contains(eventType, "fallida") {
+			return "Transferencia rechazada - Bank USAC"
+		}
+		if strings.Contains(eventType, "complet") {
+			return "Transferencia completada - Bank USAC"
+		}
+		return "Actualización de transferencia - Bank USAC"
+	case strings.HasPrefix(eventType, "pago."):
+		if strings.Contains(eventType, "rechaz") {
+			return "Pago rechazado - Bank USAC"
+		}
+		if strings.Contains(eventType, "complet") {
+			return "Pago completado - Bank USAC"
+		}
+		return "Actualización de pago - Bank USAC"
+	default:
+		return fallback
+	}
+}
+
+func estadoCorreo(eventType string, severity models.EventSeverity) string {
+	if strings.Contains(eventType, "rechaz") || strings.Contains(eventType, "fallida") {
+		return "RECHAZADA"
+	}
+	if severity == models.EventError {
+		return "ERROR"
+	}
+	if strings.Contains(eventType, "complet") || strings.Contains(eventType, "cread") || strings.Contains(eventType, "acredit") || strings.Contains(eventType, "debit") || strings.Contains(eventType, "compensad") {
+		return "COMPLETADA"
+	}
+	return "INFORMACIÓN"
 }
 
 func (s *auditService) saveGeneratedNotification(
