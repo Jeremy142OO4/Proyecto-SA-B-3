@@ -30,7 +30,7 @@ func (r *notificationRepo) SaveNotificationLog(ctx context.Context, log *models.
 }
 
 func (r *notificationRepo) GetNotificationLogs(ctx context.Context, filter models.NotificationFilter) ([]*models.NotificationLog, error) {
-	var logs []*models.NotificationLog
+	logs := make([]*models.NotificationLog, 0)
 	conditions := make([]string, 0, 3)
 	args := make([]any, 0, 4)
 	argNumber := 1
