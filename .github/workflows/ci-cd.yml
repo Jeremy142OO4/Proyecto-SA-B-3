@@ -272,6 +272,17 @@ jobs:
             --from-literal=SMTP_FROM="$SMTP_FROM" \
             --dry-run=client -o yaml | kubectl apply -f -
 
+      - name: Evitar competencia de Outbox con produccion
+        run: |
+          # Dev y prod comparten las bases de datos, pero usan RabbitMQ distintos.
+          # Solo un entorno puede publicar esos registros Outbox a la vez.
+          kubectl -n bank-usac scale \
+            deployment/customer-service \
+            deployment/account-service \
+            deployment/payment-service \
+            deployment/transaction-service \
+            --replicas=0 --timeout=60s || true
+
       - name: Aplicar manifiestos dev con rolling update
         env:
           PUBLIC_HOST: ${{ secrets.PUBLIC_HOST }}
@@ -362,6 +373,17 @@ jobs:
             --from-literal=SMTP_APP_PASSWORD="$SMTP_APP_PASSWORD" \
             --from-literal=SMTP_FROM="$SMTP_FROM" \
             --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Evitar competencia de Outbox con desarrollo
+        run: |
+          # Dev y prod comparten las bases de datos, pero usan RabbitMQ distintos.
+          # Solo un entorno puede publicar esos registros Outbox a la vez.
+          kubectl -n bank-usac-dev scale \
+            deployment/customer-service \
+            deployment/account-service \
+            deployment/payment-service \
+            deployment/transaction-service \
+            --replicas=0 --timeout=60s || true
 
       - name: Aplicar imagen publicada y rolling update
         env:
