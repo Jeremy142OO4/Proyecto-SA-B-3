@@ -17,9 +17,17 @@ import (
 
 type AuditService interface {
 	ProcessEvent(ctx context.Context, envelope *events.EventEnvelope) error
+	SetRecipientResolver(resolver RecipientResolver)
 	GetAuditByCorrelation(ctx context.Context, correlationID uuid.UUID) ([]*models.AuditLog, error)
 	GetRecentAudits(ctx context.Context, limit int) ([]*models.AuditLog, error)
 	GetNotifications(ctx context.Context, filter models.NotificationFilter) ([]*models.NotificationLog, error)
+}
+
+// RecipientResolver obtains the current email of the customer referenced by a
+// domain event. Event producers only need to publish idCliente; the audit
+// service keeps the notification concern independent from the business data.
+type RecipientResolver interface {
+	ResolveCustomer(ctx context.Context, customerID uuid.UUID) (email string, fullName string, err error)
 }
 
 type auditService struct {
@@ -27,6 +35,11 @@ type auditService struct {
 	notificationRepo repositories.NotificationRepository
 	idempotencyRepo  repositories.IdempotencyRepository
 	emailSender      EmailSender
+	recipientResolver RecipientResolver
+}
+
+func (s *auditService) SetRecipientResolver(resolver RecipientResolver) {
+	s.recipientResolver = resolver
 }
 
 func NewAuditService(
@@ -110,13 +123,24 @@ func (s *auditService) handleNotificationDispatch(
 		}
 
 		recipient := extractRecipient(envelope.Payload, rule.defaultRecipient)
-		status := models.NotificationSent
-		if err := s.saveGeneratedNotification(ctx, envelope, rule, recipient, status, ""); err != nil {
-			log.Printf("[notification-audit-service] error registrando notificacion: correlationId=%s error=%v", envelope.CorrelationID, err)
-			return err
+		fullName := extractFullName(envelope.Payload)
+		errorDetail := ""
+		if !isEmail(recipient) {
+			customerID := extractCustomerID(envelope.Payload)
+			if s.recipientResolver == nil || customerID == uuid.Nil {
+				errorDetail = "destinatario de correo no disponible en el evento"
+			} else {
+				var err error
+				resolverCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				recipient, fullName, err = s.recipientResolver.ResolveCustomer(resolverCtx, customerID)
+				cancel()
+				if err != nil {
+					errorDetail = fmt.Sprintf("no fue posible consultar el correo del cliente: %v", err)
+				}
+			}
 		}
+		return s.sendEventEmail(ctx, envelope, rule, recipient, fullName, errorDetail)
 	}
-	return nil
 }
 
 type notificationRule struct {
@@ -168,6 +192,67 @@ func extractRecipient(payload json.RawMessage, fallback string) string {
 		}
 	}
 	return fallback
+}
+
+func extractFullName(payload json.RawMessage) string {
+	var fields map[string]any
+	if err := json.Unmarshal(payload, &fields); err == nil {
+		for _, key := range []string{"nombreCompleto", "fullName", "nombre"} {
+			if value, ok := fields[key].(string); ok && strings.TrimSpace(value) != "" {
+				return strings.TrimSpace(value)
+			}
+		}
+	}
+	return "cliente"
+}
+
+func extractCustomerID(payload json.RawMessage) uuid.UUID {
+	var fields map[string]any
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		return uuid.Nil
+	}
+	for _, key := range []string{"idCliente", "customerId", "customerID"} {
+		if value, ok := fields[key].(string); ok {
+			if id, err := uuid.Parse(strings.TrimSpace(value)); err == nil {
+				return id
+			}
+		}
+	}
+	return uuid.Nil
+}
+
+func isEmail(value string) bool {
+	value = strings.TrimSpace(value)
+	return strings.Contains(value, "@") && !strings.ContainsAny(value, " \t\r\n")
+}
+
+func (s *auditService) sendEventEmail(
+	ctx context.Context,
+	envelope *events.EventEnvelope,
+	rule notificationRule,
+	recipient string,
+	fullName string,
+	errorDetail string,
+) error {
+	status := models.NotificationSent
+	if strings.TrimSpace(errorDetail) != "" {
+		status = models.NotificationFailed
+	} else if s.emailSender == nil {
+		status = models.NotificationFailed
+		errorDetail = "SMTP no configurado"
+	} else {
+		body := fmt.Sprintf("Hola %s,\n\nBank USAC registró el siguiente evento en tu cuenta:\n%s\n\n%s\n\nIdentificador de seguimiento: %s\n\nBank USAC", fullName, envelope.Type, rule.bodySummary, envelope.CorrelationID)
+		if err := s.emailSender.Send(recipient, rule.subject, body); err != nil {
+			status = models.NotificationFailed
+			errorDetail = err.Error()
+			log.Printf("[notification-audit-service] fallo al enviar correo: event=%s correlationId=%s recipient=%s error=%v", envelope.Type, envelope.CorrelationID, recipient, err)
+		}
+	}
+	if err := s.saveGeneratedNotification(ctx, envelope, rule, recipient, status, errorDetail); err != nil {
+		log.Printf("[notification-audit-service] error registrando notificacion: correlationId=%s error=%v", envelope.CorrelationID, err)
+		return err
+	}
+	return nil
 }
 
 func (s *auditService) saveGeneratedNotification(

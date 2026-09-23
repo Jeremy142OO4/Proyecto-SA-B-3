@@ -6,6 +6,7 @@ import { ProveedorAutenticacion } from './features/auth/context/ContextoAutentic
 import './styles/global.css';
 import './styles/transferencias.css';
 import './styles/modal-kyc.css';
+import './styles/eventos.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

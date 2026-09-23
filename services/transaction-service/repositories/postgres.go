@@ -73,7 +73,7 @@ func (r *Postgres) ProcesarResultadoKYC(ctx context.Context, m events.SobreMensa
 		if _, e = tx.Exec(ctx, `UPDATE transferencias SET estado='RECHAZADA',codigo_error=$1,fecha_actualizacion=NOW() WHERE id_transferencia=$2`, codigo, transferencia.IDTransferencia); e != nil {
 			return false, e
 		}
-		if e = insertarSalida(ctx, tx, events.EventoRechazada, m.IDCorrelacion, map[string]any{"idTransferencia": transferencia.IDTransferencia, "estado": models.Rechazada, "codigo": codigo, "motivo": res.Motivo}, false); e != nil {
+		if e = insertarSalida(ctx, tx, events.EventoRechazada, m.IDCorrelacion, map[string]any{"idTransferencia": transferencia.IDTransferencia, "idCliente": transferencia.IDCliente, "estado": models.Rechazada, "codigo": codigo, "motivo": res.Motivo}, false); e != nil {
 			return false, e
 		}
 		return true, tx.Commit(ctx)
@@ -120,7 +120,7 @@ func (r *Postgres) ProcesarResultadoCuentas(ctx context.Context, m events.SobreM
 		if _, e = tx.Exec(ctx, `UPDATE transferencias SET estado='RECHAZADA',codigo_error=$1,fecha_actualizacion=NOW() WHERE id_transferencia=$2`, codigo, transferencia.IDTransferencia); e != nil {
 			return false, e
 		}
-		if e = insertarSalida(ctx, tx, events.EventoRechazada, m.IDCorrelacion, map[string]any{"idTransferencia": transferencia.IDTransferencia, "estado": models.Rechazada, "codigo": codigo, "motivo": res.Motivo}, false); e != nil {
+		if e = insertarSalida(ctx, tx, events.EventoRechazada, m.IDCorrelacion, map[string]any{"idTransferencia": transferencia.IDTransferencia, "idCliente": transferencia.IDCliente, "estado": models.Rechazada, "codigo": codigo, "motivo": res.Motivo}, false); e != nil {
 			return false, e
 		}
 		return true, tx.Commit(ctx)
@@ -186,14 +186,14 @@ func (r *Postgres) ProcesarResultado(ctx context.Context, m events.SobreMensaje,
 		}
 		estado = models.Rechazada
 		salida = events.EventoRechazada
-		payload = map[string]any{"idTransferencia": t.IDTransferencia, "estado": estado, "codigo": res.Codigo}
+		payload = map[string]any{"idTransferencia": t.IDTransferencia, "idCliente": t.IDCliente, "estado": estado, "codigo": res.Codigo}
 	case events.EventoAcreditada:
 		if t.Estado != models.Procesando {
 			return false, tx.Commit(ctx)
 		}
 		estado = models.Completada
 		salida = events.EventoCompletada
-		payload = map[string]any{"idTransferencia": t.IDTransferencia, "estado": estado}
+		payload = map[string]any{"idTransferencia": t.IDTransferencia, "idCliente": t.IDCliente, "estado": estado}
 	case events.EventoCreditoRechazado:
 		if t.Estado != models.Procesando {
 			return false, tx.Commit(ctx)
@@ -208,14 +208,14 @@ func (r *Postgres) ProcesarResultado(ctx context.Context, m events.SobreMensaje,
 		}
 		estado = models.Compensada
 		salida = events.EventoCompensada
-		payload = map[string]any{"idTransferencia": t.IDTransferencia, "estado": estado}
+		payload = map[string]any{"idTransferencia": t.IDTransferencia, "idCliente": t.IDCliente, "estado": estado}
 	case events.EventoCompensacionRechazada:
 		if t.Estado != models.Compensando {
 			return false, tx.Commit(ctx)
 		}
 		estado = models.CompensacionFallida
 		salida = events.EventoCompensacionFallida
-		payload = map[string]any{"idTransferencia": t.IDTransferencia, "estado": estado, "codigo": res.Codigo}
+		payload = map[string]any{"idTransferencia": t.IDTransferencia, "idCliente": t.IDCliente, "estado": estado, "codigo": res.Codigo}
 	default:
 		return false, fmt.Errorf("evento no soportado %s", m.Tipo)
 	}
@@ -237,7 +237,7 @@ func (r *Postgres) ProcesarResultado(ctx context.Context, m events.SobreMensaje,
 		if estado == models.Compensando {
 			evento = events.EventoCompensando
 		}
-		if e = insertarSalida(ctx, tx, evento, t.IDCorrelacion, map[string]any{"idTransferencia": t.IDTransferencia, "estado": estado}, false); e != nil {
+		if e = insertarSalida(ctx, tx, evento, t.IDCorrelacion, map[string]any{"idTransferencia": t.IDTransferencia, "idCliente": t.IDCliente, "estado": estado}, false); e != nil {
 			return false, e
 		}
 	}

@@ -89,7 +89,7 @@ func (r *RepositorioPagosPostgres) ProcesarResultadoKYC(ctx context.Context, m e
 		if err = finalizarIntento(ctx, tx, pago.IDPago, "RECHAZADO", "KYC_NO_VERIFICADO", motivo); err != nil {
 			return err
 		}
-		contenido, _ := json.Marshal(map[string]any{"idPago": pago.IDPago, "estado": models.EstadoPagoRechazado, "codigo": "KYC_NO_VERIFICADO", "motivo": motivo})
+		contenido, _ := json.Marshal(map[string]any{"idPago": pago.IDPago, "idCliente": pago.IDCliente, "estado": models.EstadoPagoRechazado, "codigo": "KYC_NO_VERIFICADO", "motivo": motivo})
 		if err = insertarSalida(ctx, tx, events.EventoPagoRechazado, contenido, pago.IDCorrelacion); err != nil {
 			return err
 		}
@@ -143,7 +143,7 @@ func (r *RepositorioPagosPostgres) ProcesarResultadoValidacionCuenta(ctx context
 		if err = finalizarIntento(ctx, tx, pago.IDPago, "RECHAZADO", codigo, motivo); err != nil {
 			return err
 		}
-		contenido, _ := json.Marshal(map[string]any{"idPago": pago.IDPago, "estado": models.EstadoPagoRechazado, "codigo": codigo, "motivo": motivo})
+		contenido, _ := json.Marshal(map[string]any{"idPago": pago.IDPago, "idCliente": pago.IDCliente, "estado": models.EstadoPagoRechazado, "codigo": codigo, "motivo": motivo})
 		if err = insertarSalida(ctx, tx, events.EventoPagoRechazado, contenido, pago.IDCorrelacion); err != nil {
 			return err
 		}

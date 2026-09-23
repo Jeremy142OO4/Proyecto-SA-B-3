@@ -17,9 +17,10 @@ import (
 )
 
 type RabbitMQConsumer struct {
-	conn     *amqp.Connection
-	channel  *amqp.Channel
-	auditSvc services.AuditService
+	conn             *amqp.Connection
+	channel          *amqp.Channel
+	auditSvc         services.AuditService
+	customerResolver *customerResolver
 }
 
 func NewRabbitMQConsumer(url string, auditSvc services.AuditService) (*RabbitMQConsumer, error) {
@@ -85,11 +86,21 @@ func NewRabbitMQConsumer(url string, auditSvc services.AuditService) (*RabbitMQC
 	if err := ch.QueueBind("notification-audit.dlq.q", "notification-audit.dlq", "banco.fallidos", false, nil); err != nil {
 		return nil, err
 	}
+	resolver, err := newCustomerResolver(conn)
+	if err != nil {
+		return nil, err
+	}
+	auditSvc.SetRecipientResolver(resolver)
 
-	return &RabbitMQConsumer{conn: conn, channel: ch, auditSvc: auditSvc}, nil
+	return &RabbitMQConsumer{conn: conn, channel: ch, auditSvc: auditSvc, customerResolver: resolver}, nil
 }
 
 func (r *RabbitMQConsumer) StartConsuming(ctx context.Context) error {
+	if r.customerResolver != nil {
+		if err := r.customerResolver.Start(ctx); err != nil {
+			return err
+		}
+	}
 	msgs, err := r.channel.Consume(
 		"notification-audit.events.q",
 		"notification-audit-worker",
@@ -282,6 +293,9 @@ func (r *RabbitMQConsumer) handleDLQDelivery(ctx context.Context, d amqp.Deliver
 }
 
 func (r *RabbitMQConsumer) Close() {
+	if r.customerResolver != nil {
+		r.customerResolver.Close()
+	}
 	if r.channel != nil {
 		r.channel.Close()
 	}

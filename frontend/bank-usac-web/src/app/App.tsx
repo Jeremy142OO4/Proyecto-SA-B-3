@@ -5,6 +5,7 @@ import { PaginaCrearCuentaCliente } from '../features/accounts/pages/PaginaCrear
 import { PaginaDetalleCuenta } from '../features/accounts/pages/PaginaDetalleCuenta';
 import { PaginaAdministracionClientes } from '../features/admin/pages/PaginaAdministracionClientes';
 import { PaginaAuditoria } from '../features/audit/pages/PaginaAuditoria';
+import { PaginaEventos } from '../features/audit/pages/PaginaEventos';
 import { RutaProtegida } from '../features/auth/components/RutaProtegida';
 import { useAutenticacion } from '../features/auth/context/ContextoAutenticacion';
 import { PaginaActivacion } from '../features/auth/pages/PaginaActivacion';
@@ -41,7 +42,7 @@ export function App() {
     </Route></Route>
 
     <Route element={<RutaProtegida rolesPermitidos={['ADMIN']} />}><Route element={<DisenoPrincipal />}>
-      <Route path="/administracion/clientes" element={<PaginaAdministracionClientes />} /><Route path="/auditoria" element={<PaginaAuditoria />} />
+      <Route path="/administracion/clientes" element={<PaginaAdministracionClientes />} /><Route path="/eventos" element={<PaginaEventos />} /><Route path="/auditoria" element={<PaginaAuditoria />} />
     </Route></Route>
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes>;
