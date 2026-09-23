@@ -3,6 +3,7 @@ import { EstadoCarga, EstadoError, EstadoVacio } from '../../../components/feedb
 import type { EstadoCliente } from '../../auth/types/auth';
 import { servicioAdministracion } from '../services/servicioAdministracion';
 import type { ClienteAdministrado, EstadoKYC } from '../types/clienteAdministrado';
+import './administracion.css';
 
 const estados: EstadoCliente[] = ['PENDIENTE_ACTIVACION', 'ACTIVO', 'BLOQUEADO'];
 const estadosKYC: EstadoKYC[] = ['PENDING', 'VERIFIED', 'REJECTED'];
@@ -13,6 +14,7 @@ export function PaginaAdministracionClientes() {
   const [error, setError] = useState('');
   const [actualizando, setActualizando] = useState('');
   const [copiado, setCopiado] = useState('');
+  const [modal, setModal] = useState<{ titulo: string; mensaje: string } | null>(null);
 
   useEffect(() => {
     servicioAdministracion.listarClientes()
@@ -40,6 +42,10 @@ export function PaginaAdministracionClientes() {
     try {
       const actualizado = await servicioAdministracion.cambiarEstadoKYC(cliente.customerId, estadoKYC);
       setClientes(lista => lista.map(item => item.customerId === actualizado.customerId ? actualizado : item));
+      setModal({
+        titulo: 'Actualización realizada',
+        mensaje: `El estado KYC de ${actualizado.fullName} se actualizó correctamente a ${actualizado.kycStatus}.`,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No fue posible cambiar el estado KYC');
     } finally {
@@ -47,13 +53,17 @@ export function PaginaAdministracionClientes() {
     }
   }
 
-  async function copiarId(clienteId: string) {
+  async function copiarDpi(cliente: ClienteAdministrado) {
+    if (cliente.role !== 'CLIENTE' || !cliente.documentId) {
+      setError('Solo se puede copiar el DPI de clientes con rol CLIENTE');
+      return;
+    }
     try {
-      await navigator.clipboard.writeText(clienteId);
-      setCopiado(clienteId);
-      window.setTimeout(() => setCopiado(actual => actual === clienteId ? '' : actual), 1800);
+      await navigator.clipboard.writeText(cliente.documentId);
+      setCopiado(cliente.customerId);
+      window.setTimeout(() => setCopiado(actual => actual === cliente.customerId ? '' : actual), 1800);
     } catch {
-      setError('No fue posible copiar el identificador del cliente');
+      setError('No fue posible copiar el DPI del cliente');
     }
   }
 
@@ -72,9 +82,12 @@ export function PaginaAdministracionClientes() {
           <small>{cliente.username} · {cliente.email}</small>
           <small>{cliente.role}</small>
           <small>ID del cliente: {cliente.customerId}</small>
-          <button type="button" className="secundario" onClick={() => void copiarId(cliente.customerId)}>
-            {copiado === cliente.customerId ? 'UUID copiado' : 'Copiar UUID'}
-          </button>
+          {cliente.role === 'CLIENTE' ? <>
+            <small>DPI: {cliente.documentId || 'No disponible'}</small>
+            <button type="button" className="secundario" disabled={!cliente.documentId} onClick={() => void copiarDpi(cliente)}>
+              {copiado === cliente.customerId ? 'DPI copiado' : 'Copiar DPI'}
+            </button>
+          </> : <small className="dato-restringido">Copia de DPI no disponible para este rol</small>}
         </div>
         <label>Estado<select value={cliente.status} disabled={actualizando === cliente.customerId} onChange={(e: ChangeEvent<HTMLSelectElement>) => void cambiar(cliente, e.target.value as EstadoCliente)}>
           {estados.map(estado => <option key={estado}>{estado}</option>)}
@@ -83,6 +96,14 @@ export function PaginaAdministracionClientes() {
           {estadosKYC.map(estado => <option key={estado}>{estado}</option>)}
         </select></label>
       </article>)}
+    </div>}
+    {modal && <div className="modal-fondo" role="presentation" onClick={() => setModal(null)}>
+      <section className="modal-confirmacion" role="dialog" aria-modal="true" aria-labelledby="modal-titulo" onClick={e => e.stopPropagation()}>
+        <span className="modal-icono" aria-hidden="true">✓</span>
+        <h3 id="modal-titulo">{modal.titulo}</h3>
+        <p>{modal.mensaje}</p>
+        <button type="button" onClick={() => setModal(null)}>Aceptar</button>
+      </section>
     </div>}
   </>;
 }
