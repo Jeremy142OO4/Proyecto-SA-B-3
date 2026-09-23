@@ -200,14 +200,25 @@ func (g *Gateway) Depositar(c *fiber.Ctx) error {
 		return err
 	}
 	var entrada struct {
-		MontoCentavos int64 `json:"montoCentavos"`
+		MontoQuetzales string `json:"montoQuetzales"`
+		MontoCentavos  int64  `json:"montoCentavos"`
 	}
-	if c.BodyParser(&entrada) != nil || entrada.MontoCentavos <= 0 {
-		return fiber.NewError(422, "montoCentavos debe ser mayor que cero")
+	if c.BodyParser(&entrada) != nil {
+		return fiber.NewError(422, "monto inválido")
+	}
+	montoCentavos := entrada.MontoCentavos
+	if strings.TrimSpace(entrada.MontoQuetzales) != "" {
+		montoCentavos, err = quetzalesACentavos(entrada.MontoQuetzales)
+		if err != nil {
+			return fiber.NewError(422, "montoQuetzales debe ser un monto válido con hasta 2 decimales")
+		}
+	}
+	if montoCentavos <= 0 {
+		return fiber.NewError(422, "el monto debe ser mayor que cero")
 	}
 	id := uuid.New()
 	return g.aceptar(c, events.ComandoDepositar, id, events.SolicitudDeposito{
-		IDCuenta: idCuenta, IDOperacion: id, MontoCentavos: entrada.MontoCentavos,
+		IDCuenta: idCuenta, IDOperacion: id, MontoCentavos: montoCentavos,
 	})
 }
 func (g *Gateway) Transferir(c *fiber.Ctx) error {
