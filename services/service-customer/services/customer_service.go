@@ -27,6 +27,7 @@ type CustomerService interface {
 	ActivateCustomer(ctx context.Context, plainToken string, correlationID uuid.UUID) error
 	Login(ctx context.Context, username, password string) (*LoginResponse, error)
 	GetProfile(ctx context.Context, customerID uuid.UUID) (*models.Customer, error)
+	GetCustomerByDocumentID(ctx context.Context, documentID string) (*models.Customer, error)
 	UpdateCustomer(ctx context.Context, customerID uuid.UUID, req UpdateRequest, correlationID uuid.UUID) (*models.Customer, error)
 	ListCustomers(ctx context.Context, limit, offset int) ([]*models.Customer, error)
 	UpdateCustomerStatus(ctx context.Context, customerID uuid.UUID, status string, correlationID uuid.UUID) (*models.Customer, error)
@@ -78,6 +79,21 @@ func (s *customerService) ListCustomers(ctx context.Context, limit, offset int) 
 		offset = 0
 	}
 	return s.repo.List(ctx, limit, offset)
+}
+
+func (s *customerService) GetCustomerByDocumentID(ctx context.Context, documentID string) (*models.Customer, error) {
+	documentID = strings.TrimSpace(documentID)
+	if documentID == "" {
+		return nil, errors.New("documentId requerido")
+	}
+	cliente, err := s.repo.GetByDocumentID(ctx, documentID)
+	if err != nil {
+		return nil, err
+	}
+	if cliente == nil {
+		return nil, errors.New("cliente no encontrado")
+	}
+	return cliente, nil
 }
 
 func (s *customerService) UpdateCustomerStatus(ctx context.Context, customerID uuid.UUID, status string, correlationID uuid.UUID) (*models.Customer, error) {

@@ -16,6 +16,11 @@ export function PaginaAdministracionClientes() {
   const [copiado, setCopiado] = useState('');
   const [modal, setModal] = useState<{ titulo: string; mensaje: string } | null>(null);
 
+  function mostrarError(mensaje: string) {
+    setError(mensaje);
+    window.setTimeout(() => setError(actual => actual === mensaje ? '' : actual), 3500);
+  }
+
   useEffect(() => {
     servicioAdministracion.listarClientes()
       .then(setClientes)
@@ -55,15 +60,29 @@ export function PaginaAdministracionClientes() {
 
   async function copiarDpi(cliente: ClienteAdministrado) {
     if (cliente.role !== 'CLIENTE' || !cliente.documentId) {
-      setError('Solo se puede copiar el DPI de clientes con rol CLIENTE');
+      mostrarError('Solo se puede copiar el DPI de clientes con rol CLIENTE');
       return;
     }
     try {
-      await navigator.clipboard.writeText(cliente.documentId);
+      if (window.isSecureContext && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(cliente.documentId);
+      } else {
+        const area = document.createElement('textarea');
+        area.value = cliente.documentId;
+        area.setAttribute('readonly', '');
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        const copiadoConFallback = document.execCommand('copy');
+        area.remove();
+        if (!copiadoConFallback) throw new Error('copiado rechazado');
+      }
+      setError('');
       setCopiado(cliente.customerId);
       window.setTimeout(() => setCopiado(actual => actual === cliente.customerId ? '' : actual), 1800);
     } catch {
-      setError('No fue posible copiar el DPI del cliente');
+      mostrarError('No fue posible copiar el DPI del cliente');
     }
   }
 

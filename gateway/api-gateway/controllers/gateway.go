@@ -9,6 +9,8 @@ import (
 	"github.com/Proyecto-SA-B-3/api-gateway/responses"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"math"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -21,17 +23,22 @@ type Gateway struct {
 	operaciones *operations.Store
 	respuestas  *responses.Gestor
 	timeout     time.Duration
+	solicitante SolicitanteRPC
 }
 
-func NuevoGateway(p Publicador, o *operations.Store, r *responses.Gestor, t time.Duration) *Gateway {
-	return &Gateway{p, o, r, t}
+func NuevoGateway(p Publicador, o *operations.Store, r *responses.Gestor, t time.Duration, solicitantes ...SolicitanteRPC) *Gateway {
+	var solicitante SolicitanteRPC
+	if len(solicitantes) > 0 {
+		solicitante = solicitantes[0]
+	}
+	return &Gateway{publicador: p, operaciones: o, respuestas: r, timeout: t, solicitante: solicitante}
 }
 
 type entradaCuenta struct {
-	TipoCuenta                  string    `json:"tipoCuenta"`
-	IDCliente                   uuid.UUID `json:"idCliente"`
-	SaldoMinimoCentavos         int64     `json:"saldoMinimoCentavos"`
-	ComisionTransaccionCentavos int64     `json:"comisionTransaccionCentavos"`
+	TipoCuenta                    string `json:"tipoCuenta"`
+	Documento                     string `json:"documento"`
+	SaldoMinimoQuetzales          string `json:"saldoMinimoQuetzales"`
+	ComisionTransaccionQuetzales  string `json:"comisionTransaccionQuetzales"`
 }
 type entradaPago struct {
 	IDCuentaOrigen    uuid.UUID `json:"idCuentaOrigen"`
@@ -54,22 +61,109 @@ func (g *Gateway) CrearCuenta(c *fiber.Ctx) error {
 	if c.BodyParser(&e) != nil {
 		return fiber.NewError(400, "JSON invalido")
 	}
-	tipo := strings.ToUpper(e.TipoCuenta)
+	tipo := strings.ToUpper(strings.TrimSpace(e.TipoCuenta))
 	if tipo != "MONETARIA" && tipo != "AHORRO" && tipo != "CORRIENTE" {
 		return fiber.NewError(422, "tipoCuenta debe ser MONETARIA, AHORRO o CORRIENTE")
 	}
-	if e.IDCliente == uuid.Nil {
-		return fiber.NewError(422, "idCliente es obligatorio")
+	if strings.TrimSpace(e.Documento) == "" {
+		return fiber.NewError(422, "documento es obligatorio")
 	}
-	if e.SaldoMinimoCentavos < 0 || e.ComisionTransaccionCentavos < 0 {
+	saldoMinimoCentavos, err := quetzalesACentavos(e.SaldoMinimoQuetzales)
+	if err != nil {
+		return fiber.NewError(422, "saldoMinimoQuetzales debe ser un monto válido con hasta 2 decimales")
+	}
+	comisionTransaccionCentavos, err := quetzalesACentavos(e.ComisionTransaccionQuetzales)
+	if err != nil {
+		return fiber.NewError(422, "comisionTransaccionQuetzales debe ser un monto válido con hasta 2 decimales")
+	}
+	idCliente, err := g.buscarClientePorDPI(c, e.Documento)
+	if err != nil {
+		return err
+	}
+	if saldoMinimoCentavos < 0 || comisionTransaccionCentavos < 0 {
 		return fiber.NewError(422, "las reglas de cuenta no pueden ser negativas")
 	}
 	id := uuid.New()
 	return g.aceptar(c, events.ComandoCrearCuenta, id, events.SolicitudCrearCuenta{
-		IDSolicitud: id, IDCliente: e.IDCliente, TipoCuenta: tipo,
-		SaldoMinimoCentavos: e.SaldoMinimoCentavos,
-		ComisionTransaccionCentavos: e.ComisionTransaccionCentavos,
+		IDSolicitud: id, IDCliente: idCliente, TipoCuenta: tipo,
+		SaldoMinimoCentavos: saldoMinimoCentavos,
+		ComisionTransaccionCentavos: comisionTransaccionCentavos,
 	})
+}
+
+func (g *Gateway) buscarClientePorDPI(c *fiber.Ctx, documento string) (uuid.UUID, error) {
+	if g.solicitante == nil {
+		return uuid.Nil, fiber.NewError(503, "customer-service no disponible")
+	}
+	corr, ok := c.Locals(middleware.CorrelationLocal).(uuid.UUID)
+	if !ok || corr == uuid.Nil {
+		corr = uuid.New()
+	}
+	respuesta, err := g.solicitante.Solicitar(c.UserContext(), events.ComandoBuscarClienteDPI, corr, events.SolicitudBuscarClienteDPI{Documento: strings.TrimSpace(documento)})
+	if err != nil {
+		return uuid.Nil, fiber.NewError(503, "customer-service no disponible")
+	}
+	if respuesta.Estado < 200 || respuesta.Estado >= 300 {
+		var detalle struct {
+			Error string `json:"error"`
+		}
+		_ = json.Unmarshal(respuesta.Cuerpo, &detalle)
+		if detalle.Error == "" {
+			detalle.Error = "cliente no encontrado"
+		}
+		return uuid.Nil, fiber.NewError(respuesta.Estado, detalle.Error)
+	}
+	var cliente struct {
+		IDCliente uuid.UUID `json:"customerId"`
+	}
+	if err := json.Unmarshal(respuesta.Cuerpo, &cliente); err != nil || cliente.IDCliente == uuid.Nil {
+		return uuid.Nil, fiber.NewError(502, "respuesta invalida de customer-service")
+	}
+	return cliente.IDCliente, nil
+}
+
+func quetzalesACentavos(valor string) (int64, error) {
+	valor = strings.TrimSpace(strings.ReplaceAll(valor, ",", "."))
+	if valor == "" {
+		return 0, nil
+	}
+	if strings.HasPrefix(valor, "-") {
+		return 0, fiber.ErrUnprocessableEntity
+	}
+	partes := strings.Split(valor, ".")
+	if len(partes) > 2 || partes[0] == "" && len(partes) == 1 {
+		return 0, fiber.ErrUnprocessableEntity
+	}
+	enteroTexto := partes[0]
+	if enteroTexto == "" {
+		enteroTexto = "0"
+	}
+	fraccionTexto := ""
+	if len(partes) == 2 {
+		fraccionTexto = partes[1]
+	}
+	if len(fraccionTexto) > 2 {
+		return 0, fiber.ErrUnprocessableEntity
+	}
+	for len(fraccionTexto) < 2 {
+		fraccionTexto += "0"
+	}
+	entero, err := strconv.ParseUint(enteroTexto, 10, 64)
+	if err != nil || entero > uint64(math.MaxInt64)/100 {
+		return 0, fiber.ErrUnprocessableEntity
+	}
+	fraccion := uint64(0)
+	if fraccionTexto != "" {
+		fraccion, err = strconv.ParseUint(fraccionTexto, 10, 64)
+		if err != nil {
+			return 0, fiber.ErrUnprocessableEntity
+		}
+	}
+	centavos := entero*100 + fraccion
+	if centavos > uint64(math.MaxInt64) {
+		return 0, fiber.ErrUnprocessableEntity
+	}
+	return int64(centavos), nil
 }
 func (g *Gateway) CrearPago(c *fiber.Ctx) error {
 	var e entradaPago

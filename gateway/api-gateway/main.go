@@ -55,8 +55,8 @@ func main() {
 	if err = messaging.ConsumirRespuestas(conexion, store, gestorRespuestas); err != nil {
 		log.Fatal(err)
 	}
-	gateway := controllers.NuevoGateway(publicador, store, gestorRespuestas, cfg.TiempoPublicacion)
 	solicitante := messaging.NuevoSolicitante(publicador, gestorRespuestas, cfg.TiempoPublicacion)
+	gateway := controllers.NuevoGateway(publicador, store, gestorRespuestas, cfg.TiempoPublicacion, solicitante)
 	controladorClientes := controllers.NuevoControladorClientes(solicitante)
 	controladorAuditoria := controllers.NuevoControladorAuditoria(solicitante)
 	routes.Registrar(app, gateway, controladorClientes, controladorAuditoria, cfg.SecretoJWT, func() bool { return !conexion.IsClosed() })

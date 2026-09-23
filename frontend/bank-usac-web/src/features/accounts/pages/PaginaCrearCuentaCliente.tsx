@@ -12,7 +12,7 @@ export function PaginaCrearCuentaCliente() {
     const datos = new FormData(evento.currentTarget);
     setEnviando(true); setMensaje(''); setError('');
     try {
-      const respuesta = await servicioCuentas.crear({idCliente: String(datos.get('idCliente')), tipoCuenta: String(datos.get('tipoCuenta')), saldoMinimoCentavos: Number(datos.get('saldoMinimoCentavos') || 0), comisionTransaccionCentavos: Number(datos.get('comisionTransaccionCentavos') || 0)});
+      const respuesta = await servicioCuentas.crear({documento: String(datos.get('documento')).trim(), tipoCuenta: String(datos.get('tipoCuenta')), saldoMinimoQuetzales: String(datos.get('saldoMinimoQuetzales') || '0'), comisionTransaccionQuetzales: String(datos.get('comisionTransaccionQuetzales') || '0')});
       setMensaje(`Solicitud aceptada: ${respuesta.operationId}`);
       formulario.reset();
     } catch (e) { setError(e instanceof Error ? e.message : 'No fue posible solicitar la cuenta'); }
@@ -22,10 +22,10 @@ export function PaginaCrearCuentaCliente() {
     <p>Operación de cajero</p><h2>Crear cuenta para un cliente</h2>
     {mensaje && <div className="alerta">{mensaje}</div>}{error && <div className="alerta error">{error}</div>}
     <form onSubmit={enviar}>
-      <label>Identificador del cliente<input name="idCliente" required minLength={36} maxLength={36} placeholder="UUID del cliente" /></label>
+      <label>DPI del cliente<input name="documento" required minLength={1} maxLength={30} placeholder="DPI del cliente" /></label>
       <label>Tipo de cuenta<select name="tipoCuenta" defaultValue="CORRIENTE"><option value="CORRIENTE">Corriente</option><option value="AHORRO">Ahorro</option><option value="MONETARIA">Monetaria (compatibilidad)</option></select></label>
-      <label>Saldo mínimo (centavos)<input name="saldoMinimoCentavos" type="number" min="0" defaultValue="0" /></label>
-      <label>Comisión por transacción (centavos)<input name="comisionTransaccionCentavos" type="number" min="0" defaultValue="0" /></label>
+      <label>Saldo mínimo (Q)<input name="saldoMinimoQuetzales" type="number" min="0" step="0.01" defaultValue="0.00" /></label>
+      <label>Comisión por transacción (Q)<input name="comisionTransaccionQuetzales" type="number" min="0" step="0.01" defaultValue="0.00" /></label>
       <button disabled={enviando}>{enviando ? 'Enviando…' : 'Solicitar creación'}</button>
     </form>
   </div>;
