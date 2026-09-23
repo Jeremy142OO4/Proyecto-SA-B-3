@@ -14,7 +14,7 @@ import { PaginaNuevoPago } from '../features/payments/pages/PaginaNuevoPago';
 import { PaginaPagos } from '../features/payments/pages/PaginaPagos';
 import { PaginaDetalleTransferencia } from '../features/transfers/pages/PaginaDetalleTransferencia';
 import { PaginaEstadoTransferencia } from '../features/transfers/pages/PaginaEstadoTransferencia';
-import { PaginaNuevaTransferencia } from '../features/transfers/pages/PaginaNuevaTransferencia';
+import { PaginaNuevaTransferenciaProtegida } from '../features/transfers/pages/PaginaNuevaTransferencia';
 import { PaginaTransferencias } from '../features/transfers/pages/PaginaTransferencias';
 
 function InicioPorRol() {
@@ -32,7 +32,7 @@ export function App() {
     <Route element={<RutaProtegida rolesPermitidos={['CLIENTE']} />}><Route element={<DisenoPrincipal />}>
       <Route path="/cuentas" element={<PaginaCuentas />} /><Route path="/cuentas/:idCuenta" element={<PaginaDetalleCuenta />} />
       <Route path="/pagos" element={<PaginaPagos />} /><Route path="/pagos/nuevo" element={<PaginaNuevoPago />} />
-      <Route path="/transferencias" element={<PaginaTransferencias />} /><Route path="/transferencias/nueva" element={<PaginaNuevaTransferencia />} />
+      <Route path="/transferencias" element={<PaginaTransferencias />} /><Route path="/transferencias/nueva" element={<PaginaNuevaTransferenciaProtegida />} />
       <Route path="/transferencias/estado/:idOperacion" element={<PaginaEstadoTransferencia />} /><Route path="/transferencias/:idTransferencia" element={<PaginaDetalleTransferencia />} />
     </Route></Route>
 

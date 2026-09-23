@@ -1,5 +1,6 @@
 export type Rol = 'ADMIN' | 'TELLER' | 'CLIENTE';
 export type EstadoCliente = 'PENDIENTE_ACTIVACION' | 'ACTIVO' | 'BLOQUEADO';
+export type EstadoKYC = 'PENDING' | 'VERIFIED' | 'REJECTED';
 
 export interface Usuario {
   clienteId: string;
@@ -9,6 +10,7 @@ export interface Usuario {
   usuario: string;
   rol: Rol;
   estado: EstadoCliente;
+  kycStatus: EstadoKYC;
 }
 
 export interface RespuestaLogin {

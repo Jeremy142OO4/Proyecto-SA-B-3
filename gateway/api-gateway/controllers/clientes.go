@@ -233,6 +233,7 @@ func adaptarCliente(datos []byte) (fiber.Map, error) {
 		Username   string `json:"username"`
 		Role       string `json:"role"`
 		Status     string `json:"status"`
+		KYCStatus  string `json:"kycStatus"`
 	}
 	if err := json.Unmarshal(datos, &origen); err != nil {
 		return nil, err
@@ -241,5 +242,6 @@ func adaptarCliente(datos []byte) (fiber.Map, error) {
 		"clienteId": origen.CustomerID, "nombreCompleto": origen.FullName,
 		"documento": origen.DocumentID, "correo": origen.Email,
 		"usuario": origen.Username, "rol": origen.Role, "estado": origen.Status,
+		"kycStatus": origen.KYCStatus,
 	}, nil
 }
