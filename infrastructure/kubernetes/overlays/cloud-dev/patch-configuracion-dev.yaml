@@ -21,8 +21,9 @@ metadata:
   name: frontend
   namespace: bank-usac
 spec:
+  type: LoadBalancer
+  loadBalancerIP: "__PUBLIC_HOST__"
   ports:
     - name: http
       port: 80
       targetPort: http
-      nodePort: 30081
