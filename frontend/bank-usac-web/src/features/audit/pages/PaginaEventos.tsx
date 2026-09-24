@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Chip from '@mui/material/Chip';
+import IconButton from '@mui/material/IconButton';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import CloseIcon from '@mui/icons-material/Close';
 import { EstadoCarga, EstadoError, EstadoVacio } from '../../../components/feedback/EstadoCarga';
+import { servicioAdministracion } from '../../admin/services/servicioAdministracion';
 import { servicioAuditoria } from '../services/servicioAuditoria';
 import type { RegistroAuditoria } from '../types/auditoria';
 
@@ -62,6 +62,8 @@ const formatearNombreEvento = (tipo: string) => {
 
 const etiquetaCampo: Record<string, string> = {
   idCuenta: 'ID de cuenta',
+  idCuentaOrigen: 'Cuenta origen',
+  idCuentaDestino: 'Cuenta destino',
   numeroCuenta: 'Número de cuenta',
   tipoCuenta: 'Tipo de cuenta',
   saldoCentavos: 'Saldo actual',
@@ -81,7 +83,7 @@ const etiquetaCampo: Record<string, string> = {
 };
 
 const camposDetalle = [
-  'idCuenta', 'numeroCuenta', 'tipoCuenta', 'saldoCentavos', 'saldoMinimoCentavos',
+  'idCuenta', 'idCuentaOrigen', 'idCuentaDestino', 'numeroCuenta', 'tipoCuenta', 'saldoCentavos', 'saldoMinimoCentavos',
   'montoCentavos', 'montoTotalCentavos', 'moneda', 'estado', 'idCliente',
   'idOperacion', 'idTransferencia', 'codigo', 'motivo', 'descripcion',
   'beneficiario', 'concepto',
@@ -93,17 +95,45 @@ function formatearCampo(clave: string, valor: unknown) {
   return String(valor);
 }
 
-function detalleEvento(registro: RegistroAuditoria) {
+function textoCampo(payload: DatosEvento, clave: string) {
+  const valor = payload[clave];
+  return typeof valor === 'string' && valor.trim() !== '' ? valor : undefined;
+}
+
+function detalleEvento(
+  registro: RegistroAuditoria,
+  nombresClientes: Map<string, string>,
+  clientesPorCuenta: Map<string, string>,
+) {
   const payload = esObjeto(registro.payload) ? registro.payload : {};
   const detalles = camposDetalle
     .filter(clave => payload[clave] !== undefined && payload[clave] !== null && payload[clave] !== '')
     .map(clave => ({ etiqueta: etiquetaCampo[clave], valor: formatearCampo(clave, payload[clave]) }));
+  const idCliente = textoCampo(payload, 'idCliente');
+  const nombreCliente = idCliente ? nombresClientes.get(idCliente) : undefined;
+  if (nombreCliente) {
+    detalles.push({
+      etiqueta: registro.eventType.startsWith('transferencia.') ? 'Cliente que realizó la transferencia' : 'Cliente',
+      valor: nombreCliente,
+    });
+  }
+
+  if (registro.eventType.startsWith('transferencia.')) {
+    const idCuentaDestino = textoCampo(payload, 'idCuentaDestino');
+    const idClienteDestino = textoCampo(payload, 'idClienteDestino')
+      ?? (idCuentaDestino ? clientesPorCuenta.get(idCuentaDestino) : undefined);
+    const nombreClienteDestino = idClienteDestino ? nombresClientes.get(idClienteDestino) : undefined;
+    if (nombreClienteDestino) {
+      detalles.push({ etiqueta: 'Cliente destinatario', valor: nombreClienteDestino });
+    }
+  }
   const cuentas = Array.isArray(payload.cuentas) ? payload.cuentas.filter(esObjeto) : [];
   return { detalles, cuentas };
 }
 
 export function PaginaEventos() {
   const [registros, setRegistros] = useState<RegistroAuditoria[]>([]);
+  const [clientes, setClientes] = useState<Array<{ customerId: string; fullName: string }>>([]);
   const [filtro, setFiltro] = useState<FiltroSeveridad>('TODOS');
   const [eventoSeleccionado, setEventoSeleccionado] = useState<RegistroAuditoria | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -114,7 +144,35 @@ export function PaginaEventos() {
       .then(setRegistros)
       .catch(e => setError(e instanceof Error ? e.message : 'No fue posible consultar los eventos'))
       .finally(() => setCargando(false));
+    // La consulta de nombres es complementaria: si falla, el historial sigue
+    // funcionando y conserva los identificadores disponibles en el evento.
+    servicioAdministracion.listarClientes()
+      .then(setClientes)
+      .catch(() => setClientes([]));
   }, []);
+
+  const nombresClientes = useMemo(
+    () => new Map(clientes.map(cliente => [cliente.customerId, cliente.fullName])),
+    [clientes],
+  );
+
+  const clientesPorCuenta = useMemo(() => {
+    const resultado = new Map<string, string>();
+    registros.forEach(registro => {
+      const payload = esObjeto(registro.payload) ? registro.payload : {};
+      const idCuenta = textoCampo(payload, 'idCuenta');
+      const idCliente = textoCampo(payload, 'idCliente');
+      if (idCuenta && idCliente) resultado.set(idCuenta, idCliente);
+      const cuentas = Array.isArray(payload.cuentas) ? payload.cuentas : [];
+      cuentas.forEach(cuenta => {
+        if (!esObjeto(cuenta)) return;
+        const cuentaId = textoCampo(cuenta, 'idCuenta');
+        const clienteId = textoCampo(cuenta, 'idCliente');
+        if (cuentaId && clienteId) resultado.set(cuentaId, clienteId);
+      });
+    });
+    return resultado;
+  }, [registros]);
 
   const ultimosPorSeveridad = useMemo(() => ({
     INFO: registros.filter(registro => registro.severity === 'INFO').slice(0, 50),
@@ -137,7 +195,9 @@ export function PaginaEventos() {
       ? ultimosPorSeveridad.INFO.length + ultimosPorSeveridad.WARNING.length + ultimosPorSeveridad.ERROR.length
       : ultimosPorSeveridad[severidad].length;
 
-  const detalleSeleccionado = eventoSeleccionado ? detalleEvento(eventoSeleccionado) : null;
+  const detalleSeleccionado = eventoSeleccionado
+    ? detalleEvento(eventoSeleccionado, nombresClientes, clientesPorCuenta)
+    : null;
   const IconoSeleccionado = eventoSeleccionado ? iconosSeveridad[eventoSeleccionado.severity] : null;
 
   if (cargando) return <EstadoCarga />;
@@ -189,9 +249,9 @@ export function PaginaEventos() {
       {eventoSeleccionado && detalleSeleccionado && IconoSeleccionado && <>
         <DialogTitle id="detalle-evento-titulo" className="detalle-dialogo-titulo">
           <span>Información del evento</span>
-          <Button onClick={() => setEventoSeleccionado(null)} aria-label="Cerrar detalle" color="inherit" size="small" startIcon={<CloseIcon />}>
-            Cerrar
-          </Button>
+          <IconButton onClick={() => setEventoSeleccionado(null)} aria-label="Cerrar detalle" className="detalle-dialogo-cerrar">
+            <CloseIcon />
+          </IconButton>
         </DialogTitle>
         <DialogContent dividers className="detalle-dialogo-contenido">
           <div className="detalle-dialogo-resumen">
@@ -215,14 +275,7 @@ export function PaginaEventos() {
             {detalleSeleccionado.detalles.map(item => <div className="detalle-item" key={`${eventoSeleccionado.id}-${item.etiqueta}`}><span>{item.etiqueta}</span><strong>{item.valor}</strong></div>)}
           </div>
           {detalleSeleccionado.cuentas.length > 0 && <div className="detalle-cuentas"><strong>Cuentas consultadas</strong>{detalleSeleccionado.cuentas.map((cuenta, indice) => <div className="cuenta-detalle" key={String(cuenta.idCuenta ?? indice)}><span>{String(cuenta.idCuenta ?? 'Cuenta sin identificador')}</span><strong>{esNumero(cuenta.saldoCentavos) ? formatearMonto(cuenta.saldoCentavos) : 'Saldo no disponible'}</strong></div>)}</div>}
-          <details className="detalle-payload">
-            <summary>Payload completo del evento</summary>
-            <pre>{JSON.stringify(eventoSeleccionado.payload, null, 2)}</pre>
-          </details>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEventoSeleccionado(null)} variant="contained">Cerrar</Button>
-        </DialogActions>
       </>}
     </Dialog>
   </>;

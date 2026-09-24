@@ -111,6 +111,10 @@
   color: #173f61;
 }
 
+.detalle-dialogo-cerrar {
+  color: #1f4b72 !important;
+}
+
 .detalle-dialogo-contenido {
   display: grid;
   gap: 1rem;
@@ -143,6 +147,21 @@
 
 .severidad-chip {
   font-weight: 800;
+  min-height: 30px;
+  gap: 0.2rem;
+  white-space: nowrap;
+}
+
+.severidad-chip .MuiChip-icon {
+  width: 18px;
+  height: 18px;
+  margin-left: 8px;
+  margin-right: 0;
+}
+
+.severidad-chip .MuiChip-label {
+  padding-left: 2px;
+  padding-right: 10px;
 }
 
 .severidad-chip-info {
@@ -158,31 +177,6 @@
 .severidad-chip-error {
   color: #a33a3a !important;
   background: #fae3e3 !important;
-}
-
-.detalle-payload {
-  border: 1px solid #dbe5ec;
-  border-radius: 10px;
-  padding: .65rem .8rem;
-  color: #1f4b72;
-}
-
-.detalle-payload summary {
-  cursor: pointer;
-  font-weight: 700;
-}
-
-.detalle-payload pre {
-  max-height: 220px;
-  overflow: auto;
-  margin: .75rem 0 0;
-  padding: .75rem;
-  border-radius: 8px;
-  background: #102a43;
-  color: #e7f0f6;
-  font-size: .75rem;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 
 @media (max-width: 640px) {
