@@ -17,9 +17,17 @@ import (
 
 type AuditService interface {
 	ProcessEvent(ctx context.Context, envelope *events.EventEnvelope) error
+	SetRecipientResolver(resolver RecipientResolver)
 	GetAuditByCorrelation(ctx context.Context, correlationID uuid.UUID) ([]*models.AuditLog, error)
 	GetRecentAudits(ctx context.Context, limit int) ([]*models.AuditLog, error)
 	GetNotifications(ctx context.Context, filter models.NotificationFilter) ([]*models.NotificationLog, error)
+}
+
+// RecipientResolver obtains the current email of the customer referenced by a
+// domain event. Event producers only need to publish idCliente; the audit
+// service keeps the notification concern independent from the business data.
+type RecipientResolver interface {
+	ResolveCustomer(ctx context.Context, customerID uuid.UUID) (email string, fullName string, err error)
 }
 
 type auditService struct {
@@ -27,6 +35,11 @@ type auditService struct {
 	notificationRepo repositories.NotificationRepository
 	idempotencyRepo  repositories.IdempotencyRepository
 	emailSender      EmailSender
+	recipientResolver RecipientResolver
+}
+
+func (s *auditService) SetRecipientResolver(resolver RecipientResolver) {
+	s.recipientResolver = resolver
 }
 
 func NewAuditService(
@@ -110,13 +123,24 @@ func (s *auditService) handleNotificationDispatch(
 		}
 
 		recipient := extractRecipient(envelope.Payload, rule.defaultRecipient)
-		status := models.NotificationSent
-		if err := s.saveGeneratedNotification(ctx, envelope, rule, recipient, status, ""); err != nil {
-			log.Printf("[notification-audit-service] error registrando notificacion: correlationId=%s error=%v", envelope.CorrelationID, err)
-			return err
+		fullName := extractFullName(envelope.Payload)
+		errorDetail := ""
+		if !isEmail(recipient) {
+			customerID := extractCustomerID(envelope.Payload)
+			if s.recipientResolver == nil || customerID == uuid.Nil {
+				errorDetail = "destinatario de correo no disponible en el evento"
+			} else {
+				var err error
+				resolverCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				recipient, fullName, err = s.recipientResolver.ResolveCustomer(resolverCtx, customerID)
+				cancel()
+				if err != nil {
+					errorDetail = fmt.Sprintf("no fue posible consultar el correo del cliente: %v", err)
+				}
+			}
 		}
+		return s.sendEventEmail(ctx, envelope, rule, recipient, fullName, errorDetail)
 	}
-	return nil
 }
 
 type notificationRule struct {
@@ -168,6 +192,232 @@ func extractRecipient(payload json.RawMessage, fallback string) string {
 		}
 	}
 	return fallback
+}
+
+func extractFullName(payload json.RawMessage) string {
+	var fields map[string]any
+	if err := json.Unmarshal(payload, &fields); err == nil {
+		for _, key := range []string{"nombreCompleto", "fullName", "nombre"} {
+			if value, ok := fields[key].(string); ok && strings.TrimSpace(value) != "" {
+				return strings.TrimSpace(value)
+			}
+		}
+	}
+	return "cliente"
+}
+
+func extractCustomerID(payload json.RawMessage) uuid.UUID {
+	var fields map[string]any
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		return uuid.Nil
+	}
+	for _, key := range []string{"idCliente", "customerId", "customerID"} {
+		if value, ok := fields[key].(string); ok {
+			if id, err := uuid.Parse(strings.TrimSpace(value)); err == nil {
+				return id
+			}
+		}
+	}
+	return uuid.Nil
+}
+
+func isEmail(value string) bool {
+	value = strings.TrimSpace(value)
+	return strings.Contains(value, "@") && !strings.ContainsAny(value, " \t\r\n")
+}
+
+func (s *auditService) sendEventEmail(
+	ctx context.Context,
+	envelope *events.EventEnvelope,
+	rule notificationRule,
+	recipient string,
+	fullName string,
+	errorDetail string,
+) error {
+	severity := ClassifyEvent(envelope.Type)
+	icon, greeting, subject := notificationPresentation(severity)
+	subject = asuntoCorreo(envelope.Type, subject)
+	rule.subject = subject
+	status := models.NotificationSent
+	if strings.TrimSpace(errorDetail) != "" {
+		status = models.NotificationFailed
+	} else if s.emailSender == nil {
+		status = models.NotificationFailed
+		errorDetail = "SMTP no configurado"
+	} else {
+		body := construirCorreoOperacion(envelope, rule, fullName, icon, subject, greeting)
+		if err := s.emailSender.Send(recipient, subject, body); err != nil {
+			status = models.NotificationFailed
+			errorDetail = err.Error()
+			log.Printf("[notification-audit-service] fallo al enviar correo: event=%s correlationId=%s recipient=%s error=%v", envelope.Type, envelope.CorrelationID, recipient, err)
+		}
+	}
+	if err := s.saveGeneratedNotification(ctx, envelope, rule, recipient, status, errorDetail); err != nil {
+		log.Printf("[notification-audit-service] error registrando notificacion: correlationId=%s error=%v", envelope.CorrelationID, err)
+		return err
+	}
+	return nil
+}
+
+func notificationPresentation(severity models.EventSeverity) (icon, greeting, subject string) {
+	switch severity {
+	case models.EventError:
+		return "❌", "Ha ocurrido un problema con una operación de tu cuenta.", "Problema con una operación de Bank USAC"
+	case models.EventWarning:
+		return "⚠️", "Hay una situación de tu cuenta que requiere tu atención.", "Aviso importante de Bank USAC"
+	default:
+		return "ℹ️", "Te informamos que una operación de tu cuenta fue procesada.", "Información de tu cuenta en Bank USAC"
+	}
+}
+
+func construirCorreoOperacion(envelope *events.EventEnvelope, rule notificationRule, fullName, icon, subject, greeting string) string {
+	campos := map[string]any{}
+	_ = json.Unmarshal(envelope.Payload, &campos)
+	estado := valorCorreo(campos, "estado")
+	if estado == "" {
+		estado = estadoCorreo(envelope.Type, ClassifyEvent(envelope.Type))
+	}
+
+	var cuerpo strings.Builder
+	fmt.Fprintf(&cuerpo, "%s %s\n\n", icon, subject)
+	fmt.Fprintf(&cuerpo, "Hola %s,\n\n%s\n\n", nombreCorreo(fullName), greeting)
+	cuerpo.WriteString("╔══════════════════════════════════════════════════╗\n")
+	cuerpo.WriteString("║              COMPROBANTE DE OPERACIÓN            ║\n")
+	cuerpo.WriteString("╚══════════════════════════════════════════════════╝\n\n")
+	agregarLineaCorreo(&cuerpo, "Operación", tipoOperacionCorreo(envelope.Type))
+	agregarLineaCorreo(&cuerpo, "Estado", estado)
+	agregarLineaCorreo(&cuerpo, "Realizado por", nombreCorreo(fullName))
+
+	switch {
+	case strings.HasPrefix(envelope.Type, "transferencia."):
+		agregarLineaCorreo(&cuerpo, "Cuenta origen", valorCorreo(campos, "idCuentaOrigen"))
+		agregarLineaCorreo(&cuerpo, "Cuenta destino", valorCorreo(campos, "idCuentaDestino"))
+		agregarMontoCorreo(&cuerpo, "Monto enviado", campos, "montoCentavos", "montoTotalCentavos")
+		agregarLineaCorreo(&cuerpo, "Descripción", valorCorreo(campos, "descripcion"))
+	case strings.HasPrefix(envelope.Type, "pago."):
+		agregarLineaCorreo(&cuerpo, "Cuenta origen", valorCorreo(campos, "idCuentaOrigen"))
+		agregarLineaCorreo(&cuerpo, "Beneficiario", valorCorreo(campos, "beneficiario"))
+		agregarLineaCorreo(&cuerpo, "Tipo de pago", valorCorreo(campos, "tipoPago"))
+		agregarLineaCorreo(&cuerpo, "Concepto", valorCorreo(campos, "concepto"))
+		agregarMontoCorreo(&cuerpo, "Monto", campos, "montoCentavos")
+		agregarLineaCorreo(&cuerpo, "Referencia externa", valorCorreo(campos, "referenciaExterna"))
+	default:
+		agregarLineaCorreo(&cuerpo, "Cuenta", valorCorreo(campos, "idCuenta"))
+		agregarMontoCorreo(&cuerpo, "Monto", campos, "montoCentavos", "saldoCentavos")
+	}
+
+	agregarLineaCorreo(&cuerpo, "Código", valorCorreo(campos, "codigo", "codigoError"))
+	agregarLineaCorreo(&cuerpo, "Motivo", valorCorreo(campos, "motivo", "motivoRechazo"))
+	agregarLineaCorreo(&cuerpo, "Fecha", envelope.OccurredAt.Local().Format("02/01/2006 15:04"))
+	agregarLineaCorreo(&cuerpo, "CorrelationId", envelope.CorrelationID.String())
+	cuerpo.WriteString("\nResumen: ")
+	cuerpo.WriteString(rule.bodySummary)
+	cuerpo.WriteString("\n\nGracias por utilizar Bank USAC.\n")
+	cuerpo.WriteString("Este correo es un comprobante informativo; conserva el CorrelationId para cualquier consulta.\n")
+	cuerpo.WriteString("\nBank USAC")
+	return cuerpo.String()
+}
+
+func agregarLineaCorreo(cuerpo *strings.Builder, etiqueta, valor string) {
+	if strings.TrimSpace(valor) == "" {
+		return
+	}
+	fmt.Fprintf(cuerpo, "%-20s: %s\n", etiqueta, valor)
+}
+
+func agregarMontoCorreo(cuerpo *strings.Builder, etiqueta string, campos map[string]any, claves ...string) {
+	for _, clave := range claves {
+		if monto, ok := numeroCorreo(campos[clave]); ok {
+			agregarLineaCorreo(cuerpo, etiqueta, fmt.Sprintf("Q %.2f", monto/100))
+			return
+		}
+	}
+}
+
+func valorCorreo(campos map[string]any, claves ...string) string {
+	for _, clave := range claves {
+		if valor, ok := campos[clave]; ok && valor != nil {
+			texto := strings.TrimSpace(fmt.Sprint(valor))
+			if texto != "" && texto != "<nil>" {
+				return texto
+			}
+		}
+	}
+	return ""
+}
+
+func numeroCorreo(valor any) (float64, bool) {
+	switch numero := valor.(type) {
+	case float64:
+		return numero, true
+	case float32:
+		return float64(numero), true
+	case int:
+		return float64(numero), true
+	case int64:
+		return float64(numero), true
+	case json.Number:
+		resultado, err := numero.Float64()
+		return resultado, err == nil
+	default:
+		return 0, false
+	}
+}
+
+func nombreCorreo(nombre string) string {
+	if strings.TrimSpace(nombre) == "" {
+		return "cliente"
+	}
+	return strings.TrimSpace(nombre)
+}
+
+func tipoOperacionCorreo(eventType string) string {
+	switch {
+	case strings.HasPrefix(eventType, "transferencia."):
+		return "Transferencia bancaria"
+	case strings.HasPrefix(eventType, "pago."):
+		return "Pago"
+	case strings.HasPrefix(eventType, "cuenta."):
+		return "Operación de cuenta"
+	default:
+		return "Operación bancaria"
+	}
+}
+
+func asuntoCorreo(eventType, fallback string) string {
+	switch {
+	case strings.HasPrefix(eventType, "transferencia."):
+		if strings.Contains(eventType, "rechaz") || strings.Contains(eventType, "fallida") {
+			return "Transferencia rechazada - Bank USAC"
+		}
+		if strings.Contains(eventType, "complet") {
+			return "Transferencia completada - Bank USAC"
+		}
+		return "Actualización de transferencia - Bank USAC"
+	case strings.HasPrefix(eventType, "pago."):
+		if strings.Contains(eventType, "rechaz") {
+			return "Pago rechazado - Bank USAC"
+		}
+		if strings.Contains(eventType, "complet") {
+			return "Pago completado - Bank USAC"
+		}
+		return "Actualización de pago - Bank USAC"
+	default:
+		return fallback
+	}
+}
+
+func estadoCorreo(eventType string, severity models.EventSeverity) string {
+	if strings.Contains(eventType, "rechaz") || strings.Contains(eventType, "fallida") {
+		return "RECHAZADA"
+	}
+	if severity == models.EventError {
+		return "ERROR"
+	}
+	if strings.Contains(eventType, "complet") || strings.Contains(eventType, "cread") || strings.Contains(eventType, "acredit") || strings.Contains(eventType, "debit") || strings.Contains(eventType, "compensad") {
+		return "COMPLETADA"
+	}
+	return "INFORMACIÓN"
 }
 
 func (s *auditService) saveGeneratedNotification(

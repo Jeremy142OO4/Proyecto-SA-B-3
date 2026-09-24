@@ -28,14 +28,14 @@ func (r *auditRepo) SaveAuditLog(ctx context.Context, log *models.AuditLog) erro
 }
 
 func (r *auditRepo) GetAuditLogsByCorrelationID(ctx context.Context, correlationID uuid.UUID) ([]*models.AuditLog, error) {
-	var logs []*models.AuditLog
+	logs := make([]*models.AuditLog, 0)
 	query := `SELECT * FROM audit_logs WHERE correlation_id = $1 ORDER BY occurred_at ASC`
 	err := r.db.SelectContext(ctx, &logs, query, correlationID)
 	return logs, err
 }
 
 func (r *auditRepo) GetRecentAuditLogs(ctx context.Context, limit int) ([]*models.AuditLog, error) {
-	var logs []*models.AuditLog
+	logs := make([]*models.AuditLog, 0)
 	query := `SELECT * FROM audit_logs ORDER BY occurred_at DESC LIMIT $1`
 	err := r.db.SelectContext(ctx, &logs, query, limit)
 	return logs, err

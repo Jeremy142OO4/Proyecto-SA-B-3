@@ -1,0 +1,7 @@
+.modal-kyc-fondo{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:1.5rem;background:rgba(9,31,53,.62);backdrop-filter:blur(3px)}
+.modal-kyc{width:min(100%,480px);padding:2rem;border-radius:18px;background:white;box-shadow:0 24px 70px rgba(9,31,53,.28);text-align:center}
+.modal-kyc-icono{width:48px;height:48px;margin:0 auto 1rem;display:grid;place-items:center;border-radius:50%;background:#fff0cb;color:#8a6314;font-size:1.5rem;font-weight:800}
+.modal-kyc-etiqueta{margin:0;color:#8a6314;font-size:.76rem;text-transform:uppercase;letter-spacing:.1em;font-weight:800}
+.modal-kyc h2{margin:.45rem 0 .8rem;color:#122033;font-size:1.35rem}
+.modal-kyc p:not(.modal-kyc-etiqueta){margin:0 0 1.4rem;color:#526c80;line-height:1.5}
+.modal-kyc button{width:100%}

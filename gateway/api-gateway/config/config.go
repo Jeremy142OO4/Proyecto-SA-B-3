@@ -16,7 +16,7 @@ type Configuracion struct {
 }
 
 func Cargar() (Configuracion, error) {
-	segundos, err := strconv.Atoi(obtener("TIMEOUT_PUBLICACION_SEGUNDOS", "5"))
+	segundos, err := strconv.Atoi(obtener("TIMEOUT_PUBLICACION_SEGUNDOS", "60"))
 	if err != nil || segundos <= 0 {
 		return Configuracion{}, fmt.Errorf("TIMEOUT_PUBLICACION_SEGUNDOS invalido")
 	}

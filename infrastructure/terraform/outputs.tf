@@ -46,3 +46,8 @@ output "gke_get_credentials_command" {
   description = "Comando para configurar kubectl contra el cluster GKE."
   value       = "gcloud container clusters get-credentials ${google_container_cluster.bank_usac.name} --zone ${google_container_cluster.bank_usac.location} --project ${var.project_id}"
 }
+
+output "frontend_public_ip" {
+  description = "IP publica regional reservada para el LoadBalancer del frontend."
+  value       = google_compute_address.frontend.address
+}

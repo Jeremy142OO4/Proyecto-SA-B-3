@@ -1,0 +1,48 @@
+.dato-restringido {
+  color: #8a6b35 !important;
+  font-style: italic;
+}
+
+.modal-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: #102f5088;
+}
+
+.modal-confirmacion {
+  width: min(100%, 420px);
+  padding: 2rem;
+  text-align: center;
+  background: white;
+  border: 1px solid #dbe5ec;
+  border-radius: 18px;
+  box-shadow: 0 18px 50px #102f5055;
+}
+
+.modal-confirmacion h3 {
+  margin: .9rem 0 .4rem;
+  color: #173b5d;
+}
+
+.modal-confirmacion p {
+  margin: 0 0 1.4rem;
+  color: #5c7283;
+  line-height: 1.5;
+}
+
+.modal-icono {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin: auto;
+  border-radius: 50%;
+  background: #def3e8;
+  color: #1d7350;
+  font-size: 1.8rem;
+  font-weight: 800;
+}

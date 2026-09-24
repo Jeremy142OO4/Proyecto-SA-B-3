@@ -50,6 +50,7 @@ const (
 	ComandoPerfilCliente     = "cliente.perfil.solicitado"
 	ComandoActualizarCliente = "cliente.actualizacion.solicitada"
 	ComandoListarClientes    = "cliente.listado.solicitado"
+	ComandoBuscarClienteDPI  = "cliente.dpi.consulta.solicitada"
 	ComandoEstadoCliente     = "cliente.estado.solicitado"
 	ComandoValidarKYC        = "cliente.kyc.validacion.solicitada"
 	EventoKYCVerificado      = "cliente.kyc.verificado"
@@ -57,6 +58,10 @@ const (
 	ComandoEstadoKYC         = "cliente.kyc.estado.solicitado"
 	EventoKYCActualizado     = "cliente.kyc.estado.actualizado"
 )
+
+type SolicitudBuscarClienteDPI struct {
+	Documento string `json:"documentId"`
+}
 
 type SolicitudValidacionCliente struct {
 	IDSolicitud uuid.UUID `json:"idSolicitud"`

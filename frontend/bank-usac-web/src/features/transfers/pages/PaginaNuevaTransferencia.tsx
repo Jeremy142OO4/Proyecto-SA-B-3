@@ -1,10 +1,10 @@
-import { useCallback, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { EstadoCarga, EstadoError } from '../../../components/feedback/EstadoCarga';
 import { usarConsulta } from '../../../hooks/usarConsulta';
+import { useAutenticacion } from '../../auth/context/ContextoAutenticacion';
 import { servicioCuentas } from '../../accounts/services/servicioCuentas';
 import { servicioTransferencias } from '../services/servicioTransferencias';
-import type { ResultadoExternoSimulado } from '../types/transferencia';
 
 const etiqueta = (numero: string, saldo: number) => `•••• ${numero.slice(-4)} · ${new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(saldo / 100)}`;
 
@@ -34,7 +34,6 @@ export function PaginaNuevaTransferencia() {
         idCuentaDestino: destino,
         montoCentavos: Math.round(Number(formulario.get('monto')) * 100),
         descripcion: String(formulario.get('descripcion')).trim(),
-        resultadoExternoSimulado: String(formulario.get('resultadoExternoSimulado')) as ResultadoExternoSimulado,
       });
       navegar(`/operaciones/${respuesta.operationId}`);
     } catch (excepcion) {
@@ -54,13 +53,30 @@ export function PaginaNuevaTransferencia() {
       <label>UUID de la cuenta destino<input name="destino" required maxLength={36} placeholder="UUID de la cuenta destino" /></label>
       <label>Monto en quetzales<input name="monto" required type="number" min="0.01" step="0.01" /></label>
       <label>Descripción<input name="descripcion" maxLength={255} placeholder="Ej. Pago de alquiler" /></label>
-      <label>Resultado externo para demostración
-        <select name="resultadoExternoSimulado" defaultValue="EXITO">
-          <option value="EXITO">Éxito</option><option value="FALLO">Fallo</option><option value="TIMEOUT">Timeout</option>
-        </select>
-      </label>
-      <small>La Saga validará KYC y los tipos de cuenta antes de mover fondos.</small>
       <button disabled={enviando || !cuentas.datos?.length}>{enviando ? 'Enviando…' : 'Confirmar transferencia'}</button>
     </form>
+  </div>;
+}
+
+export function PaginaNuevaTransferenciaProtegida() {
+  const { usuario } = useAutenticacion();
+  const navegar = useNavigate();
+  const bloqueada = usuario?.rol === 'CLIENTE' && usuario.kycStatus !== 'VERIFIED';
+  const [mostrarModal, setMostrarModal] = useState(bloqueada);
+
+  useEffect(() => {
+    setMostrarModal(bloqueada);
+  }, [bloqueada]);
+
+  if (!bloqueada) return <PaginaNuevaTransferencia />;
+
+  return <div className="modal-kyc-fondo" role="presentation">
+    {mostrarModal && <section className="modal-kyc" role="dialog" aria-modal="true" aria-labelledby="titulo-modal-kyc">
+      <div className="modal-kyc-icono">!</div>
+      <p className="modal-kyc-etiqueta">Transferencia no disponible</p>
+      <h2 id="titulo-modal-kyc">No es válida la realización de transferencias</h2>
+      <p>Tu estado KYC todavía no está verificado. Debes tener el estado <strong>VERIFIED</strong> para realizar transferencias.</p>
+      <button type="button" onClick={() => { setMostrarModal(false); navegar(-1); }}>Volver a la página anterior</button>
+    </section>}
   </div>;
 }

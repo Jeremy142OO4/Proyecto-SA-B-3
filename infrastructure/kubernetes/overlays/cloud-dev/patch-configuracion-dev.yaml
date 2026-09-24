@@ -5,7 +5,7 @@ metadata:
   namespace: bank-usac
 data:
   ENTORNO: desarrollo
-  CORS_ORIGINS: "http://__PUBLIC_HOST__"
+  CORS_ORIGINS: "__FRONTEND_URL__"
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -13,7 +13,7 @@ metadata:
   name: customer-service-config
   namespace: bank-usac
 data:
-  ACTIVATION_LINK_BASE: "http://__PUBLIC_HOST__/activar"
+  ACTIVATION_LINK_BASE: "__FRONTEND_URL__/activar"
 ---
 apiVersion: v1
 kind: Service
@@ -21,8 +21,10 @@ metadata:
   name: frontend
   namespace: bank-usac
 spec:
+  type: LoadBalancer
+  loadBalancerIP: "__PUBLIC_HOST__"
   ports:
+    - $patch: replace
     - name: http
       port: 80
       targetPort: http
-      nodePort: 30081

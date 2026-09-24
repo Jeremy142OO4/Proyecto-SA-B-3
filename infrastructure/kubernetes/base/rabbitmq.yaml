@@ -39,13 +39,13 @@ spec:
             exec: { command: [rabbitmq-diagnostics, -q, ping] }
             initialDelaySeconds: 25
             periodSeconds: 10
-            timeoutSeconds: 5
+            timeoutSeconds: 10
             failureThreshold: 6
           livenessProbe:
             exec: { command: [rabbitmq-diagnostics, -q, ping] }
             initialDelaySeconds: 60
             periodSeconds: 15
-            timeoutSeconds: 5
+            timeoutSeconds: 10
             failureThreshold: 6
           resources:
             requests: { cpu: 100m, memory: 256Mi }

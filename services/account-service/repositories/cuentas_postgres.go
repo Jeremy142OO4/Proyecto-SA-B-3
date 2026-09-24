@@ -147,7 +147,7 @@ func (r *RepositorioCuentasPostgres) ProcesarMovimiento(ctx context.Context, sol
 func (r *RepositorioCuentasPostgres) ListarMovimientos(ctx context.Context, idCuenta uuid.UUID, limite, desplazamiento int) ([]models.MovimientoCuenta, error) {
 	filas, err := r.conexion.Query(ctx, `SELECT id_movimiento,id_cuenta,id_operacion,id_correlacion,
 		tipo_movimiento,monto_centavos,saldo_anterior_centavos,saldo_nuevo_centavos,
-		descripcion,fecha_creacion FROM movimientos_cuenta WHERE id_cuenta=$1
+		COALESCE(descripcion,''),fecha_creacion FROM movimientos_cuenta WHERE id_cuenta=$1
 		ORDER BY fecha_creacion DESC LIMIT $2 OFFSET $3`, idCuenta, limite, desplazamiento)
 	if err != nil {
 		return nil, fmt.Errorf("listar movimientos: %w", err)
@@ -332,7 +332,7 @@ func buscarMovimientoPorOperacion(ctx context.Context, tx pgx.Tx, idOperacion uu
 	var movimiento models.MovimientoCuenta
 	err := tx.QueryRow(ctx, `SELECT id_movimiento, id_cuenta, id_operacion, id_correlacion,
 		tipo_movimiento, monto_centavos, saldo_anterior_centavos, saldo_nuevo_centavos,
-		descripcion, fecha_creacion FROM movimientos_cuenta
+		COALESCE(descripcion,''), fecha_creacion FROM movimientos_cuenta
 		WHERE id_operacion = $1 AND tipo_movimiento = $2`, idOperacion, tipo).Scan(
 		&movimiento.IDMovimiento, &movimiento.IDCuenta, &movimiento.IDOperacion,
 		&movimiento.IDCorrelacion, &movimiento.TipoMovimiento, &movimiento.MontoCentavos,

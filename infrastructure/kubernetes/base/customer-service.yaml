@@ -62,6 +62,7 @@ spec:
           startupProbe:
             httpGet: { path: /health/live, port: http }
             periodSeconds: 2
+            timeoutSeconds: 2
             failureThreshold: 30
           readinessProbe:
             httpGet: { path: /health/ready, port: http }

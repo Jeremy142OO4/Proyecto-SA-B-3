@@ -54,6 +54,7 @@ spec:
           startupProbe:
             httpGet: { path: /health/live, port: http }
             periodSeconds: 2
+            timeoutSeconds: 2
             failureThreshold: 30
           resources:
             requests: { cpu: 50m, memory: 64Mi }

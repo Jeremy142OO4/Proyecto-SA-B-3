@@ -12,7 +12,7 @@ export function DisenoPrincipal() {
       <nav>
         {usuario?.rol === 'CLIENTE' && <><NavLink to="/cuentas">Cuentas</NavLink><NavLink to="/transferencias">Transferencias</NavLink><NavLink to="/transferencias/nueva">Nueva transferencia</NavLink><NavLink to="/pagos">Pagos</NavLink><NavLink to="/pagos/nuevo">Nuevo pago</NavLink></>}
         {usuario?.rol === 'TELLER' && <><NavLink to="/cajero/clientes/nuevo">Registrar cliente</NavLink><NavLink to="/cajero/cuentas/nueva">Crear cuenta</NavLink></>}
-        {usuario?.rol === 'ADMIN' && <><NavLink to="/administracion/clientes">Administrar clientes</NavLink><NavLink to="/auditoria">Auditoría</NavLink></>}
+        {usuario?.rol === 'ADMIN' && <><NavLink to="/administracion/clientes">Administrar clientes</NavLink><NavLink to="/eventos">Eventos</NavLink><NavLink to="/auditoria">Auditoría</NavLink></>}
       </nav>
       <div className="usuario">
         <span>{usuario?.rol}</span>

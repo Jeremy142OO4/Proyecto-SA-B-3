@@ -64,7 +64,7 @@ func NewRabbitMQClient(url string, repo repositories.CustomerRepository, svc ser
 	if _, err := ch.QueueDeclare(colaComandosCliente, true, false, false, false, argumentos); err != nil {
 		return nil, err
 	}
-	for _, tipo := range []string{events.ComandoValidarCliente, events.ComandoValidarKYC, events.ComandoRegistrarCliente, events.ComandoActivarCliente, events.ComandoLoginCliente, events.ComandoPerfilCliente, events.ComandoActualizarCliente, events.ComandoListarClientes, events.ComandoEstadoCliente, events.ComandoEstadoKYC} {
+	for _, tipo := range []string{events.ComandoValidarCliente, events.ComandoValidarKYC, events.ComandoRegistrarCliente, events.ComandoActivarCliente, events.ComandoLoginCliente, events.ComandoPerfilCliente, events.ComandoActualizarCliente, events.ComandoListarClientes, events.ComandoBuscarClienteDPI, events.ComandoEstadoCliente, events.ComandoEstadoKYC} {
 		if err := ch.QueueBind(colaComandosCliente, tipo, intercambioComandos, false, nil); err != nil {
 			return nil, err
 		}
@@ -248,6 +248,16 @@ func (r *RabbitMQClient) ejecutarRPC(ctx context.Context, sobre events.EventEnve
 			return errorRespuesta(500, err)
 		}
 		return respuesta(200, clientes)
+	case events.ComandoBuscarClienteDPI:
+		var req events.SolicitudBuscarClienteDPI
+		if err := json.Unmarshal(sobre.Payload, &req); err != nil || strings.TrimSpace(req.Documento) == "" {
+			return errorRespuesta(400, errors.New("documentId requerido"))
+		}
+		cliente, err := r.svc.GetCustomerByDocumentID(ctx, req.Documento)
+		if err != nil {
+			return errorRespuesta(404, err)
+		}
+		return respuesta(200, cliente)
 	case events.ComandoEstadoCliente:
 		var req struct {
 			IDCliente uuid.UUID `json:"idCliente"`

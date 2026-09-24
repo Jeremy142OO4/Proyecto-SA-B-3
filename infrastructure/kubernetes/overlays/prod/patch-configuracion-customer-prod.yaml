@@ -4,4 +4,4 @@ metadata:
   name: customer-service-config
   namespace: bank-usac
 data:
-  ACTIVATION_LINK_BASE: "https://bank-usac.example.com/activar"
+  ACTIVATION_LINK_BASE: "__FRONTEND_URL__/activar"

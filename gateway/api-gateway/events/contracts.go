@@ -27,12 +27,17 @@ const (
 	ComandoPerfilCliente           = "cliente.perfil.solicitado"
 	ComandoActualizarCliente       = "cliente.actualizacion.solicitada"
 	ComandoListarClientes          = "cliente.listado.solicitado"
+	ComandoBuscarClienteDPI        = "cliente.dpi.consulta.solicitada"
 	ComandoEstadoCliente           = "cliente.estado.solicitado"
 	ComandoEstadoKYC               = "cliente.kyc.estado.solicitado"
 	ComandoAuditoriaRegistros      = "auditoria.registros.solicitados"
 	ComandoAuditoriaTraza          = "auditoria.traza.solicitada"
 	ComandoAuditoriaNotificaciones = "auditoria.notificaciones.solicitadas"
 )
+
+type SolicitudBuscarClienteDPI struct {
+	Documento string `json:"documentId"`
+}
 
 type SolicitudCrearCuenta struct {
 	IDSolicitud                 uuid.UUID `json:"idSolicitud"`

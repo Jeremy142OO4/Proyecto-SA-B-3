@@ -38,10 +38,12 @@ spec:
             httpGet: { path: /salud, port: http }
             initialDelaySeconds: 5
             periodSeconds: 5
+            timeoutSeconds: 2
           livenessProbe:
             httpGet: { path: /salud, port: http }
             initialDelaySeconds: 15
             periodSeconds: 10
+            timeoutSeconds: 2
           resources:
             requests: { cpu: 50m, memory: 64Mi }
             limits: { cpu: 300m, memory: 256Mi }
