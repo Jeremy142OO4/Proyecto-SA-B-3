@@ -136,7 +136,7 @@ export function PaginaEventos() {
   if (error) return <EstadoError mensaje={error} />;
 
   return <>
-    <div className="titulo-seccion"><div><h2>Eventos</h2></div></div>
+    <div className="titulo-seccion"><div><h2>Evento</h2></div></div>
     <section className="panel-eventos">
       <div className="cabecera-eventos"><div><strong>Historial de eventos</strong><small>Clasificación operativa del sistema</small></div><span className="contador-eventos">{visibles.length} registros</span></div>
       <div className="filtros-eventos" role="tablist" aria-label="Filtrar eventos por severidad">
