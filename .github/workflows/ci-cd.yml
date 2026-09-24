@@ -319,7 +319,9 @@ jobs:
   desplegar-produccion:
     name: Desplegar en Kubernetes prod
     runs-on: ubuntu-latest
-    needs: validacion-sistema
+    needs:
+      - validacion-sistema
+      - construir-publicar-imagenes
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     environment: production
     env:
