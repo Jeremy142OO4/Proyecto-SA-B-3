@@ -577,7 +577,8 @@ func technicalFailure(value string) bool {
 		"base de datos", "database", "postgres", "rabbit", "infraestructura",
 		"infrastructure", "proveedor externo", "fallo externo", "fallo tecnico",
 		"falla tecnica", "error interno", "internal server", "connection refused",
-		"conexión rechazada", "panic", "no disponible",
+		"conexión rechazada", "panic", "no disponible", "compensacion.fallida",
+		"compensación fallida",
 	} {
 		if strings.Contains(value, token) {
 			return true
@@ -592,7 +593,7 @@ func recoverableFailure(value string) bool {
 		"4xx", "rechaz", "invalid", "inval", "no encontrado", "not found",
 		"no autorizado", "unauthorized", "forbidden", "prohibid", "conflict",
 		"rate limit", "limite", "saldo", "kyc", "cuenta_no", "cuentas_no",
-		"cliente_no", "pendiente", "datos incorrectos", "datos invalidos",
+		"cliente_no", "pendiente", "compens", "datos incorrectos", "datos invalidos",
 	} {
 		if strings.Contains(value, token) {
 			return true

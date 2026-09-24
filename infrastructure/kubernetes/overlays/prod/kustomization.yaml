@@ -5,3 +5,4 @@ resources:
 patches:
   - path: patch-configuracion-prod.yaml
   - path: patch-configuracion-customer-prod.yaml
+  - path: patch-servicio-frontend.yaml
