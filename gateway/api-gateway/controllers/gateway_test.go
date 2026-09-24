@@ -53,7 +53,7 @@ func TestTransferenciaAceptada(t *testing.T) {
 		c.Locals("customerId", "11111111-1111-4111-8111-111111111111")
 		return c.Next()
 	}, g.Transferir)
-	r := httptest.NewRequest("POST", "/", strings.NewReader(`{"idCuentaOrigen":"22222222-2222-4222-8222-222222222222","idCuentaDestino":"33333333-3333-4333-8333-333333333333","montoCentavos":1250}`))
+	r := httptest.NewRequest("POST", "/", strings.NewReader(`{"idCuentaOrigen":"22222222-2222-4222-8222-222222222222","idCuentaDestino":"33333333-3333-4333-8333-333333333333","tipoCuentaDestino":"AHORRO","montoCentavos":1250}`))
 	r.Header.Set("Content-Type", "application/json")
 	resp, e := app.Test(r)
 	if e != nil || resp.StatusCode != 202 {

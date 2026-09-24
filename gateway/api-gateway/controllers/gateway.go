@@ -51,6 +51,7 @@ type entradaPago struct {
 type entradaTransferencia struct {
 	IDCuentaOrigen           uuid.UUID `json:"idCuentaOrigen"`
 	IDCuentaDestino          uuid.UUID `json:"idCuentaDestino"`
+	TipoCuentaDestino        string    `json:"tipoCuentaDestino"`
 	MontoCentavos            int64     `json:"montoCentavos"`
 	Descripcion              string    `json:"descripcion"`
 	ResultadoExternoSimulado string    `json:"resultadoExternoSimulado"`
@@ -229,6 +230,10 @@ func (g *Gateway) Transferir(c *fiber.Ctx) error {
 	if e.IDCuentaOrigen == uuid.Nil || e.IDCuentaDestino == uuid.Nil || e.IDCuentaOrigen == e.IDCuentaDestino || e.MontoCentavos <= 0 {
 		return fiber.NewError(422, "cuentas distintas y montoCentavos mayor que cero son obligatorios")
 	}
+	tipoCuentaDestino := strings.ToUpper(strings.TrimSpace(e.TipoCuentaDestino))
+	if tipoCuentaDestino != "MONETARIA" && tipoCuentaDestino != "AHORRO" && tipoCuentaDestino != "CORRIENTE" {
+		return fiber.NewError(422, "tipoCuentaDestino debe ser MONETARIA, AHORRO o CORRIENTE")
+	}
 	resultadoExterno := strings.ToUpper(strings.TrimSpace(e.ResultadoExternoSimulado))
 	if resultadoExterno == "" {
 		resultadoExterno = "EXITO"
@@ -240,7 +245,7 @@ func (g *Gateway) Transferir(c *fiber.Ctx) error {
 		return err
 	}
 	id := uuid.New()
-	return g.aceptar(c, events.ComandoTransferir, id, events.SolicitudTransferencia{IDTransferencia: id, IDCliente: idCliente(c), IDCuentaOrigen: e.IDCuentaOrigen, IDCuentaDestino: e.IDCuentaDestino, MontoCentavos: e.MontoCentavos, Descripcion: strings.TrimSpace(e.Descripcion), ResultadoExternoSimulado: resultadoExterno})
+	return g.aceptar(c, events.ComandoTransferir, id, events.SolicitudTransferencia{IDTransferencia: id, IDCliente: idCliente(c), IDCuentaOrigen: e.IDCuentaOrigen, IDCuentaDestino: e.IDCuentaDestino, TipoCuentaDestino: tipoCuentaDestino, MontoCentavos: e.MontoCentavos, Descripcion: strings.TrimSpace(e.Descripcion), ResultadoExternoSimulado: resultadoExterno})
 }
 func (g *Gateway) ListarCuentas(c *fiber.Ctx) error {
 	return g.consultar(c, events.ComandoListarCuentas, events.EventoCuentasConsultadas, events.SolicitudHistorial{IDCliente: idCliente(c), Limite: limite(c), Desplazamiento: desplazamiento(c)}, func(b json.RawMessage) (any, error) {

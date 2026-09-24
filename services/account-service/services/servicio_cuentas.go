@@ -93,6 +93,11 @@ func (s *servicioCuentas) ValidarTransferencia(ctx context.Context, solicitud ev
 			return resultado
 		}
 		resultado.TipoCuentaDestino = string(destino.TipoCuenta)
+		if destino.TipoCuenta != origen.TipoCuenta {
+			resultado.Codigo = "TIPOS_CUENTA_NO_COINCIDEN"
+			resultado.Motivo = "la cuenta origen y la cuenta destino deben ser del mismo tipo"
+			return resultado
+		}
 		if destino.Estado != models.EstadoCuentaActiva {
 			resultado.Codigo, resultado.Motivo = "CUENTA_NO_ACTIVA", "ambas cuentas deben estar activas"
 			return resultado

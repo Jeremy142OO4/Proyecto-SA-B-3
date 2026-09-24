@@ -101,6 +101,7 @@ type SolicitudTransferencia struct {
 	IDCliente                uuid.UUID `json:"idCliente"`
 	IDCuentaOrigen           uuid.UUID `json:"idCuentaOrigen"`
 	IDCuentaDestino          uuid.UUID `json:"idCuentaDestino"`
+	TipoCuentaDestino        string    `json:"tipoCuentaDestino"`
 	MontoCentavos            int64     `json:"montoCentavos"`
 	Descripcion              string    `json:"descripcion,omitempty"`
 	ResultadoExternoSimulado string    `json:"resultadoExternoSimulado,omitempty"`

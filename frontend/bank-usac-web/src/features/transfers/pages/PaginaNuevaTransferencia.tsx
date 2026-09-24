@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import { EstadoCarga, EstadoError } from '../../../components/feedback/EstadoCarga';
 import { usarConsulta } from '../../../hooks/usarConsulta';
 import { useAutenticacion } from '../../auth/context/ContextoAutenticacion';
@@ -14,24 +20,35 @@ export function PaginaNuevaTransferencia() {
   const cuentas = usarConsulta(consulta);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState('');
+  const [advertencia, setAdvertencia] = useState('');
 
   async function enviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
     if (enviando) return;
-    setEnviando(true);
-    setError('');
     const formulario = new FormData(evento.currentTarget);
     const origen = String(formulario.get('origen'));
     const destino = String(formulario.get('destino')).trim();
-    if (origen === destino) {
-      setError('La cuenta destino debe ser diferente.');
-      setEnviando(false);
+    const tipoCuentaDestino = String(formulario.get('tipoCuentaDestino'));
+    const cuentaOrigen = cuentas.datos?.find(cuenta => cuenta.idCuenta === origen);
+    if (!cuentaOrigen || !tipoCuentaDestino) {
+      setError('Selecciona la cuenta de origen y el tipo de cuenta destino.');
       return;
     }
+    if (origen === destino) {
+      setError('La cuenta destino debe ser diferente.');
+      return;
+    }
+    if (cuentaOrigen.tipoCuenta !== tipoCuentaDestino) {
+      setAdvertencia(`La cuenta de origen es de tipo ${cuentaOrigen.tipoCuenta} y seleccionaste una cuenta destino de tipo ${tipoCuentaDestino}. Ambas cuentas deben ser del mismo tipo.`);
+      return;
+    }
+    setEnviando(true);
+    setError('');
     try {
       const respuesta = await servicioTransferencias.crear({
         idCuentaOrigen: origen,
         idCuentaDestino: destino,
+        tipoCuentaDestino,
         montoCentavos: Math.round(Number(formulario.get('monto')) * 100),
         descripcion: String(formulario.get('descripcion')).trim(),
       });
@@ -51,10 +68,19 @@ export function PaginaNuevaTransferencia() {
     <form onSubmit={enviar}>
       <label>Cuenta de origen<select name="origen" required>{cuentas.datos?.map(cuenta => <option key={cuenta.idCuenta} value={cuenta.idCuenta}>{etiqueta(cuenta.numeroCuenta, cuenta.saldoCentavos)}</option>)}</select></label>
       <label>UUID de la cuenta destino<input name="destino" required maxLength={36} placeholder="UUID de la cuenta destino" /></label>
+      <label>Tipo de cuenta destino<select name="tipoCuentaDestino" required defaultValue=""><option value="" disabled>Selecciona el tipo de cuenta destino</option><option value="MONETARIA">Monetaria</option><option value="AHORRO">Ahorro</option><option value="CORRIENTE">Corriente</option></select></label>
       <label>Monto en quetzales<input name="monto" required type="number" min="0.01" step="0.01" /></label>
       <label>Descripción<input name="descripcion" maxLength={255} placeholder="Ej. Pago de alquiler" /></label>
       <button disabled={enviando || !cuentas.datos?.length}>{enviando ? 'Enviando…' : 'Confirmar transferencia'}</button>
-    </form>
+      </form>
+      <Dialog open={advertencia !== ''} onClose={() => setAdvertencia('')} aria-labelledby="titulo-advertencia-transferencia">
+        <DialogTitle id="titulo-advertencia-transferencia" sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#8a6314' }}>
+          <WarningAmberOutlinedIcon />
+          Transferencia no válida
+        </DialogTitle>
+        <DialogContent dividers>{advertencia}</DialogContent>
+        <DialogActions><Button onClick={() => setAdvertencia('')} variant="contained">Entendido</Button></DialogActions>
+      </Dialog>
   </div>;
 }
 
