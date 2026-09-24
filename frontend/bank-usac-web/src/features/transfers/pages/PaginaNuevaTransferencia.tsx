@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Button from '@mui/material/Button';
+import Alert from '@mui/material/Alert';
+import AlertTitle from '@mui/material/AlertTitle';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
+import { ErrorApi } from '../../../services/clienteApi';
 import { EstadoCarga, EstadoError } from '../../../components/feedback/EstadoCarga';
 import { usarConsulta } from '../../../hooks/usarConsulta';
 import { useAutenticacion } from '../../auth/context/ContextoAutenticacion';
@@ -25,21 +29,17 @@ export function PaginaNuevaTransferencia() {
   async function enviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
     if (enviando) return;
+    setError('');
     const formulario = new FormData(evento.currentTarget);
     const origen = String(formulario.get('origen'));
     const destino = String(formulario.get('destino')).trim();
     const tipoCuentaDestino = String(formulario.get('tipoCuentaDestino'));
-    const cuentaOrigen = cuentas.datos?.find(cuenta => cuenta.idCuenta === origen);
-    if (!cuentaOrigen || !tipoCuentaDestino) {
+    if (!cuentas.datos?.some(cuenta => cuenta.idCuenta === origen) || !tipoCuentaDestino) {
       setError('Selecciona la cuenta de origen y el tipo de cuenta destino.');
       return;
     }
     if (origen === destino) {
       setError('La cuenta destino debe ser diferente.');
-      return;
-    }
-    if (cuentaOrigen.tipoCuenta !== tipoCuentaDestino) {
-      setAdvertencia(`La cuenta de origen es de tipo ${cuentaOrigen.tipoCuenta} y seleccionaste una cuenta destino de tipo ${tipoCuentaDestino}. Ambas cuentas deben ser del mismo tipo.`);
       return;
     }
     setEnviando(true);
@@ -54,7 +54,11 @@ export function PaginaNuevaTransferencia() {
       });
       navegar(`/operaciones/${respuesta.operationId}`);
     } catch (excepcion) {
-      setError(excepcion instanceof Error ? excepcion.message : 'No fue posible enviar la transferencia');
+      if (excepcion instanceof ErrorApi && excepcion.estado === 409) {
+        setAdvertencia(excepcion.message);
+      } else {
+        setError(excepcion instanceof Error ? excepcion.message : 'No fue posible enviar la transferencia');
+      }
     } finally {
       setEnviando(false);
     }
@@ -73,13 +77,36 @@ export function PaginaNuevaTransferencia() {
       <label>Descripción<input name="descripcion" maxLength={255} placeholder="Ej. Pago de alquiler" /></label>
       <button disabled={enviando || !cuentas.datos?.length}>{enviando ? 'Enviando…' : 'Confirmar transferencia'}</button>
       </form>
-      <Dialog open={advertencia !== ''} onClose={() => setAdvertencia('')} aria-labelledby="titulo-advertencia-transferencia">
-        <DialogTitle id="titulo-advertencia-transferencia" sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#8a6314' }}>
-          <WarningAmberOutlinedIcon />
-          Transferencia no válida
+      <Dialog
+        open={advertencia !== ''}
+        onClose={() => setAdvertencia('')}
+        aria-labelledby="titulo-advertencia-transferencia"
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle id="titulo-advertencia-transferencia" sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#153b62', pb: 1 }}>
+          <WarningAmberOutlinedIcon sx={{ color: '#c48713', fontSize: 30 }} />
+          Tipo de cuenta destino no válido
         </DialogTitle>
-        <DialogContent dividers>{advertencia}</DialogContent>
-        <DialogActions><Button onClick={() => setAdvertencia('')} variant="contained">Entendido</Button></DialogActions>
+        <DialogContent dividers sx={{ pt: 2 }}>
+          <Alert
+            severity="warning"
+            variant="outlined"
+            icon={<WarningAmberOutlinedIcon fontSize="inherit" />}
+            sx={{ alignItems: 'flex-start', borderRadius: 2 }}
+          >
+            <AlertTitle sx={{ fontWeight: 700 }}>El tipo seleccionado no coincide</AlertTitle>
+            {advertencia}
+          </Alert>
+          <DialogContentText sx={{ mt: 2, color: 'text.secondary' }}>
+            Verifica el UUID de la cuenta destino y selecciona el tipo de cuenta que realmente le corresponde. Las transferencias entre tipos de cuenta diferentes sí están permitidas.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setAdvertencia('')} variant="contained" autoFocus>
+            Entendido
+          </Button>
+        </DialogActions>
       </Dialog>
   </div>;
 }

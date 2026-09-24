@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/Proyecto-SA-B-3/api-gateway/events"
 	"github.com/Proyecto-SA-B-3/api-gateway/middleware"
 	"github.com/Proyecto-SA-B-3/api-gateway/operations"
@@ -244,8 +245,35 @@ func (g *Gateway) Transferir(c *fiber.Ctx) error {
 	if err := g.validarPropiedadCuenta(c, e.IDCuentaOrigen); err != nil {
 		return err
 	}
+	tipoCuentaReal, err := g.consultarTipoCuenta(c, e.IDCuentaDestino)
+	if err != nil {
+		return err
+	}
+	if tipoCuentaReal != tipoCuentaDestino {
+		return fiber.NewError(409, fmt.Sprintf("el tipo seleccionado (%s) no coincide con el UUID de destino; la cuenta corresponde a %s", tipoCuentaDestino, tipoCuentaReal))
+	}
 	id := uuid.New()
 	return g.aceptar(c, events.ComandoTransferir, id, events.SolicitudTransferencia{IDTransferencia: id, IDCliente: idCliente(c), IDCuentaOrigen: e.IDCuentaOrigen, IDCuentaDestino: e.IDCuentaDestino, TipoCuentaDestino: tipoCuentaDestino, MontoCentavos: e.MontoCentavos, Descripcion: strings.TrimSpace(e.Descripcion), ResultadoExternoSimulado: resultadoExterno})
+}
+
+func (g *Gateway) consultarTipoCuenta(c *fiber.Ctx, idCuenta uuid.UUID) (string, error) {
+	resultado, err := g.solicitar(c, events.ComandoConsultarCuenta, events.EventoCuentaConsultada, events.SolicitudConsultarCuenta{IDCuenta: idCuenta}, func(b json.RawMessage) (any, error) {
+		var cuenta struct {
+			TipoCuenta string `json:"tipoCuenta"`
+		}
+		if err := json.Unmarshal(b, &cuenta); err != nil || strings.TrimSpace(cuenta.TipoCuenta) == "" {
+			return nil, fiber.NewError(502, "respuesta invalida al consultar la cuenta destino")
+		}
+		return strings.ToUpper(strings.TrimSpace(cuenta.TipoCuenta)), nil
+	})
+	if err != nil {
+		return "", err
+	}
+	tipo, ok := resultado.(string)
+	if !ok || tipo == "" {
+		return "", fiber.NewError(502, "respuesta invalida al consultar la cuenta destino")
+	}
+	return tipo, nil
 }
 func (g *Gateway) ListarCuentas(c *fiber.Ctx) error {
 	return g.consultar(c, events.ComandoListarCuentas, events.EventoCuentasConsultadas, events.SolicitudHistorial{IDCliente: idCliente(c), Limite: limite(c), Desplazamiento: desplazamiento(c)}, func(b json.RawMessage) (any, error) {

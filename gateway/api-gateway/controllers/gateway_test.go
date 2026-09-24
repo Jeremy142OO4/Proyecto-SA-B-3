@@ -26,6 +26,7 @@ func (p *publicadorFalso) Publicar(_ context.Context, m events.SobreMensaje) err
 		contenido, _ := json.Marshal(map[string]any{
 			"idCliente": "11111111-1111-4111-8111-111111111111",
 			"idCuenta":  "22222222-2222-4222-8222-222222222222",
+			"tipoCuenta": "AHORRO",
 		})
 		p.respuestas.Entregar(events.SobreMensaje{
 			IDMensaje: uuid.New(), IDCorrelacion: m.IDCorrelacion,
