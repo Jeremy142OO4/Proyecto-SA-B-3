@@ -5,4 +5,4 @@ metadata:
   namespace: bank-usac
 data:
   ENTORNO: produccion
-  CORS_ORIGINS: "https://bank-usac.example.com"
+  CORS_ORIGINS: "__FRONTEND_URL__"

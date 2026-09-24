@@ -237,6 +237,27 @@ jobs:
           location: ${{ env.GKE_ZONE }}
           project_id: ${{ env.GCP_PROJECT_ID }}
 
+      - name: Desplegar frontend dev en Cloud Run
+        id: frontend-cloud-run
+        env:
+          PUBLIC_HOST: ${{ secrets.PUBLIC_HOST }}
+        shell: bash
+        run: |
+          BACKEND_HOST="${PUBLIC_HOST#http://}"
+          BACKEND_HOST="${BACKEND_HOST#https://}"
+          BACKEND_HOST="${BACKEND_HOST%%/*}"
+          gcloud run deploy bank-usac-frontend-dev \
+            --image "${REGISTRY}/${IMAGE_NAMESPACE}/bank-usac-frontend:${IMAGE_TAG}" \
+            --region us-central1 \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080 \
+            --set-env-vars "BACKEND_URL=http://${BACKEND_HOST}" \
+            --quiet
+          FRONTEND_URL="$(gcloud run services describe bank-usac-frontend-dev \
+            --region us-central1 --format='value(status.url)')"
+          echo "url=$FRONTEND_URL" >> "$GITHUB_OUTPUT"
+
       - name: Crear secretos del entorno dev
         env:
           URL_BASE_DATOS_CUENTAS: ${{ secrets.URL_BASE_DATOS_CUENTAS }}
@@ -286,9 +307,10 @@ jobs:
       - name: Aplicar manifiestos dev con rolling update
         env:
           PUBLIC_HOST: ${{ secrets.PUBLIC_HOST }}
+          FRONTEND_URL: ${{ steps.frontend-cloud-run.outputs.url }}
         run: |
           kubectl kustomize infrastructure/kubernetes/overlays/cloud-dev \
-            | sed "s/:v2.0.0/:${IMAGE_TAG}/g; s/__PUBLIC_HOST__/${PUBLIC_HOST:-bank-usac.example.com}/g" \
+            | sed "s|:v2.0.0|:${IMAGE_TAG}|g; s|__PUBLIC_HOST__|${PUBLIC_HOST:-bank-usac.example.com}|g; s|__FRONTEND_URL__|${FRONTEND_URL}|g" \
             | kubectl apply -f -
           for despliegue in rabbitmq api-gateway customer-service account-service payment-service transaction-service notification-audit-service frontend; do
             kubectl -n "$KUBE_NAMESPACE" rollout status "deployment/$despliegue" --timeout=180s
@@ -338,6 +360,28 @@ jobs:
           cluster_name: ${{ env.GKE_CLUSTER }}
           location: ${{ env.GKE_ZONE }}
           project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Desplegar frontend prod en Cloud Run
+        id: frontend-cloud-run
+        env:
+          PUBLIC_HOST: ${{ secrets.PUBLIC_HOST }}
+          IMAGE_TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          BACKEND_HOST="${PUBLIC_HOST#http://}"
+          BACKEND_HOST="${BACKEND_HOST#https://}"
+          BACKEND_HOST="${BACKEND_HOST%%/*}"
+          gcloud run deploy bank-usac-frontend-prod \
+            --image "${REGISTRY}/${IMAGE_NAMESPACE}/bank-usac-frontend:${IMAGE_TAG}" \
+            --region us-central1 \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080 \
+            --set-env-vars "BACKEND_URL=http://${BACKEND_HOST}" \
+            --quiet
+          FRONTEND_URL="$(gcloud run services describe bank-usac-frontend-prod \
+            --region us-central1 --format='value(status.url)')"
+          echo "url=$FRONTEND_URL" >> "$GITHUB_OUTPUT"
 
       - name: Crear o actualizar secretos de produccion
         env:
@@ -389,9 +433,10 @@ jobs:
         env:
           PUBLIC_HOST: ${{ secrets.PUBLIC_HOST }}
           IMAGE_TAG: ${{ steps.version.outputs.tag }}
+          FRONTEND_URL: ${{ steps.frontend-cloud-run.outputs.url }}
         run: |
           kubectl kustomize infrastructure/kubernetes/overlays/prod \
-            | sed "s/:v2.0.0/:${IMAGE_TAG}/g; s/__PUBLIC_HOST__/${PUBLIC_HOST:-bank-usac.example.com}/g" \
+            | sed "s|:v2.0.0|:${IMAGE_TAG}|g; s|__PUBLIC_HOST__|${PUBLIC_HOST:-bank-usac.example.com}|g; s|__FRONTEND_URL__|${FRONTEND_URL}|g" \
             | kubectl apply -f -
           for despliegue in rabbitmq api-gateway customer-service account-service payment-service transaction-service notification-audit-service frontend; do
             kubectl -n "$KUBE_NAMESPACE" rollout status "deployment/$despliegue" --timeout=180s

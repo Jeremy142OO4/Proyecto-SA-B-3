@@ -5,7 +5,7 @@ metadata:
   namespace: bank-usac
 data:
   ENTORNO: desarrollo
-  CORS_ORIGINS: "http://__PUBLIC_HOST__"
+  CORS_ORIGINS: "__FRONTEND_URL__"
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -13,7 +13,7 @@ metadata:
   name: customer-service-config
   namespace: bank-usac
 data:
-  ACTIVATION_LINK_BASE: "http://__PUBLIC_HOST__/activar"
+  ACTIVATION_LINK_BASE: "__FRONTEND_URL__/activar"
 ---
 apiVersion: v1
 kind: Service
