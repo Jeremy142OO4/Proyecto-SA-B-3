@@ -95,7 +95,7 @@ func (s *SMTPEmailSender) Send(to string, subject string, body string) error {
 		"To: " + to,
 		"Subject: " + subject,
 		"MIME-Version: 1.0",
-		"Content-Type: text/plain; charset=UTF-8",
+		"Content-Type: text/html; charset=UTF-8",
 		"",
 		body,
 	}, "\r\n")

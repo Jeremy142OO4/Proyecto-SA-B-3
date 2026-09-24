@@ -33,7 +33,22 @@ const (
 	ComandoAuditoriaRegistros      = "auditoria.registros.solicitados"
 	ComandoAuditoriaTraza          = "auditoria.traza.solicitada"
 	ComandoAuditoriaNotificaciones = "auditoria.notificaciones.solicitadas"
+	EventoErrorHTTP                = "auditoria.error.http"
 )
+
+// ErrorHTTP permite auditar errores que ocurren en el gateway antes de que
+// exista un evento de dominio: validaciones, autenticación, autorización,
+// timeouts y respuestas técnicas del sistema.
+type ErrorHTTP struct {
+	StatusCode    int       `json:"statusCode"`
+	Codigo        string    `json:"codigo"`
+	Mensaje       string    `json:"mensaje"`
+	Metodo        string    `json:"metodo"`
+	Ruta          string    `json:"ruta"`
+	CustomerID    string    `json:"customerId,omitempty"`
+	Rol           string    `json:"rol,omitempty"`
+	CorrelationID uuid.UUID `json:"correlationId"`
+}
 
 type SolicitudBuscarClienteDPI struct {
 	Documento string `json:"documentId"`

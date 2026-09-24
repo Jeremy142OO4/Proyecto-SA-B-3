@@ -20,7 +20,9 @@ Este catálogo describe los mensajes intercambiados mediante RabbitMQ por los co
 | Historial filtrado | `transferencia.historial.solicitado`, `transferencia.historial.consultado` con filtros opcionales |
 | Fallos externos | `pago.procesamiento.solicitado` y `transferencia.solicitada` incorporan el escenario simulado; los resultados terminales usan los eventos existentes de completado, rechazo y compensación. |
 
-Los eventos exitosos se clasifican como `INFO`; rechazos recuperables y compensaciones como `WARNING`; timeouts, DLQ y compensaciones fallidas como `ERROR`. Esta clasificación es utilizada por Notification & Audit Service sin cambiar la routing key original.
+Los eventos exitosos se clasifican como `INFO`; rechazos recuperables y errores de validación HTTP `4xx` como `WARNING`; timeouts, DLQ, fallas técnicas, errores de infraestructura y respuestas HTTP `5xx` como `ERROR`. Esta clasificación es utilizada por Notification & Audit Service sin cambiar la routing key original.
+
+El API Gateway publica `auditoria.error.http` en `banco.eventos` cuando una solicitud termina con error. El payload conserva el código HTTP, el mensaje, la ruta, el método y el `CorrelationId`, por lo que los errores que ocurren antes de un evento de dominio también quedan disponibles en el historial.
 
 ## Customer Service
 
@@ -119,6 +121,8 @@ Payment Service primero consume las respuestas de KYC y de reglas de cuenta; só
 | `auditoria.notificaciones.solicitadas` | Comando de consulta | API Gateway | Notification & Audit Service | Consultar el historial de notificaciones. |
 
 Este servicio también consume los eventos de dominio publicados por los demás microservicios. Cada evento válido se almacena como evidencia de auditoría; los eventos que requieren comunicación al usuario generan además una notificación.
+
+La cola de auditoría también observa las DLQ de Customer, Account, Transaction, Payment y del propio servicio de auditoría. Un mensaje que agota sus reintentos se registra como `notification-audit.dlq` con severidad `ERROR` y conserva el motivo técnico disponible en los encabezados del mensaje.
 
 ## Mensajes fallidos
 

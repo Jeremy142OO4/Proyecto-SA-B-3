@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -72,6 +73,9 @@ func NewRabbitMQConsumer(url string, auditSvc services.AuditService) (*RabbitMQC
 			return nil, err
 		}
 	}
+	if err := ch.QueueBind(q.Name, "auditoria.#", "banco.eventos", false, nil); err != nil {
+		return nil, err
+	}
 	if _, err := ch.QueueDeclare("notification-audit.commands.q", true, false, false, false, args); err != nil {
 		return nil, err
 	}
@@ -83,8 +87,17 @@ func NewRabbitMQConsumer(url string, auditSvc services.AuditService) (*RabbitMQC
 	if _, err := ch.QueueDeclare("notification-audit.dlq.q", true, false, false, false, nil); err != nil {
 		return nil, err
 	}
-	if err := ch.QueueBind("notification-audit.dlq.q", "notification-audit.dlq", "banco.fallidos", false, nil); err != nil {
-		return nil, err
+	for _, rk := range []string{
+		"notification-audit.dlq",
+		"cliente.validacion.fallida",
+		"cuenta.comando.fallido",
+		"transaccion.mensaje.fallido",
+		"pago.mensaje.fallido",
+		"gateway.respuesta.fallida",
+	} {
+		if err := ch.QueueBind("notification-audit.dlq.q", rk, "banco.fallidos", false, nil); err != nil {
+			return nil, err
+		}
 	}
 	resolver, err := newCustomerResolver(conn)
 	if err != nil {
@@ -270,6 +283,10 @@ func (r *RabbitMQConsumer) handleDLQDelivery(ctx context.Context, d amqp.Deliver
 		"mensajeOriginal": original.MessageID,
 		"tipoOriginal":    original.Type,
 		"productor":       original.Producer,
+		"codigo":          "DLQ",
+		"motivo":          "El mensaje agotó los reintentos y requiere revisión técnica.",
+		"routingKey":      d.RoutingKey,
+		"ultimoError":     headerString(d.Headers, "x-ultimo-error"),
 	})
 	if err != nil {
 		_ = d.Nack(false, false)
@@ -290,6 +307,14 @@ func (r *RabbitMQConsumer) handleDLQDelivery(ctx context.Context, d amqp.Deliver
 		return
 	}
 	_ = d.Ack(false)
+}
+
+func headerString(headers amqp.Table, key string) string {
+	value, ok := headers[key]
+	if !ok {
+		return ""
+	}
+	return fmt.Sprint(value)
 }
 
 func (r *RabbitMQConsumer) Close() {

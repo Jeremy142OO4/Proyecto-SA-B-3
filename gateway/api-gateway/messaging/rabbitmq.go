@@ -77,6 +77,23 @@ func (p *Publicador) Publicar(ctx context.Context, m events.SobreMensaje) error 
 	}
 	return nil
 }
+
+// PublicarEvento publica un evento de auditoría en banco.eventos, separado de
+// los comandos que el gateway envía a los microservicios.
+func (p *Publicador) PublicarEvento(ctx context.Context, m events.SobreMensaje) error {
+	b, e := json.Marshal(m)
+	if e != nil {
+		return e
+	}
+	conf, e := p.canal.PublishWithDeferredConfirmWithContext(ctx, IntercambioEventos, m.Tipo, true, false, amqp.Publishing{ContentType: "application/json", DeliveryMode: amqp.Persistent, Timestamp: time.Now().UTC(), MessageId: m.IDMensaje.String(), CorrelationId: m.IDCorrelacion.String(), Body: b})
+	if e != nil {
+		return e
+	}
+	if conf == nil || !conf.Wait() {
+		return fmt.Errorf("RabbitMQ no confirmo evento %s", m.Tipo)
+	}
+	return nil
+}
 func (p *Publicador) Cerrar() error { return p.canal.Close() }
 func ConsumirRespuestas(c *amqp.Connection, ops *operations.Store, gestor *responses.Gestor) error {
 	if c == nil || c.IsClosed() {

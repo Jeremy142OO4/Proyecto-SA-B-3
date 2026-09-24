@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import SvgIcon, { type SvgIconProps } from '@mui/material/SvgIcon';
+import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import Chip from '@mui/material/Chip';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import CloseIcon from '@mui/icons-material/Close';
 import { EstadoCarga, EstadoError, EstadoVacio } from '../../../components/feedback/EstadoCarga';
 import { servicioAuditoria } from '../services/servicioAuditoria';
 import type { RegistroAuditoria } from '../types/auditoria';
@@ -14,14 +23,10 @@ const severidades: Array<{ valor: FiltroSeveridad; etiqueta: string }> = [
   { valor: 'ERROR', etiqueta: 'Errores' },
 ];
 
-const IconoInfo = (props: SvgIconProps) => <SvgIcon {...props}><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zM11 17h2v-6h-2v6zm0-8h2V7h-2v2z" /></SvgIcon>;
-const IconoAdvertencia = (props: SvgIconProps) => <SvgIcon {...props}><path d="M1 21h22L12 2 1 21zm12-3h-2v2h2v-2zm0-2h-2v-4h2v4z" /></SvgIcon>;
-const IconoError = (props: SvgIconProps) => <SvgIcon {...props}><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z" /></SvgIcon>;
-
 const iconosSeveridad = {
-  INFO: IconoInfo,
-  WARNING: IconoAdvertencia,
-  ERROR: IconoError,
+  INFO: InfoOutlinedIcon,
+  WARNING: WarningAmberOutlinedIcon,
+  ERROR: ErrorOutlineIcon,
 };
 
 const nombresEventos: Record<string, string> = {
@@ -100,7 +105,7 @@ function detalleEvento(registro: RegistroAuditoria) {
 export function PaginaEventos() {
   const [registros, setRegistros] = useState<RegistroAuditoria[]>([]);
   const [filtro, setFiltro] = useState<FiltroSeveridad>('TODOS');
-  const [eventoAbierto, setEventoAbierto] = useState<string | null>(null);
+  const [eventoSeleccionado, setEventoSeleccionado] = useState<RegistroAuditoria | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
 
@@ -132,6 +137,9 @@ export function PaginaEventos() {
       ? ultimosPorSeveridad.INFO.length + ultimosPorSeveridad.WARNING.length + ultimosPorSeveridad.ERROR.length
       : ultimosPorSeveridad[severidad].length;
 
+  const detalleSeleccionado = eventoSeleccionado ? detalleEvento(eventoSeleccionado) : null;
+  const IconoSeleccionado = eventoSeleccionado ? iconosSeveridad[eventoSeleccionado.severity] : null;
+
   if (cargando) return <EstadoCarga />;
   if (error) return <EstadoError mensaje={error} />;
 
@@ -148,19 +156,17 @@ export function PaginaEventos() {
     {!visibles.length ? <EstadoVacio mensaje="No hay eventos para la clasificación seleccionada." /> : <div className="lista-eventos">
       {visibles.map(registro => {
         const Icono = iconosSeveridad[registro.severity];
-        const detalle = detalleEvento(registro);
-        const abierto = eventoAbierto === registro.id;
         return <article
-          className={`evento evento-${registro.severity.toLowerCase()}${abierto ? ' evento-expandido' : ''}`}
+          className={`evento evento-${registro.severity.toLowerCase()}`}
           key={registro.id}
           role="button"
           tabIndex={0}
-          aria-expanded={abierto}
-          onClick={() => setEventoAbierto(abierto ? null : registro.id)}
+          aria-label={`Ver detalle de ${formatearNombreEvento(registro.eventType)}`}
+          onClick={() => setEventoSeleccionado(registro)}
           onKeyDown={evento => {
             if (evento.key === 'Enter' || evento.key === ' ') {
               evento.preventDefault();
-              setEventoAbierto(abierto ? null : registro.id);
+              setEventoSeleccionado(registro);
             }
           }}
         >
@@ -169,18 +175,55 @@ export function PaginaEventos() {
             <div className="evento-cabecera"><strong>{formatearNombreEvento(registro.eventType)}</strong><span className={`severidad severidad-${registro.severity.toLowerCase()}`}><span className="icono-severidad" aria-hidden="true"><Icono fontSize="small" /></span>{registro.severity}</span></div>
             <small>{registro.producer} · {new Date(registro.occurredAt).toLocaleString('es-GT')}</small>
             <span className="evento-correlacion">CorrelationId: {registro.correlationId}</span>
-            {abierto && <div className="evento-detalle" onClick={evento => evento.stopPropagation()}>
-              <div className="detalle-titulo">Información detallada</div>
-              <div className="detalle-grid">
-                <div className="detalle-item"><span>Evento</span><strong>{formatearNombreEvento(registro.eventType)}</strong></div>
-                <div className="detalle-item"><span>Fecha</span><strong>{new Date(registro.occurredAt).toLocaleString('es-GT')}</strong></div>
-                {detalle.detalles.map(item => <div className="detalle-item" key={`${registro.id}-${item.etiqueta}`}><span>{item.etiqueta}</span><strong>{item.valor}</strong></div>)}
-              </div>
-              {detalle.cuentas.length > 0 && <div className="detalle-cuentas"><strong>Cuentas consultadas</strong>{detalle.cuentas.map((cuenta, indice) => <div className="cuenta-detalle" key={String(cuenta.idCuenta ?? indice)}><span>{String(cuenta.idCuenta ?? 'Cuenta sin identificador')}</span><strong>{esNumero(cuenta.saldoCentavos) ? formatearMonto(cuenta.saldoCentavos) : 'Saldo no disponible'}</strong></div>)}</div>}
-            </div>}
           </div>
         </article>;
       })}
     </div>}
+    <Dialog
+      open={eventoSeleccionado !== null}
+      onClose={() => setEventoSeleccionado(null)}
+      fullWidth
+      maxWidth="md"
+      aria-labelledby="detalle-evento-titulo"
+    >
+      {eventoSeleccionado && detalleSeleccionado && IconoSeleccionado && <>
+        <DialogTitle id="detalle-evento-titulo" className="detalle-dialogo-titulo">
+          <span>Información del evento</span>
+          <Button onClick={() => setEventoSeleccionado(null)} aria-label="Cerrar detalle" color="inherit" size="small" startIcon={<CloseIcon />}>
+            Cerrar
+          </Button>
+        </DialogTitle>
+        <DialogContent dividers className="detalle-dialogo-contenido">
+          <div className="detalle-dialogo-resumen">
+            <div>
+              <strong>{formatearNombreEvento(eventoSeleccionado.eventType)}</strong>
+              <small>{eventoSeleccionado.producer} · {new Date(eventoSeleccionado.occurredAt).toLocaleString('es-GT')}</small>
+            </div>
+            <Chip
+              icon={<IconoSeleccionado />}
+              label={eventoSeleccionado.severity}
+              className={`severidad-chip severidad-chip-${eventoSeleccionado.severity.toLowerCase()}`}
+            />
+          </div>
+          <div className="detalle-grid">
+            <div className="detalle-item"><span>Identificador del evento</span><strong>{eventoSeleccionado.eventId}</strong></div>
+            <div className="detalle-item"><span>CorrelationId</span><strong>{eventoSeleccionado.correlationId}</strong></div>
+            {eventoSeleccionado.causationId && <div className="detalle-item"><span>CausationId</span><strong>{eventoSeleccionado.causationId}</strong></div>}
+            {eventoSeleccionado.version !== undefined && <div className="detalle-item"><span>Versión</span><strong>{eventoSeleccionado.version}</strong></div>}
+            <div className="detalle-item"><span>Fecha del evento</span><strong>{new Date(eventoSeleccionado.occurredAt).toLocaleString('es-GT')}</strong></div>
+            {eventoSeleccionado.recordedAt && <div className="detalle-item"><span>Fecha registrada</span><strong>{new Date(eventoSeleccionado.recordedAt).toLocaleString('es-GT')}</strong></div>}
+            {detalleSeleccionado.detalles.map(item => <div className="detalle-item" key={`${eventoSeleccionado.id}-${item.etiqueta}`}><span>{item.etiqueta}</span><strong>{item.valor}</strong></div>)}
+          </div>
+          {detalleSeleccionado.cuentas.length > 0 && <div className="detalle-cuentas"><strong>Cuentas consultadas</strong>{detalleSeleccionado.cuentas.map((cuenta, indice) => <div className="cuenta-detalle" key={String(cuenta.idCuenta ?? indice)}><span>{String(cuenta.idCuenta ?? 'Cuenta sin identificador')}</span><strong>{esNumero(cuenta.saldoCentavos) ? formatearMonto(cuenta.saldoCentavos) : 'Saldo no disponible'}</strong></div>)}</div>}
+          <details className="detalle-payload">
+            <summary>Payload completo del evento</summary>
+            <pre>{JSON.stringify(eventoSeleccionado.payload, null, 2)}</pre>
+          </details>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEventoSeleccionado(null)} variant="contained">Cerrar</Button>
+        </DialogActions>
+      </>}
+    </Dialog>
   </>;
 }
