@@ -296,7 +296,6 @@ func construirCorreoOperacion(envelope *events.EventEnvelope, rule notificationR
 	}
 
 	var cuerpo strings.Builder
-	escapar := html.EscapeString
 	fmt.Fprintf(&cuerpo, `<!doctype html>
 <html lang="es"><head><meta charset="UTF-8"></head>
 <body style="margin:0;background:#eef4f8;font-family:Arial,Helvetica,sans-serif;color:#173f61;">
@@ -311,7 +310,7 @@ func construirCorreoOperacion(envelope *events.EventEnvelope, rule notificationR
       <div style="border:1px solid #dbe5ec;border-radius:10px;overflow:hidden;">
         <div style="padding:16px 18px;background:%s;color:%s;font-size:18px;font-weight:800;">%s</div>
         <div style="padding:18px;">
-          <table role="presentation" style="width:100%%;border-collapse:collapse;font-size:14px;">`, escaper(icon), escaper(titulo), escaper(nombreCorreo(fullName)), escaper(greeting), colorSuave, colorPrincipal, escaper(strings.ToUpper(estado)))
+          <table role="presentation" style="width:100%%;border-collapse:collapse;font-size:14px;">`, html.EscapeString(icon), html.EscapeString(titulo), html.EscapeString(nombreCorreo(fullName)), html.EscapeString(greeting), colorSuave, colorPrincipal, html.EscapeString(strings.ToUpper(estado)))
 
 	agregarFilaHTML(&cuerpo, "Operación", tipoOperacionCorreo(envelope.Type))
 	agregarFilaHTML(&cuerpo, "Estado", estado)
@@ -347,7 +346,7 @@ func construirCorreoOperacion(envelope *events.EventEnvelope, rule notificationR
     </div>
     <div style="padding:16px 24px;background:#0b1d35;color:#d9e7f1;text-align:center;font-size:12px;">Este correo fue generado automáticamente. Por favor, no respondas a este mensaje.</div>
   </div>
-</body></html>`, colorPrincipal, escaper(rule.bodySummary))
+</body></html>`, colorPrincipal, html.EscapeString(rule.bodySummary))
 	return cuerpo.String()
 }
 
