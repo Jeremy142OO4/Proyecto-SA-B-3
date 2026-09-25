@@ -141,7 +141,7 @@ jobs:
     name: Construir y publicar imagenes versionadas
     runs-on: ubuntu-latest
     needs: validacion-sistema
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/v'))
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/v'))
     strategy:
       fail-fast: false
       matrix:
@@ -293,14 +293,18 @@ jobs:
 
       - name: Evitar competencia de Outbox con produccion
         run: |
-          # Dev y prod comparten las bases de datos, pero usan RabbitMQ distintos.
-          # Solo un entorno puede publicar esos registros Outbox a la vez.
+          kubectl -n bank-usac delete hpa customer-service account-service payment-service transaction-service notification-audit-service --ignore-not-found
           kubectl -n bank-usac scale \
+            deployment/rabbitmq \
+            deployment/api-gateway \
             deployment/customer-service \
             deployment/account-service \
             deployment/payment-service \
             deployment/transaction-service \
+            deployment/notification-audit-service \
+            deployment/frontend \
             --replicas=0 --timeout=60s || true
+          kubectl -n bank-usac delete service frontend --ignore-not-found
 
       - name: Aplicar manifiestos dev con rolling update
         env:
@@ -317,7 +321,7 @@ jobs:
   desplegar-produccion:
     name: Desplegar en Kubernetes prod
     runs-on: ubuntu-latest
-    needs: construir-publicar-imagenes
+    needs: validacion-sistema
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     environment: production
     env:
@@ -325,10 +329,22 @@ jobs:
       GKE_CLUSTER: ${{ secrets.GKE_CLUSTER }}
       GKE_ZONE: ${{ secrets.GKE_ZONE }}
       KUBE_NAMESPACE: bank-usac
-      IMAGE_TAG: ${{ github.sha }}
     steps:
-      - name: Descargar codigo
+      - name: Descargar codigo con historial y tags
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Obtener version publicada
+        id: version
+        shell: bash
+        run: |
+          VERSION="$(git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' --abbrev=0 2>/dev/null || true)"
+          if [ -z "$VERSION" ]; then
+            echo "No existe una version publicada. Cree un tag vX.Y.Z antes de promover a main."
+            exit 1
+          fi
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Autenticar en Google Cloud
         uses: google-github-actions/auth@v2
@@ -351,6 +367,7 @@ jobs:
         id: frontend-cloud-run
         env:
           PUBLIC_HOST: ${{ secrets.PUBLIC_HOST }}
+          IMAGE_TAG: ${{ steps.version.outputs.tag }}
         shell: bash
         run: |
           BACKEND_HOST="${PUBLIC_HOST#http://}"
@@ -405,7 +422,7 @@ jobs:
 
       - name: Evitar competencia de Outbox con desarrollo
         run: |
-          kubectl -n bank-usac-dev delete hpa payment-service transaction-service --ignore-not-found
+          kubectl -n bank-usac-dev delete hpa customer-service account-service payment-service transaction-service notification-audit-service --ignore-not-found
           kubectl -n bank-usac-dev scale \
             deployment/rabbitmq \
             deployment/api-gateway \
@@ -422,6 +439,7 @@ jobs:
       - name: Aplicar imagen publicada y rolling update
         env:
           PUBLIC_HOST: ${{ secrets.PUBLIC_HOST }}
+          IMAGE_TAG: ${{ steps.version.outputs.tag }}
           FRONTEND_URL: ${{ steps.frontend-cloud-run.outputs.url }}
         run: |
           kubectl kustomize infrastructure/kubernetes/overlays/prod \

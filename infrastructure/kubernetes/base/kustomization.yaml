@@ -13,3 +13,6 @@ resources:
   - frontend.yaml
   - hpa-payment.yaml
   - hpa-transaction.yaml
+  - hpa-customer.yaml
+  - hpa-account.yaml
+  - hpa-notification-audit.yaml
