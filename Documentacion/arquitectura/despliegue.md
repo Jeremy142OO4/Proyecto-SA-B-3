@@ -2,7 +2,7 @@
 
 El presente documento describe el despliegue de **Bank USAC** durante la Fase 2. La solución utiliza Google Cloud, un clúster administrado de Google Kubernetes Engine (GKE), RabbitMQ para comunicación asíncrona y cinco instancias independientes de Cloud SQL para PostgreSQL.
 
-![Diagrama de despliegue de Bank USAC](../Imagenes/DespliegueFinal.drawio.png)
+![Diagrama de despliegue de Bank USAC](../Imagenes/DiagramaDespliegueFinal.drawio.png)
 
 ## 1. Vista general
 
