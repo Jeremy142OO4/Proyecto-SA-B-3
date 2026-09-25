@@ -115,7 +115,8 @@ Después de un merge a `develop`, el pipeline ejecuta adicionalmente:
 
 - Actualiza el Deployment de Kubernetes en el namespace `bank-usac-dev` usando `kubectl set image`.
 - Espera rollout completo: `kubectl rollout status deployment/<servicio> -n bank-usac-dev`.
-- Si el rollout falla, se ejecuta automáticamente `kubectl rollout undo`.
+- Antes del despliegue se guardan las revisiones estables de todos los Deployments y de Cloud Run.
+- Si el rollout falla, se ejecuta automáticamente `kubectl rollout undo --to-revision` para todos los Deployments y se restaura el tráfico de Cloud Run a la revisión anterior.
 
 ---
 
@@ -179,7 +180,7 @@ strategy:
 
 - `kubectl rollout status` espera hasta 5 minutos.
 - Prueba de humo: solicitud HTTP al endpoint `/health` del API Gateway.
-- Si falla, ejecuta `kubectl rollout undo` automáticamente y notifica al equipo.
+- Si falla cualquier rollout o la verificación de exposición, revierte todos los Deployments a sus revisiones anteriores y devuelve el tráfico de Cloud Run a la revisión estable previa. El workflow conserva el estado fallido para detener la promoción.
 
 ---
 
