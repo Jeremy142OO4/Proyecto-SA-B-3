@@ -235,6 +235,24 @@ jobs:
           location: ${{ env.GKE_ZONE }}
           project_id: ${{ env.GCP_PROJECT_ID }}
 
+      - name: Guardar estado estable de desarrollo
+        id: estado-anterior-dev
+        shell: bash
+        run: |
+          REVISION_CLOUD_RUN="$(gcloud run services describe bank-usac-frontend-dev \
+            --region us-central1 \
+            --format='value(status.latestReadyRevisionName)' 2>/dev/null || true)"
+          echo "revision_cloud_run=$REVISION_CLOUD_RUN" >> "$GITHUB_OUTPUT"
+
+          : > /tmp/revisiones-kubernetes.txt
+          for despliegue in rabbitmq api-gateway customer-service account-service payment-service transaction-service notification-audit-service frontend; do
+            revision="$(kubectl -n "$KUBE_NAMESPACE" get deployment "$despliegue" \
+              -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}' 2>/dev/null || true)"
+            if [ -n "$revision" ]; then
+              echo "$despliegue $revision" >> /tmp/revisiones-kubernetes.txt
+            fi
+          done
+
       - name: Desplegar frontend dev en Cloud Run
         id: frontend-cloud-run
         env:
@@ -318,6 +336,36 @@ jobs:
             kubectl -n "$KUBE_NAMESPACE" rollout status "deployment/$despliegue" --timeout=180s
           done
 
+      - name: Rollback automatico de desarrollo
+        if: failure()
+        env:
+          REVISION_CLOUD_RUN: ${{ steps.estado-anterior-dev.outputs.revision_cloud_run }}
+        shell: bash
+        run: |
+          set +e
+          resultado=0
+
+          if [ -s /tmp/revisiones-kubernetes.txt ]; then
+            while read -r despliegue revision; do
+              echo "Restaurando $despliegue a la revision $revision"
+              kubectl -n "$KUBE_NAMESPACE" rollout undo "deployment/$despliegue" --to-revision="$revision" || resultado=1
+            done < /tmp/revisiones-kubernetes.txt
+
+            while read -r despliegue revision; do
+              kubectl -n "$KUBE_NAMESPACE" rollout status "deployment/$despliegue" --timeout=180s || resultado=1
+            done < /tmp/revisiones-kubernetes.txt
+          fi
+
+          if [ -n "$REVISION_CLOUD_RUN" ]; then
+            echo "Restaurando Cloud Run a $REVISION_CLOUD_RUN"
+            gcloud run services update-traffic bank-usac-frontend-dev \
+              --region us-central1 \
+              --to-revisions "$REVISION_CLOUD_RUN=100" \
+              --quiet || resultado=1
+          fi
+
+          exit "$resultado"
+
   desplegar-produccion:
     name: Desplegar en Kubernetes prod
     runs-on: ubuntu-latest
@@ -362,6 +410,24 @@ jobs:
           cluster_name: ${{ env.GKE_CLUSTER }}
           location: ${{ env.GKE_ZONE }}
           project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Guardar estado estable de produccion
+        id: estado-anterior-prod
+        shell: bash
+        run: |
+          REVISION_CLOUD_RUN="$(gcloud run services describe bank-usac-frontend-prod \
+            --region us-central1 \
+            --format='value(status.latestReadyRevisionName)' 2>/dev/null || true)"
+          echo "revision_cloud_run=$REVISION_CLOUD_RUN" >> "$GITHUB_OUTPUT"
+
+          : > /tmp/revisiones-kubernetes.txt
+          for despliegue in rabbitmq api-gateway customer-service account-service payment-service transaction-service notification-audit-service frontend; do
+            revision="$(kubectl -n "$KUBE_NAMESPACE" get deployment "$despliegue" \
+              -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}' 2>/dev/null || true)"
+            if [ -n "$revision" ]; then
+              echo "$despliegue $revision" >> /tmp/revisiones-kubernetes.txt
+            fi
+          done
 
       - name: Desplegar frontend prod en Cloud Run
         id: frontend-cloud-run
@@ -457,3 +523,33 @@ jobs:
           done
           test "$EXTERNAL_IP" = "$PUBLIC_HOST"
           kubectl -n "$KUBE_NAMESPACE" get deployments,services,hpa
+
+      - name: Rollback automatico de produccion
+        if: failure()
+        env:
+          REVISION_CLOUD_RUN: ${{ steps.estado-anterior-prod.outputs.revision_cloud_run }}
+        shell: bash
+        run: |
+          set +e
+          resultado=0
+
+          if [ -s /tmp/revisiones-kubernetes.txt ]; then
+            while read -r despliegue revision; do
+              echo "Restaurando $despliegue a la revision $revision"
+              kubectl -n "$KUBE_NAMESPACE" rollout undo "deployment/$despliegue" --to-revision="$revision" || resultado=1
+            done < /tmp/revisiones-kubernetes.txt
+
+            while read -r despliegue revision; do
+              kubectl -n "$KUBE_NAMESPACE" rollout status "deployment/$despliegue" --timeout=180s || resultado=1
+            done < /tmp/revisiones-kubernetes.txt
+          fi
+
+          if [ -n "$REVISION_CLOUD_RUN" ]; then
+            echo "Restaurando Cloud Run a $REVISION_CLOUD_RUN"
+            gcloud run services update-traffic bank-usac-frontend-prod \
+              --region us-central1 \
+              --to-revisions "$REVISION_CLOUD_RUN=100" \
+              --quiet || resultado=1
+          fi
+
+          exit "$resultado"
