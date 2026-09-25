@@ -8,7 +8,7 @@ Este documento extiende la vista de componentes C4 (Nivel 3). La Fase 1 document
 El Transaction Service coordina el flujo de transferencias bancarias de forma asíncrona mediante una Saga de coreografía. En la Fase 2 se extiende con componentes de historial y trazabilidad.
 
 
-![Diagrama entidad-relación de Transaction Service](../Imagenes/componentes.drawio%20(1).png)
+![Diagrama entidad-relación de Transaction Service](../Imagenes/componentesv3.drawio.png)
 
 ### Componentes de Transaction Service
 
