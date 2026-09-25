@@ -502,6 +502,12 @@ jobs:
           # El Service de desarrollo retenia la IP estatica que ahora usara produccion.
           kubectl -n bank-usac-dev delete service frontend --ignore-not-found
 
+      - name: Desactivar frontend dev en Cloud Run
+        run: |
+          gcloud run services delete bank-usac-frontend-dev \
+            --region us-central1 \
+            --quiet || true
+
       - name: Aplicar imagen publicada y rolling update
         env:
           PUBLIC_HOST: ${{ secrets.PUBLIC_HOST }}
