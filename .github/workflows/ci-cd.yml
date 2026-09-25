@@ -332,8 +332,6 @@ jobs:
           kubectl kustomize infrastructure/kubernetes/overlays/cloud-dev \
             | sed "s|:v2.0.0|:${IMAGE_TAG}|g; s|__PUBLIC_HOST__|${PUBLIC_HOST:-bank-usac.example.com}|g; s|__FRONTEND_URL__|${FRONTEND_URL}|g" \
             | kubectl apply -f -
-          kubectl -n "$KUBE_NAMESPACE" set image deployment/payment-service \
-            payment-service=docker.io/jeremy142004/bank-usac-payment-service:prueba-rollback-inexistente
           for despliegue in rabbitmq api-gateway customer-service account-service payment-service transaction-service notification-audit-service frontend; do
             kubectl -n "$KUBE_NAMESPACE" rollout status "deployment/$despliegue" --timeout=180s
           done
