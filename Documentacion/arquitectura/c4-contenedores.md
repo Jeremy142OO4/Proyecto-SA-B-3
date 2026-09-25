@@ -12,7 +12,7 @@ El diagrama de contenedores (C4, nivel 2) descompone el sistema Bank USAC en las
 
 ## Diagrama de contenedores
 
-![Diagrama de contenedores de Bank USAC](../Imagenes/contenedores.drawio.png)
+![Diagrama de contenedores de Bank USAC](../Imagenes/componentesv3.drawio.png)
 
 
 ## Contenedores de aplicación

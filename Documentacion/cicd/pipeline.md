@@ -227,4 +227,4 @@ El pipeline usa una estrategia de matrix para ejecutar jobs en paralelo por serv
 
 ## Diagrama de flujo del pipeline
 
-![Diagrama de flujo pipeline](../Imagenes/Diagrama%20de%20flujo%20del%20Pipeline%20CI_CD%20—%20Bank%20USAC.drawio.png)
+![Diagrama de flujo pipeline](../Imagenes/DiagramaFlujoPipeline.drawio.png)

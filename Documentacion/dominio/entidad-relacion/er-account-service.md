@@ -4,7 +4,7 @@ El diagrama representa la estructura persistente administrada exclusivamente por
 
 > **Fase 2:** Se añaden los campos `account_type`, `min_balance` y `transaction_fee` a la tabla `accounts` para dar soporte a los tipos **AHORRO** y **CORRIENTE**, cada uno con saldo mínimo y comisión por operación diferenciados.
 
-![Diagrama entidad-relación de Account Service](../../Imagenes/ER_Account.png)
+![Diagrama entidad-relación de Account Service](../../Imagenes/ER%20Account%20Service.png)
 
 ## Entidades principales
 

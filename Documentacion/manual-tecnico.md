@@ -247,7 +247,7 @@ Esto asegura que Kubernetes levante un Pod nuevo con la versión actualizada y v
 El ciclo de vida del software está 100 % automatizado sin despliegues manuales en producción.
 
 ### 6.1. Flujo de ramas y pipeline
-![flujo de pipeline](./Imagenes/Diagrama%20de%20flujo%20del%20Pipeline%20CI_CD%20—%20Bank%20USAC.drawio.png)
+![flujo de pipeline](./Imagenes/DiagramaFlujoPipeline.drawio.png)
 
 ### 6.2. Fases obligatorias del pipeline
 
