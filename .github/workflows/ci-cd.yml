@@ -1,7 +1,5 @@
 name: CI/CD Bank USAC
 
-# Commit de prueba para activar el despliegue completo de todos los componentes.
-
 on:
   push:
     branches:
@@ -152,18 +150,27 @@ jobs:
           echo "hay_componentes=$([[ "$cantidad_componentes" -gt 0 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
           echo "Componentes seleccionados: $componentes"
+          {
+            echo "## Componentes detectados"
+            echo "| Componente | Estado |"
+            echo "| --- | --- |"
+            if [[ "$gateway" == "true" ]]; then echo "| API Gateway | ✅ Ejecutar |"; else echo "| API Gateway | ⏭️ Omitido |"; fi
+            if [[ "$customer" == "true" ]]; then echo "| Clientes | ✅ Ejecutar |"; else echo "| Clientes | ⏭️ Omitido |"; fi
+            if [[ "$account" == "true" ]]; then echo "| Cuentas | ✅ Ejecutar |"; else echo "| Cuentas | ⏭️ Omitido |"; fi
+            if [[ "$transaction" == "true" ]]; then echo "| Transacciones | ✅ Ejecutar |"; else echo "| Transacciones | ⏭️ Omitido |"; fi
+            if [[ "$payment" == "true" ]]; then echo "| Pagos | ✅ Ejecutar |"; else echo "| Pagos | ⏭️ Omitido |"; fi
+            if [[ "$notification" == "true" ]]; then echo "| Notificaciones y Auditoria | ✅ Ejecutar |"; else echo "| Notificaciones y Auditoria | ⏭️ Omitido |"; fi
+            if [[ "$frontend" == "true" ]]; then echo "| Frontend | ✅ Ejecutar |"; else echo "| Frontend | ⏭️ Omitido |"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
-  build-test-go:
-    name: Build y test - ${{ matrix.nombre }}
+  build-test-gateway:
+    name: Build y test - API Gateway
     runs-on: ubuntu-latest
     needs: detectar-cambios
-    if: needs.detectar-cambios.outputs.hay_go == 'true'
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.detectar-cambios.outputs.matriz_go) }}
+    if: contains(fromJSON(needs.detectar-cambios.outputs.componentes), 'api-gateway')
     defaults:
       run:
-        working-directory: ${{ matrix.directorio }}
+        working-directory: gateway/api-gateway
     steps:
       - name: Descargar codigo
         uses: actions/checkout@v4
@@ -171,9 +178,9 @@ jobs:
       - name: Configurar Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: ${{ matrix.directorio }}/go.mod
+          go-version-file: gateway/api-gateway/go.mod
           cache: true
-          cache-dependency-path: ${{ matrix.directorio }}/go.sum
+          cache-dependency-path: gateway/api-gateway/go.sum
 
       - name: Build
         run: go build ./...
@@ -184,15 +191,225 @@ jobs:
         run: go list ./... | grep -v '/test/' | xargs go test -cover -count=1
 
       - name: Pruebas unitarias por categoria
-        if: matrix.categorias && env.OMITIR_PRUEBAS != 'true'
+        if: false && env.OMITIR_PRUEBAS != 'true'
         run: go test -v -count=1 ./test/unitarias
 
       - name: Pruebas de integracion por categoria
-        if: matrix.categorias && env.OMITIR_PRUEBAS != 'true'
+        if: false && env.OMITIR_PRUEBAS != 'true'
         run: go test -v -count=1 ./test/integracion
 
       - name: Pruebas E2E por categoria
-        if: matrix.categorias && env.OMITIR_PRUEBAS != 'true'
+        if: false && env.OMITIR_PRUEBAS != 'true'
+        run: go test -v -count=1 ./test/e2e
+
+      - name: Validacion estatica
+        run: go vet ./...
+
+  build-test-customer:
+    name: Build y test - Clientes
+    runs-on: ubuntu-latest
+    needs: detectar-cambios
+    if: contains(fromJSON(needs.detectar-cambios.outputs.componentes), 'customer-service')
+    defaults:
+      run:
+        working-directory: services/service-customer
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: services/service-customer/go.mod
+          cache: true
+          cache-dependency-path: services/service-customer/go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Pruebas existentes del servicio
+        if: env.OMITIR_PRUEBAS != 'true'
+        shell: bash
+        run: go list ./... | grep -v '/test/' | xargs go test -cover -count=1
+
+      - name: Pruebas unitarias por categoria
+        if: true && env.OMITIR_PRUEBAS != 'true'
+        run: go test -v -count=1 ./test/unitarias
+
+      - name: Pruebas de integracion por categoria
+        if: true && env.OMITIR_PRUEBAS != 'true'
+        run: go test -v -count=1 ./test/integracion
+
+      - name: Pruebas E2E por categoria
+        if: true && env.OMITIR_PRUEBAS != 'true'
+        run: go test -v -count=1 ./test/e2e
+
+      - name: Validacion estatica
+        run: go vet ./...
+
+  build-test-account:
+    name: Build y test - Cuentas
+    runs-on: ubuntu-latest
+    needs: detectar-cambios
+    if: contains(fromJSON(needs.detectar-cambios.outputs.componentes), 'account-service')
+    defaults:
+      run:
+        working-directory: services/account-service
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: services/account-service/go.mod
+          cache: true
+          cache-dependency-path: services/account-service/go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Pruebas existentes del servicio
+        if: env.OMITIR_PRUEBAS != 'true'
+        shell: bash
+        run: go list ./... | grep -v '/test/' | xargs go test -cover -count=1
+
+      - name: Pruebas unitarias por categoria
+        if: true && env.OMITIR_PRUEBAS != 'true'
+        run: go test -v -count=1 ./test/unitarias
+
+      - name: Pruebas de integracion por categoria
+        if: true && env.OMITIR_PRUEBAS != 'true'
+        run: go test -v -count=1 ./test/integracion
+
+      - name: Pruebas E2E por categoria
+        if: true && env.OMITIR_PRUEBAS != 'true'
+        run: go test -v -count=1 ./test/e2e
+
+      - name: Validacion estatica
+        run: go vet ./...
+
+  build-test-transaction:
+    name: Build y test - Transacciones
+    runs-on: ubuntu-latest
+    needs: detectar-cambios
+    if: contains(fromJSON(needs.detectar-cambios.outputs.componentes), 'transaction-service')
+    defaults:
+      run:
+        working-directory: services/transaction-service
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: services/transaction-service/go.mod
+          cache: true
+          cache-dependency-path: services/transaction-service/go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Pruebas existentes del servicio
+        if: env.OMITIR_PRUEBAS != 'true'
+        shell: bash
+        run: go list ./... | grep -v '/test/' | xargs go test -cover -count=1
+
+      - name: Pruebas unitarias por categoria
+        if: true && env.OMITIR_PRUEBAS != 'true'
+        run: go test -v -count=1 ./test/unitarias
+
+      - name: Pruebas de integracion por categoria
+        if: true && env.OMITIR_PRUEBAS != 'true'
+        run: go test -v -count=1 ./test/integracion
+
+      - name: Pruebas E2E por categoria
+        if: true && env.OMITIR_PRUEBAS != 'true'
+        run: go test -v -count=1 ./test/e2e
+
+      - name: Validacion estatica
+        run: go vet ./...
+
+  build-test-payment:
+    name: Build y test - Pagos
+    runs-on: ubuntu-latest
+    needs: detectar-cambios
+    if: contains(fromJSON(needs.detectar-cambios.outputs.componentes), 'payment-service')
+    defaults:
+      run:
+        working-directory: services/payment-service
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: services/payment-service/go.mod
+          cache: true
+          cache-dependency-path: services/payment-service/go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Pruebas existentes del servicio
+        if: env.OMITIR_PRUEBAS != 'true'
+        shell: bash
+        run: go list ./... | grep -v '/test/' | xargs go test -cover -count=1
+
+      - name: Pruebas unitarias por categoria
+        if: true && env.OMITIR_PRUEBAS != 'true'
+        run: go test -v -count=1 ./test/unitarias
+
+      - name: Pruebas de integracion por categoria
+        if: true && env.OMITIR_PRUEBAS != 'true'
+        run: go test -v -count=1 ./test/integracion
+
+      - name: Pruebas E2E por categoria
+        if: true && env.OMITIR_PRUEBAS != 'true'
+        run: go test -v -count=1 ./test/e2e
+
+      - name: Validacion estatica
+        run: go vet ./...
+
+  build-test-notification:
+    name: Build y test - Notificaciones y Auditoria
+    runs-on: ubuntu-latest
+    needs: detectar-cambios
+    if: contains(fromJSON(needs.detectar-cambios.outputs.componentes), 'notification-audit-service')
+    defaults:
+      run:
+        working-directory: services/service-notification-audit
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: services/service-notification-audit/go.mod
+          cache: true
+          cache-dependency-path: services/service-notification-audit/go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Pruebas existentes del servicio
+        if: env.OMITIR_PRUEBAS != 'true'
+        shell: bash
+        run: go list ./... | grep -v '/test/' | xargs go test -cover -count=1
+
+      - name: Pruebas unitarias por categoria
+        if: true && env.OMITIR_PRUEBAS != 'true'
+        run: go test -v -count=1 ./test/unitarias
+
+      - name: Pruebas de integracion por categoria
+        if: true && env.OMITIR_PRUEBAS != 'true'
+        run: go test -v -count=1 ./test/integracion
+
+      - name: Pruebas E2E por categoria
+        if: true && env.OMITIR_PRUEBAS != 'true'
         run: go test -v -count=1 ./test/e2e
 
       - name: Validacion estatica
@@ -231,13 +448,23 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - detectar-cambios
-      - build-test-go
+      - build-test-gateway
+      - build-test-customer
+      - build-test-account
+      - build-test-transaction
+      - build-test-payment
+      - build-test-notification
       - build-test-frontend
     if: >-
       always() &&
       needs.detectar-cambios.outputs.hay_componentes == 'true' &&
       needs.detectar-cambios.result == 'success' &&
-      (needs.build-test-go.result == 'success' || needs.build-test-go.result == 'skipped') &&
+      (needs.build-test-gateway.result == 'success' || needs.build-test-gateway.result == 'skipped') &&
+      (needs.build-test-customer.result == 'success' || needs.build-test-customer.result == 'skipped') &&
+      (needs.build-test-account.result == 'success' || needs.build-test-account.result == 'skipped') &&
+      (needs.build-test-transaction.result == 'success' || needs.build-test-transaction.result == 'skipped') &&
+      (needs.build-test-payment.result == 'success' || needs.build-test-payment.result == 'skipped') &&
+      (needs.build-test-notification.result == 'success' || needs.build-test-notification.result == 'skipped') &&
       (needs.build-test-frontend.result == 'success' || needs.build-test-frontend.result == 'skipped')
     steps:
       - name: Descargar codigo
@@ -259,19 +486,17 @@ jobs:
       - name: Validar configuracion de Compose
         run: docker compose config --quiet
 
-  construir-publicar-imagenes:
-    name: Construir y publicar - ${{ matrix.nombre }}
+  publicar-gateway:
+    name: Publicar - API Gateway
     runs-on: ubuntu-latest
     needs:
       - detectar-cambios
       - validacion-sistema
     if: >-
+      always() && needs.validacion-sistema.result == 'success' &&
       github.event_name == 'push' &&
-      needs.detectar-cambios.outputs.hay_componentes == 'true' &&
+      contains(fromJSON(needs.detectar-cambios.outputs.componentes), 'api-gateway') &&
       (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/v'))
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.detectar-cambios.outputs.matriz_imagenes) }}
     steps:
       - name: Descargar codigo
         uses: actions/checkout@v4
@@ -301,11 +526,287 @@ jobs:
       - name: Construir y publicar imagen versionada
         uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.directorio }}
+          context: gateway/api-gateway
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.imagen }}:${{ steps.version.outputs.tag }}
-          cache-from: type=gha,scope=${{ matrix.imagen }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.imagen }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/bank-usac-api-gateway:${{ steps.version.outputs.tag }}
+          cache-from: type=gha,scope=bank-usac-api-gateway
+          cache-to: type=gha,mode=max,scope=bank-usac-api-gateway
+
+  publicar-customer:
+    name: Publicar - Clientes
+    runs-on: ubuntu-latest
+    needs:
+      - detectar-cambios
+      - validacion-sistema
+    if: >-
+      always() && needs.validacion-sistema.result == 'success' &&
+      github.event_name == 'push' &&
+      contains(fromJSON(needs.detectar-cambios.outputs.componentes), 'customer-service') &&
+      (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/v'))
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Determinar version de imagen
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="$GITHUB_REF_NAME"
+          elif [[ "$GITHUB_REF" == refs/heads/release/* ]]; then
+            VERSION="${GITHUB_REF_NAME#release/}"
+          else
+            VERSION="$GITHUB_SHA"
+          fi
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Iniciar sesion en Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Configurar Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Construir y publicar imagen versionada
+        uses: docker/build-push-action@v6
+        with:
+          context: services/service-customer
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/bank-usac-customer-service:${{ steps.version.outputs.tag }}
+          cache-from: type=gha,scope=bank-usac-customer-service
+          cache-to: type=gha,mode=max,scope=bank-usac-customer-service
+
+  publicar-account:
+    name: Publicar - Cuentas
+    runs-on: ubuntu-latest
+    needs:
+      - detectar-cambios
+      - validacion-sistema
+    if: >-
+      always() && needs.validacion-sistema.result == 'success' &&
+      github.event_name == 'push' &&
+      contains(fromJSON(needs.detectar-cambios.outputs.componentes), 'account-service') &&
+      (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/v'))
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Determinar version de imagen
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="$GITHUB_REF_NAME"
+          elif [[ "$GITHUB_REF" == refs/heads/release/* ]]; then
+            VERSION="${GITHUB_REF_NAME#release/}"
+          else
+            VERSION="$GITHUB_SHA"
+          fi
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Iniciar sesion en Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Configurar Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Construir y publicar imagen versionada
+        uses: docker/build-push-action@v6
+        with:
+          context: services/account-service
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/bank-usac-account-service:${{ steps.version.outputs.tag }}
+          cache-from: type=gha,scope=bank-usac-account-service
+          cache-to: type=gha,mode=max,scope=bank-usac-account-service
+
+  publicar-transaction:
+    name: Publicar - Transacciones
+    runs-on: ubuntu-latest
+    needs:
+      - detectar-cambios
+      - validacion-sistema
+    if: >-
+      always() && needs.validacion-sistema.result == 'success' &&
+      github.event_name == 'push' &&
+      contains(fromJSON(needs.detectar-cambios.outputs.componentes), 'transaction-service') &&
+      (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/v'))
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Determinar version de imagen
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="$GITHUB_REF_NAME"
+          elif [[ "$GITHUB_REF" == refs/heads/release/* ]]; then
+            VERSION="${GITHUB_REF_NAME#release/}"
+          else
+            VERSION="$GITHUB_SHA"
+          fi
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Iniciar sesion en Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Configurar Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Construir y publicar imagen versionada
+        uses: docker/build-push-action@v6
+        with:
+          context: services/transaction-service
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/bank-usac-transaction-service:${{ steps.version.outputs.tag }}
+          cache-from: type=gha,scope=bank-usac-transaction-service
+          cache-to: type=gha,mode=max,scope=bank-usac-transaction-service
+
+  publicar-payment:
+    name: Publicar - Pagos
+    runs-on: ubuntu-latest
+    needs:
+      - detectar-cambios
+      - validacion-sistema
+    if: >-
+      always() && needs.validacion-sistema.result == 'success' &&
+      github.event_name == 'push' &&
+      contains(fromJSON(needs.detectar-cambios.outputs.componentes), 'payment-service') &&
+      (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/v'))
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Determinar version de imagen
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="$GITHUB_REF_NAME"
+          elif [[ "$GITHUB_REF" == refs/heads/release/* ]]; then
+            VERSION="${GITHUB_REF_NAME#release/}"
+          else
+            VERSION="$GITHUB_SHA"
+          fi
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Iniciar sesion en Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Configurar Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Construir y publicar imagen versionada
+        uses: docker/build-push-action@v6
+        with:
+          context: services/payment-service
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/bank-usac-payment-service:${{ steps.version.outputs.tag }}
+          cache-from: type=gha,scope=bank-usac-payment-service
+          cache-to: type=gha,mode=max,scope=bank-usac-payment-service
+
+  publicar-notification:
+    name: Publicar - Notificaciones y Auditoria
+    runs-on: ubuntu-latest
+    needs:
+      - detectar-cambios
+      - validacion-sistema
+    if: >-
+      always() && needs.validacion-sistema.result == 'success' &&
+      github.event_name == 'push' &&
+      contains(fromJSON(needs.detectar-cambios.outputs.componentes), 'notification-audit-service') &&
+      (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/v'))
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Determinar version de imagen
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="$GITHUB_REF_NAME"
+          elif [[ "$GITHUB_REF" == refs/heads/release/* ]]; then
+            VERSION="${GITHUB_REF_NAME#release/}"
+          else
+            VERSION="$GITHUB_SHA"
+          fi
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Iniciar sesion en Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Configurar Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Construir y publicar imagen versionada
+        uses: docker/build-push-action@v6
+        with:
+          context: services/service-notification-audit
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/bank-usac-notification-audit-service:${{ steps.version.outputs.tag }}
+          cache-from: type=gha,scope=bank-usac-notification-audit-service
+          cache-to: type=gha,mode=max,scope=bank-usac-notification-audit-service
+
+  publicar-frontend:
+    name: Publicar - Frontend
+    runs-on: ubuntu-latest
+    needs:
+      - detectar-cambios
+      - validacion-sistema
+    if: >-
+      always() && needs.validacion-sistema.result == 'success' &&
+      github.event_name == 'push' &&
+      contains(fromJSON(needs.detectar-cambios.outputs.componentes), 'frontend') &&
+      (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/v'))
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Determinar version de imagen
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="$GITHUB_REF_NAME"
+          elif [[ "$GITHUB_REF" == refs/heads/release/* ]]; then
+            VERSION="${GITHUB_REF_NAME#release/}"
+          else
+            VERSION="$GITHUB_SHA"
+          fi
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Iniciar sesion en Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Configurar Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Construir y publicar imagen versionada
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend/bank-usac-web
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/bank-usac-frontend:${{ steps.version.outputs.tag }}
+          cache-from: type=gha,scope=bank-usac-frontend
+          cache-to: type=gha,mode=max,scope=bank-usac-frontend
 
   desplegar-desarrollo:
     name: Desplegar en Kubernetes dev
@@ -313,13 +814,26 @@ jobs:
     needs:
       - detectar-cambios
       - validacion-sistema
-      - construir-publicar-imagenes
+      - publicar-gateway
+      - publicar-customer
+      - publicar-account
+      - publicar-transaction
+      - publicar-payment
+      - publicar-notification
+      - publicar-frontend
     if: >-
+      always() &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/develop' &&
       needs.detectar-cambios.outputs.hay_componentes == 'true' &&
       needs.validacion-sistema.result == 'success' &&
-      needs.construir-publicar-imagenes.result == 'success'
+      (needs.publicar-gateway.result == 'success' || needs.publicar-gateway.result == 'skipped') &&
+      (needs.publicar-customer.result == 'success' || needs.publicar-customer.result == 'skipped') &&
+      (needs.publicar-account.result == 'success' || needs.publicar-account.result == 'skipped') &&
+      (needs.publicar-transaction.result == 'success' || needs.publicar-transaction.result == 'skipped') &&
+      (needs.publicar-payment.result == 'success' || needs.publicar-payment.result == 'skipped') &&
+      (needs.publicar-notification.result == 'success' || needs.publicar-notification.result == 'skipped') &&
+      (needs.publicar-frontend.result == 'success' || needs.publicar-frontend.result == 'skipped')
     environment: development
     env:
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
