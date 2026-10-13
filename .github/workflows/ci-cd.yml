@@ -905,6 +905,9 @@ jobs:
             --port 8080 \
             --set-env-vars "BACKEND_URL=http://${BACKEND_HOST}" \
             --quiet
+          # Restablecer el trafico tras un rollback que lo haya fijado a una revision.
+          gcloud run services update-traffic bank-usac-frontend-dev \
+            --region us-central1 --to-latest --quiet
           FRONTEND_URL="$(gcloud run services describe bank-usac-frontend-dev \
             --region us-central1 --format='value(status.url)')"
           echo "url=$FRONTEND_URL" >> "$GITHUB_OUTPUT"
@@ -1118,6 +1121,9 @@ jobs:
             --port 8080 \
             --set-env-vars "BACKEND_URL=http://${BACKEND_HOST}" \
             --quiet
+          # Restablecer el trafico tras un rollback que lo haya fijado a una revision.
+          gcloud run services update-traffic bank-usac-frontend-prod \
+            --region us-central1 --to-latest --quiet
           FRONTEND_URL="$(gcloud run services describe bank-usac-frontend-prod \
             --region us-central1 --format='value(status.url)')"
           echo "url=$FRONTEND_URL" >> "$GITHUB_OUTPUT"
