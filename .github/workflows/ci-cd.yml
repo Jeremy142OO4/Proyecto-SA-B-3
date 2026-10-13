@@ -1,5 +1,7 @@
 name: CI/CD Bank USAC
 
+# Commit de prueba para activar el despliegue completo de todos los componentes.
+
 on:
   push:
     branches:
