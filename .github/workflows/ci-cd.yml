@@ -23,31 +23,142 @@ env:
   OMITIR_PRUEBAS: "false"
 
 jobs:
+  detectar-cambios:
+    name: Detectar componentes modificados
+    runs-on: ubuntu-latest
+    outputs:
+      matriz_go: ${{ steps.filtros.outputs.matriz_go }}
+      matriz_imagenes: ${{ steps.filtros.outputs.matriz_imagenes }}
+      componentes: ${{ steps.filtros.outputs.componentes }}
+      hay_go: ${{ steps.filtros.outputs.hay_go }}
+      hay_frontend: ${{ steps.filtros.outputs.hay_frontend }}
+      hay_componentes: ${{ steps.filtros.outputs.hay_componentes }}
+    steps:
+      - name: Descargar codigo con historial
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calcular filtros por ruta
+        id: filtros
+        shell: bash
+        env:
+          EVENTO: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          SHA_ANTERIOR: ${{ github.event.before }}
+          SHA_BASE_PR: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+
+          gateway=false
+          account=false
+          payment=false
+          transaction=false
+          customer=false
+          notification=false
+          frontend=false
+          todos=false
+
+          # Una version de release debe contener todas las imagenes con la misma
+          # etiqueta. El despacho manual tambien ejecuta una validacion completa.
+          if [[ "$EVENTO" == "workflow_dispatch" || "$REF" == refs/heads/release/* || "$REF" == refs/tags/v* ]]; then
+            todos=true
+          else
+            if [[ "$EVENTO" == "pull_request" ]]; then
+              base="$SHA_BASE_PR"
+            else
+              base="$SHA_ANTERIOR"
+            fi
+
+            if [[ -z "${base:-}" || "$base" =~ ^0+$ ]]; then
+              base="$(git rev-parse HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)"
+            fi
+
+            mapfile -t archivos < <(git diff --name-only "$base" "$GITHUB_SHA")
+            printf 'Archivos evaluados:\n'
+            printf ' - %s\n' "${archivos[@]}"
+
+            for archivo in "${archivos[@]}"; do
+              case "$archivo" in
+                gateway/api-gateway/*) gateway=true ;;
+                services/account-service/*) account=true ;;
+                services/payment-service/*) payment=true ;;
+                services/transaction-service/*) transaction=true ;;
+                services/service-customer/*) customer=true ;;
+                services/service-notification-audit/*) notification=true ;;
+                frontend/bank-usac-web/*) frontend=true ;;
+                infrastructure/*|docker-compose.yml|.github/workflows/*|go.work|go.work.sum)
+                  todos=true
+                  ;;
+              esac
+            done
+          fi
+
+          if [[ "$todos" == "true" ]]; then
+            gateway=true
+            account=true
+            payment=true
+            transaction=true
+            customer=true
+            notification=true
+            frontend=true
+          fi
+
+          matriz_go="$(jq -cn \
+            --argjson gateway "$gateway" \
+            --argjson account "$account" \
+            --argjson payment "$payment" \
+            --argjson transaction "$transaction" \
+            --argjson customer "$customer" \
+            --argjson notification "$notification" \
+            '{include: [
+              {activo:$gateway,id:"api-gateway",nombre:"API Gateway",directorio:"gateway/api-gateway",categorias:false},
+              {activo:$account,id:"account-service",nombre:"Account Service",directorio:"services/account-service",categorias:true},
+              {activo:$payment,id:"payment-service",nombre:"Payment Service",directorio:"services/payment-service",categorias:true},
+              {activo:$transaction,id:"transaction-service",nombre:"Transaction Service",directorio:"services/transaction-service",categorias:true},
+              {activo:$customer,id:"customer-service",nombre:"Customer Service",directorio:"services/service-customer",categorias:true},
+              {activo:$notification,id:"notification-audit-service",nombre:"Notification Audit Service",directorio:"services/service-notification-audit",categorias:true}
+            ] | map(select(.activo)) | map(del(.activo))}')"
+
+          matriz_imagenes="$(jq -cn \
+            --argjson gateway "$gateway" \
+            --argjson account "$account" \
+            --argjson payment "$payment" \
+            --argjson transaction "$transaction" \
+            --argjson customer "$customer" \
+            --argjson notification "$notification" \
+            --argjson frontend "$frontend" \
+            '{include: [
+              {activo:$gateway,id:"api-gateway",nombre:"API Gateway",directorio:"gateway/api-gateway",imagen:"bank-usac-api-gateway"},
+              {activo:$account,id:"account-service",nombre:"Account Service",directorio:"services/account-service",imagen:"bank-usac-account-service"},
+              {activo:$payment,id:"payment-service",nombre:"Payment Service",directorio:"services/payment-service",imagen:"bank-usac-payment-service"},
+              {activo:$transaction,id:"transaction-service",nombre:"Transaction Service",directorio:"services/transaction-service",imagen:"bank-usac-transaction-service"},
+              {activo:$customer,id:"customer-service",nombre:"Customer Service",directorio:"services/service-customer",imagen:"bank-usac-customer-service"},
+              {activo:$notification,id:"notification-audit-service",nombre:"Notification Audit Service",directorio:"services/service-notification-audit",imagen:"bank-usac-notification-audit-service"},
+              {activo:$frontend,id:"frontend",nombre:"Frontend",directorio:"frontend/bank-usac-web",imagen:"bank-usac-frontend"}
+            ] | map(select(.activo)) | map(del(.activo))}')"
+
+          componentes="$(echo "$matriz_imagenes" | jq -c '[.include[].id]')"
+          cantidad_go="$(echo "$matriz_go" | jq '.include | length')"
+          cantidad_componentes="$(echo "$matriz_imagenes" | jq '.include | length')"
+
+          echo "matriz_go=$matriz_go" >> "$GITHUB_OUTPUT"
+          echo "matriz_imagenes=$matriz_imagenes" >> "$GITHUB_OUTPUT"
+          echo "componentes=$componentes" >> "$GITHUB_OUTPUT"
+          echo "hay_go=$([[ "$cantidad_go" -gt 0 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "hay_frontend=$frontend" >> "$GITHUB_OUTPUT"
+          echo "hay_componentes=$([[ "$cantidad_componentes" -gt 0 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+          echo "Componentes seleccionados: $componentes"
+
   build-test-go:
     name: Build y test - ${{ matrix.nombre }}
     runs-on: ubuntu-latest
+    needs: detectar-cambios
+    if: needs.detectar-cambios.outputs.hay_go == 'true'
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - nombre: API Gateway
-            directorio: gateway/api-gateway
-            categorias: false
-          - nombre: Account Service
-            directorio: services/account-service
-            categorias: true
-          - nombre: Payment Service
-            directorio: services/payment-service
-            categorias: true
-          - nombre: Transaction Service
-            directorio: services/transaction-service
-            categorias: true
-          - nombre: Customer Service
-            directorio: services/service-customer
-            categorias: true
-          - nombre: Notification Audit Service
-            directorio: services/service-notification-audit
-            categorias: true
+      matrix: ${{ fromJSON(needs.detectar-cambios.outputs.matriz_go) }}
     defaults:
       run:
         working-directory: ${{ matrix.directorio }}
@@ -88,6 +199,8 @@ jobs:
   build-test-frontend:
     name: Build y test - Frontend
     runs-on: ubuntu-latest
+    needs: detectar-cambios
+    if: needs.detectar-cambios.outputs.hay_frontend == 'true'
     defaults:
       run:
         working-directory: frontend/bank-usac-web
@@ -115,8 +228,15 @@ jobs:
     name: Validacion basica del sistema
     runs-on: ubuntu-latest
     needs:
+      - detectar-cambios
       - build-test-go
       - build-test-frontend
+    if: >-
+      always() &&
+      needs.detectar-cambios.outputs.hay_componentes == 'true' &&
+      needs.detectar-cambios.result == 'success' &&
+      (needs.build-test-go.result == 'success' || needs.build-test-go.result == 'skipped') &&
+      (needs.build-test-frontend.result == 'success' || needs.build-test-frontend.result == 'skipped')
     steps:
       - name: Descargar codigo
         uses: actions/checkout@v4
@@ -138,35 +258,18 @@ jobs:
         run: docker compose config --quiet
 
   construir-publicar-imagenes:
-    name: Construir y publicar imagenes versionadas
+    name: Construir y publicar - ${{ matrix.nombre }}
     runs-on: ubuntu-latest
-    needs: validacion-sistema
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/v'))
+    needs:
+      - detectar-cambios
+      - validacion-sistema
+    if: >-
+      github.event_name == 'push' &&
+      needs.detectar-cambios.outputs.hay_componentes == 'true' &&
+      (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/v'))
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - nombre: API Gateway
-            directorio: gateway/api-gateway
-            imagen: bank-usac-api-gateway
-          - nombre: Account Service
-            directorio: services/account-service
-            imagen: bank-usac-account-service
-          - nombre: Payment Service
-            directorio: services/payment-service
-            imagen: bank-usac-payment-service
-          - nombre: Transaction Service
-            directorio: services/transaction-service
-            imagen: bank-usac-transaction-service
-          - nombre: Customer Service
-            directorio: services/service-customer
-            imagen: bank-usac-customer-service
-          - nombre: Notification Audit Service
-            directorio: services/service-notification-audit
-            imagen: bank-usac-notification-audit-service
-          - nombre: Frontend
-            directorio: frontend/bank-usac-web
-            imagen: bank-usac-frontend
+      matrix: ${{ fromJSON(needs.detectar-cambios.outputs.matriz_imagenes) }}
     steps:
       - name: Descargar codigo
         uses: actions/checkout@v4
@@ -205,8 +308,16 @@ jobs:
   desplegar-desarrollo:
     name: Desplegar en Kubernetes dev
     runs-on: ubuntu-latest
-    needs: construir-publicar-imagenes
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    needs:
+      - detectar-cambios
+      - validacion-sistema
+      - construir-publicar-imagenes
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/develop' &&
+      needs.detectar-cambios.outputs.hay_componentes == 'true' &&
+      needs.validacion-sistema.result == 'success' &&
+      needs.construir-publicar-imagenes.result == 'success'
     environment: development
     env:
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
@@ -245,16 +356,24 @@ jobs:
           echo "revision_cloud_run=$REVISION_CLOUD_RUN" >> "$GITHUB_OUTPUT"
 
           : > /tmp/revisiones-kubernetes.txt
+          : > /tmp/imagenes-kubernetes.txt
           for despliegue in rabbitmq api-gateway customer-service account-service payment-service transaction-service notification-audit-service frontend; do
             revision="$(kubectl -n "$KUBE_NAMESPACE" get deployment "$despliegue" \
               -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}' 2>/dev/null || true)"
             if [ -n "$revision" ]; then
               echo "$despliegue $revision" >> /tmp/revisiones-kubernetes.txt
             fi
+
+            imagen="$(kubectl -n "$KUBE_NAMESPACE" get deployment "$despliegue" \
+              -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
+            if [ -n "$imagen" ]; then
+              echo "$despliegue $imagen" >> /tmp/imagenes-kubernetes.txt
+            fi
           done
 
       - name: Desplegar frontend dev en Cloud Run
         id: frontend-cloud-run
+        if: contains(fromJSON(needs.detectar-cambios.outputs.componentes), 'frontend')
         env:
           PUBLIC_HOST: ${{ secrets.PUBLIC_HOST }}
         shell: bash
@@ -328,10 +447,37 @@ jobs:
         env:
           PUBLIC_HOST: ${{ secrets.PUBLIC_HOST }}
           FRONTEND_URL: ${{ steps.frontend-cloud-run.outputs.url }}
+          COMPONENTES: ${{ needs.detectar-cambios.outputs.componentes }}
         run: |
+          if [ -z "$FRONTEND_URL" ]; then
+            FRONTEND_URL="$(gcloud run services describe bank-usac-frontend-dev \
+              --region us-central1 --format='value(status.url)' 2>/dev/null || true)"
+          fi
+
           kubectl kustomize infrastructure/kubernetes/overlays/cloud-dev \
             | sed "s|:v2.0.0|:${IMAGE_TAG}|g; s|__PUBLIC_HOST__|${PUBLIC_HOST:-bank-usac.example.com}|g; s|__FRONTEND_URL__|${FRONTEND_URL}|g" \
-            | kubectl apply -f -
+            > /tmp/manifiestos-dev.yaml
+
+          # Los manifiestos llevan una sola etiqueta por ejecucion. Para los
+          # componentes no modificados se conserva exactamente la imagen que ya
+          # estaba estable en el cluster, evitando buscar tags que no se crearon.
+          while read -r componente despliegue imagen_base; do
+            if ! echo "$COMPONENTES" | jq -e --arg id "$componente" 'index($id) != null' >/dev/null; then
+              imagen_actual="$(awk -v d="$despliegue" '$1 == d {print $2}' /tmp/imagenes-kubernetes.txt)"
+              imagen_actual="${imagen_actual:-${REGISTRY}/${IMAGE_NAMESPACE}/${imagen_base}:v2.0.0}"
+              sed -i "s|${REGISTRY}/${IMAGE_NAMESPACE}/${imagen_base}:${IMAGE_TAG}|${imagen_actual}|g" /tmp/manifiestos-dev.yaml
+            fi
+          done <<'COMPONENTES_IMAGENES'
+          api-gateway api-gateway bank-usac-api-gateway
+          account-service account-service bank-usac-account-service
+          payment-service payment-service bank-usac-payment-service
+          transaction-service transaction-service bank-usac-transaction-service
+          customer-service customer-service bank-usac-customer-service
+          notification-audit-service notification-audit-service bank-usac-notification-audit-service
+          frontend frontend bank-usac-frontend
+          COMPONENTES_IMAGENES
+
+          kubectl apply -f /tmp/manifiestos-dev.yaml
           for despliegue in rabbitmq api-gateway customer-service account-service payment-service transaction-service notification-audit-service frontend; do
             kubectl -n "$KUBE_NAMESPACE" rollout status "deployment/$despliegue" --timeout=180s
           done
@@ -369,8 +515,13 @@ jobs:
   desplegar-produccion:
     name: Desplegar en Kubernetes prod
     runs-on: ubuntu-latest
-    needs: validacion-sistema
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    needs:
+      - detectar-cambios
+      - validacion-sistema
+    if: >-
+      github.event_name == 'push' &&
+      needs.detectar-cambios.outputs.hay_componentes == 'true' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     environment: production
     env:
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
