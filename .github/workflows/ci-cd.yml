@@ -480,6 +480,10 @@ jobs:
           COMPONENTES_IMAGENES
 
           kubectl apply -f /tmp/manifiestos-dev.yaml
+          # Las variables provenientes de Secrets se leen al crear el pod.
+          kubectl -n "$KUBE_NAMESPACE" rollout restart \
+            deployment/api-gateway deployment/customer-service deployment/account-service \
+            deployment/payment-service deployment/transaction-service deployment/notification-audit-service
           for despliegue in rabbitmq api-gateway customer-service account-service payment-service transaction-service notification-audit-service frontend; do
             kubectl -n "$KUBE_NAMESPACE" rollout status "deployment/$despliegue" --timeout=180s
           done
