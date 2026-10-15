@@ -1,5 +1,7 @@
 name: CI/CD Bank USAC
 
+# Este workflow valida cambios de feature y Pull Requests hacia develop.
+
 on:
   push:
     branches:
