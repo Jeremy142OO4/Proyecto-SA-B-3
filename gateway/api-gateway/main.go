@@ -28,20 +28,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	conexion, err := messaging.Conectar(cfg.URLRabbitMQ)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer conexion.Close()
-	canal, err := conexion.Channel()
-	if err != nil {
-		log.Fatal(err)
-	}
-	if err = messaging.DeclararTopologia(canal); err != nil {
-		log.Fatal(err)
-	}
-	canal.Close()
-	publicador, err := messaging.NuevoPublicador(conexion)
+	store := operations.NuevoStore()
+	gestorRespuestas := responses.Nuevo()
+	publicador, err := messaging.NuevoCliente(cfg.URLRabbitMQ, store, gestorRespuestas)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -63,16 +52,11 @@ func main() {
 		return c.Status(codigo).JSON(fiber.Map{"error": mensaje, "correlationId": correlacion.String()})
 	}})
 	app.Use(logger.New(logger.Config{Format: "{\"timestamp\":\"${time}\",\"level\":\"info\",\"service\":\"api-gateway\",\"method\":\"${method}\",\"path\":\"${path}\",\"status\":${status}}\n"}), cors.New(cors.Config{AllowOrigins: cfg.OrigenesCORS, AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Correlation-ID"}))
-	store := operations.NuevoStore()
-	gestorRespuestas := responses.Nuevo()
-	if err = messaging.ConsumirRespuestas(conexion, store, gestorRespuestas); err != nil {
-		log.Fatal(err)
-	}
 	solicitante := messaging.NuevoSolicitante(publicador, gestorRespuestas, cfg.TiempoPublicacion)
 	gateway := controllers.NuevoGateway(publicador, store, gestorRespuestas, cfg.TiempoPublicacion, solicitante)
 	controladorClientes := controllers.NuevoControladorClientes(solicitante)
 	controladorAuditoria := controllers.NuevoControladorAuditoria(solicitante)
-	routes.Registrar(app, gateway, controladorClientes, controladorAuditoria, cfg.SecretoJWT, func() bool { return !conexion.IsClosed() })
+	routes.Registrar(app, gateway, controladorClientes, controladorAuditoria, cfg.SecretoJWT, publicador.Listo)
 	go func() {
 		if err := app.Listen(":" + cfg.PuertoHTTP); err != nil {
 			log.Printf("servidor detenido: %v", err)

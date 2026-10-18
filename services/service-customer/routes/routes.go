@@ -8,12 +8,17 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func SetupRoutes(app *fiber.App, cc *controllers.CustomerController, cfg *config.Config) {
+func SetupRoutes(app *fiber.App, cc *controllers.CustomerController, cfg *config.Config, disponibilidad ...func() bool) {
 	app.Use(middleware.CorrelationMiddleware())
 
 	// Health Checks para Kubernetes
 	app.Get("/health/live", func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) })
-	app.Get("/health/ready", func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) })
+	app.Get("/health/ready", func(c *fiber.Ctx) error {
+		if len(disponibilidad) > 0 && !disponibilidad[0]() {
+			return c.SendStatus(fiber.StatusServiceUnavailable)
+		}
+		return c.SendStatus(fiber.StatusOK)
+	})
 
 	api := app.Group("/api/v1/customers")
 

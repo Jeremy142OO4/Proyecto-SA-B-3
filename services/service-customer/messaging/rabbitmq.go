@@ -27,84 +27,59 @@ const (
 )
 
 type RabbitMQClient struct {
-	conn    *amqp.Connection
-	channel *amqp.Channel
-	repo    repositories.CustomerRepository
-	svc     services.CustomerService
+	sesion *sesionAMQP
+	repo   repositories.CustomerRepository
+	svc    services.CustomerService
 }
 
 func NewRabbitMQClient(url string, repo repositories.CustomerRepository, svc services.CustomerService) (*RabbitMQClient, error) {
-	conn, err := amqp.Dial(url)
+	r := &RabbitMQClient{repo: repo, svc: svc}
+	s, err := nuevaSesion(url, colaComandosCliente, 10, declararTopologia, func(ctx context.Context, d amqp.Delivery) error {
+		var sobre events.EventEnvelope
+		if json.Unmarshal(d.Body, &sobre) != nil || sobre.MessageID == uuid.Nil || sobre.CorrelationID == uuid.Nil {
+			return errors.New("comando de cliente invalido")
+		}
+		return r.procesarComando(ctx, sobre)
+	})
 	if err != nil {
 		return nil, err
 	}
+	r.sesion = s
+	s.iniciar()
+	return r, nil
+}
 
-	ch, err := conn.Channel()
-	if err != nil {
-		return nil, err
-	}
-
+func declararTopologia(ch *amqp.Channel) error {
 	// Declarar Exchanges estándar
 	exchanges := []string{intercambioComandos, intercambioEventos, intercambioRespuestas, intercambioFallidos}
 	for _, ex := range exchanges {
 		if err := ch.ExchangeDeclare(ex, "topic", true, false, false, false, nil); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	if _, err := ch.QueueDeclare(colaFallidosCliente, true, false, false, false, nil); err != nil {
-		return nil, err
+		return err
 	}
 	if err := ch.QueueBind(colaFallidosCliente, "cliente.#", intercambioFallidos, false, nil); err != nil {
-		return nil, err
+		return err
 	}
 	argumentos := amqp.Table{
 		"x-dead-letter-exchange":    intercambioFallidos,
 		"x-dead-letter-routing-key": "cliente.validacion.fallida",
 	}
 	if _, err := ch.QueueDeclare(colaComandosCliente, true, false, false, false, argumentos); err != nil {
-		return nil, err
+		return err
 	}
 	for _, tipo := range []string{events.ComandoValidarCliente, events.ComandoValidarKYC, events.ComandoRegistrarCliente, events.ComandoActivarCliente, events.ComandoLoginCliente, events.ComandoPerfilCliente, events.ComandoActualizarCliente, events.ComandoListarClientes, events.ComandoBuscarClienteDPI, events.ComandoEstadoCliente, events.ComandoEstadoKYC} {
 		if err := ch.QueueBind(colaComandosCliente, tipo, intercambioComandos, false, nil); err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	return &RabbitMQClient{conn: conn, channel: ch, repo: repo, svc: svc}, nil
-}
-
-func (r *RabbitMQClient) StartValidationConsumer(ctx context.Context) error {
-	ch, err := r.conn.Channel()
-	if err != nil {
-		return err
-	}
-	if err = ch.Qos(10, 0, false); err != nil {
-		_ = ch.Close()
-		return err
-	}
-	entregas, err := ch.ConsumeWithContext(ctx, colaComandosCliente, "customer-service.validacion-cliente", false, false, false, false, nil)
-	if err != nil {
-		_ = ch.Close()
-		return err
-	}
-	go func() {
-		defer ch.Close()
-		for entrega := range entregas {
-			var sobre events.EventEnvelope
-			if json.Unmarshal(entrega.Body, &sobre) != nil || sobre.MessageID == uuid.Nil || sobre.CorrelationID == uuid.Nil {
-				_ = entrega.Nack(false, false)
-				continue
-			}
-			if err := r.procesarComando(ctx, sobre); err != nil {
-				log.Printf("[ComandoCliente] Error: %v", err)
-				_ = entrega.Nack(false, false)
-				continue
-			}
-			_ = entrega.Ack(false)
-		}
-	}()
 	return nil
 }
+
+func (r *RabbitMQClient) Listo() bool { return r.sesion.listo() }
 
 type respuestaRPC struct {
 	Estado int             `json:"estado"`
@@ -165,7 +140,7 @@ func (r *RabbitMQClient) publicarRespuesta(ctx context.Context, sobre events.Eve
 	if err != nil {
 		return err
 	}
-	return r.channel.PublishWithContext(ctx, intercambioRespuestas, respuesta.Type, false, false, amqp.Publishing{DeliveryMode: amqp.Persistent, ContentType: "application/json", CorrelationId: sobre.CorrelationID.String(), Body: bytes})
+	return r.sesion.publicar(ctx, intercambioRespuestas, respuesta.Type, amqp.Publishing{DeliveryMode: amqp.Persistent, ContentType: "application/json", CorrelationId: sobre.CorrelationID.String(), Body: bytes})
 }
 
 func (r *RabbitMQClient) ejecutarRPC(ctx context.Context, sobre events.EventEnvelope) (int, json.RawMessage) {
@@ -289,19 +264,13 @@ func (r *RabbitMQClient) ejecutarRPC(ctx context.Context, sobre events.EventEnve
 	}
 }
 
-func (r *RabbitMQClient) Close() {
-	if r.channel != nil {
-		r.channel.Close()
-	}
-	if r.conn != nil {
-		r.conn.Close()
-	}
-}
+func (r *RabbitMQClient) Close() { r.sesion.cerrar() }
 
 // StartOutboxWorker envía periódicamente los eventos pendientes a RabbitMQ
 func (r *RabbitMQClient) StartOutboxWorker(ctx context.Context, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	go func() {
+		defer ticker.Stop()
 		for {
 			select {
 			case <-ctx.Done():
@@ -314,6 +283,9 @@ func (r *RabbitMQClient) StartOutboxWorker(ctx context.Context, interval time.Du
 }
 
 func (r *RabbitMQClient) processPendingOutbox(ctx context.Context) {
+	if !r.Listo() {
+		return
+	}
 	msgs, err := r.repo.GetPendingOutbox(ctx, 20)
 	if err != nil || len(msgs) == 0 {
 		return
@@ -323,12 +295,10 @@ func (r *RabbitMQClient) processPendingOutbox(ctx context.Context) {
 		exchange := intercambioEventos
 		routingKey := msg.EventType
 
-		err := r.channel.PublishWithContext(
+		err := r.sesion.publicar(
 			ctx,
 			exchange,
 			routingKey,
-			false,
-			false,
 			amqp.Publishing{
 				DeliveryMode:  amqp.Persistent,
 				ContentType:   "application/json",

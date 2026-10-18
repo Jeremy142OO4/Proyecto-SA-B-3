@@ -46,9 +46,6 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	rabbit.StartOutboxWorker(ctx, 1*time.Second)
-	if err := rabbit.StartValidationConsumer(ctx); err != nil {
-		log.Fatalf("Fallo al iniciar consumidor de validacion de clientes: %v", err)
-	}
 
 	// 4. Servidor HTTP Fiber
 	app := fiber.New(fiber.Config{
@@ -57,7 +54,7 @@ func main() {
 	app.Use(recover.New())
 	app.Use(logger.New())
 
-	routes.SetupRoutes(app, controller, cfg)
+	routes.SetupRoutes(app, controller, cfg, rabbit.Listo)
 
 	// 5. Cierre controlado (Graceful Shutdown)
 	go func() {
