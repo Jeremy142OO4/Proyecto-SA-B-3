@@ -1,0 +1,68 @@
+extensions:
+  file_storage:
+    directory: /var/lib/otel-offsets
+    create_directory: true
+  health_check:
+    endpoint: 0.0.0.0:13133
+receivers:
+  filelog/bank:
+    include:
+      - /var/log/pods/{{ .Values.applicationNamespace }}_*/api-gateway/*.log
+      - /var/log/pods/{{ .Values.applicationNamespace }}_*/customer-service/*.log
+      - /var/log/pods/{{ .Values.applicationNamespace }}_*/account-service/*.log
+      - /var/log/pods/{{ .Values.applicationNamespace }}_*/transaction-service/*.log
+      - /var/log/pods/{{ .Values.applicationNamespace }}_*/payment-service/*.log
+      - /var/log/pods/{{ .Values.applicationNamespace }}_*/notification-audit-service/*.log
+    start_at: end
+    include_file_path: true
+    max_log_size: 64KiB
+    max_concurrent_files: 64
+    storage: file_storage
+    retry_on_failure:
+      enabled: true
+      max_elapsed_time: 60s
+    operators:
+      - type: container
+        id: container-parser
+      - type: json_parser
+        id: application-json
+        parse_from: body
+        parse_to: attributes.application
+        on_error: drop
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 96
+    spike_limit_mib: 16
+  transform/bank:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          - set(resource.attributes["service.name"], attributes["application"]["serviceName"])
+          - set(resource.attributes["service.version"], attributes["application"]["version"])
+          - set(resource.attributes["deployment.environment.name"], attributes["application"]["environment"])
+          - set(attributes["correlationId"], attributes["application"]["correlationId"]) where attributes["application"]["correlationId"] != nil
+          - set(attributes["traceId"], attributes["application"]["traceId"]) where attributes["application"]["traceId"] != nil
+          - set(attributes["spanId"], attributes["application"]["spanId"]) where attributes["application"]["spanId"] != nil
+          - set(severity_text, attributes["application"]["level"])
+          - delete_key(attributes, "application")
+  batch:
+    timeout: 2s
+    send_batch_size: 128
+    send_batch_max_size: 256
+exporters:
+  otlphttp:
+    endpoint: http://otel-collector:4318
+    sending_queue:
+      queue_size: 128
+      num_consumers: 1
+    retry_on_failure:
+      max_elapsed_time: 60s
+service:
+  extensions: [file_storage, health_check]
+  pipelines:
+    logs:
+      receivers: [filelog/bank]
+      processors: [memory_limiter, transform/bank, batch]
+      exporters: [otlphttp]

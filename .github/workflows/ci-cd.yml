@@ -33,6 +33,7 @@ jobs:
       hay_go: ${{ steps.filtros.outputs.hay_go }}
       hay_frontend: ${{ steps.filtros.outputs.hay_frontend }}
       hay_componentes: ${{ steps.filtros.outputs.hay_componentes }}
+      hay_observabilidad: ${{ steps.filtros.outputs.hay_observabilidad }}
     steps:
       - name: Descargar codigo con historial
         uses: actions/checkout@v4
@@ -58,6 +59,7 @@ jobs:
           notification=false
           frontend=false
           todos=false
+          observabilidad=false
 
           # Una version de release debe contener todas las imagenes con la misma
           # etiqueta. El despacho manual tambien ejecuta una validacion completa.
@@ -80,6 +82,7 @@ jobs:
 
             for archivo in "${archivos[@]}"; do
               case "$archivo" in
+                infrastructure/observability/*) observabilidad=true ;;
                 gateway/api-gateway/*) gateway=true ;;
                 services/account-service/*) account=true ;;
                 services/payment-service/*) payment=true ;;
@@ -95,6 +98,7 @@ jobs:
           fi
 
           if [[ "$todos" == "true" ]]; then
+            observabilidad=true
             gateway=true
             account=true
             payment=true
@@ -147,6 +151,7 @@ jobs:
           echo "componentes=$componentes" >> "$GITHUB_OUTPUT"
           echo "hay_go=$([[ "$cantidad_go" -gt 0 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           echo "hay_frontend=$frontend" >> "$GITHUB_OUTPUT"
+          echo "hay_observabilidad=$observabilidad" >> "$GITHUB_OUTPUT"
           echo "hay_componentes=$([[ "$cantidad_componentes" -gt 0 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
           echo "Componentes seleccionados: $componentes"
@@ -154,6 +159,7 @@ jobs:
             echo "## Componentes detectados"
             echo "| Componente | Estado |"
             echo "| --- | --- |"
+            if [[ "$observabilidad" == "true" ]]; then echo "| Observabilidad | ✅ Ejecutar |"; else echo "| Observabilidad | ⏭️ Omitida |"; fi
             if [[ "$gateway" == "true" ]]; then echo "| API Gateway | ✅ Ejecutar |"; else echo "| API Gateway | ⏭️ Omitido |"; fi
             if [[ "$customer" == "true" ]]; then echo "| Clientes | ✅ Ejecutar |"; else echo "| Clientes | ⏭️ Omitido |"; fi
             if [[ "$account" == "true" ]]; then echo "| Cuentas | ✅ Ejecutar |"; else echo "| Cuentas | ⏭️ Omitido |"; fi
@@ -162,6 +168,48 @@ jobs:
             if [[ "$notification" == "true" ]]; then echo "| Notificaciones y Auditoria | ✅ Ejecutar |"; else echo "| Notificaciones y Auditoria | ⏭️ Omitido |"; fi
             if [[ "$frontend" == "true" ]]; then echo "| Frontend | ✅ Ejecutar |"; else echo "| Frontend | ⏭️ Omitido |"; fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+  validar-observabilidad:
+    name: Validar observabilidad
+    needs: detectar-cambios
+    if: needs.detectar-cambios.outputs.hay_observabilidad == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.19.0
+      - name: Validar chart y configuraciones
+        run: |
+          python3 -m pip install --disable-pip-version-check PyYAML==6.0.3
+          python3 infrastructure/observability/validate.py
+
+  desplegar-observabilidad-dev:
+    name: Desplegar observabilidad dev
+    needs: [detectar-cambios, validar-observabilidad]
+    if: >-
+      needs.detectar-cambios.outputs.hay_observabilidad == 'true' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment: development
+    env:
+      KUBE_NAMESPACE: bank-usac-dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.19.0
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ secrets.GKE_CLUSTER }}
+          location: ${{ secrets.GKE_ZONE }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+      - name: Instalar perfil compacto con comprobacion de capacidad
+        run: bash infrastructure/observability/deploy.sh
 
   build-test-gateway:
     name: Build y test - API Gateway
@@ -818,6 +866,7 @@ jobs:
     name: Desplegar en Kubernetes dev
     runs-on: ubuntu-latest
     needs:
+      - desplegar-observabilidad-dev
       - detectar-cambios
       - validacion-sistema
       - publicar-gateway
@@ -833,6 +882,7 @@ jobs:
       github.ref == 'refs/heads/develop' &&
       needs.detectar-cambios.outputs.hay_componentes == 'true' &&
       needs.validacion-sistema.result == 'success' &&
+      (needs.desplegar-observabilidad-dev.result == 'success' || needs.desplegar-observabilidad-dev.result == 'skipped') &&
       (needs.publicar-gateway.result == 'success' || needs.publicar-gateway.result == 'skipped') &&
       (needs.publicar-customer.result == 'success' || needs.publicar-customer.result == 'skipped') &&
       (needs.publicar-account.result == 'success' || needs.publicar-account.result == 'skipped') &&

@@ -267,3 +267,5 @@ func copiarEncabezados(origen amqp.Table) amqp.Table {
 	}
 	return destino
 }
+
+func (c *ConsumidorCuentas) Cerrado() bool { return c.canal.IsClosed() }

@@ -138,3 +138,5 @@ func (c *ConsumidorPagos) procesar(ctx context.Context, d amqp.Delivery) (result
 	}
 	return fmt.Errorf("mensaje no soportado: %s", d.RoutingKey)
 }
+
+func (c *ConsumidorPagos) Cerrado() bool { return c.canal.IsClosed() }

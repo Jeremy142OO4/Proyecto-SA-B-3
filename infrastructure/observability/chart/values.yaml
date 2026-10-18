@@ -1,0 +1,61 @@
+applicationNamespace: bank-usac-dev
+environment: dev
+grafanaSecret: observability-grafana
+storageClass: standard-rwo
+components:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.163.1
+    uid: 10001
+    args: ["--config=/etc/bank/config.yaml"]
+    config: collector.yaml
+    ports: [{name: http, port: 13133}, {name: otlp-grpc, port: 4317}, {name: otlp-http, port: 4318}, {name: metrics, port: 9464}]
+    readyPath: /
+    memoryRequest: 64Mi
+    memoryLimit: 192Mi
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    uid: 65534
+    args: ["--config.file=/etc/bank/config.yaml", "--storage.tsdb.path=/prometheus", "--storage.tsdb.retention.time=48h", "--storage.tsdb.retention.size=2GB", "--web.enable-lifecycle"]
+    config: prometheus.yaml
+    ports: [{name: http, port: 9090}]
+    readyPath: /-/ready
+    memoryRequest: 128Mi
+    memoryLimit: 256Mi
+    storage: 3Gi
+    dataPath: /prometheus
+  loki:
+    image: grafana/loki:3.7.8
+    uid: 10001
+    args: ["-config.file=/etc/bank/config.yaml"]
+    config: loki.yaml
+    ports: [{name: http, port: 3100}]
+    readyPath: /ready
+    memoryRequest: 128Mi
+    memoryLimit: 384Mi
+    storage: 3Gi
+    dataPath: /var/loki
+  tempo:
+    image: grafana/tempo:2.10.8
+    uid: 10001
+    args: ["-config.file=/etc/bank/config.yaml"]
+    config: tempo.yaml
+    ports: [{name: http, port: 3200}, {name: otlp-grpc, port: 4317}]
+    readyPath: /ready
+    memoryRequest: 128Mi
+    memoryLimit: 384Mi
+    storage: 3Gi
+    dataPath: /var/tempo
+  grafana:
+    image: grafana/grafana:13.2.4
+    uid: 472
+    config: datasources.yaml
+    ports: [{name: http, port: 3000}]
+    readyPath: /api/health
+    memoryRequest: 96Mi
+    memoryLimit: 256Mi
+    storage: 1Gi
+    dataPath: /var/lib/grafana
+agent:
+  image: otel/opentelemetry-collector-contrib:0.163.1
+  memoryRequest: 32Mi
+  memoryLimit: 128Mi

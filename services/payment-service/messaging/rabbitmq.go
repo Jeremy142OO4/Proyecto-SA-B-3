@@ -21,7 +21,7 @@ const (
 )
 
 func Conectar(url string) (*amqp.Connection, error) {
-	c, e := amqp.Dial(url)
+	c, e := amqp.DialConfig(url, amqp.Config{Heartbeat: 10 * time.Second, Dial: amqp.DefaultDial(5 * time.Second)})
 	if e != nil {
 		return nil, fmt.Errorf("conectar RabbitMQ pagos: %w", e)
 	}
@@ -66,6 +66,7 @@ func NuevoPublicador(c *amqp.Connection) (*Publicador, error) {
 		return nil, e
 	}
 	if e = ch.Confirm(false); e != nil {
+		_ = ch.Close()
 		return nil, e
 	}
 	return &Publicador{ch}, nil
@@ -108,3 +109,5 @@ func (p *Publicador) Republicar(ctx context.Context, intercambio, clave string, 
 func (p *Publicador) EnviarFallido(ctx context.Context, cuerpo []byte, encabezados amqp.Table) error {
 	return p.Republicar(ctx, IntercambioFallidos, "pago.mensaje.fallido", cuerpo, encabezados)
 }
+
+func (p *Publicador) Cerrado() bool { return p.canal.IsClosed() }

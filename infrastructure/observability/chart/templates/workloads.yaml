@@ -1,0 +1,122 @@
+{{- range $name, $component := .Values.components }}
+---
+apiVersion: apps/v1
+kind: {{ if $component.storage }}StatefulSet{{ else }}Deployment{{ end }}
+metadata:
+  name: {{ $name }}
+spec:
+  replicas: 1
+  {{- if $component.storage }}
+  serviceName: {{ $name }}
+  {{- else }}
+  strategy:
+    type: Recreate
+  {{- end }}
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ $name }}}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: {{ $name }}}
+      annotations:
+        checksum/config: {{ tpl ($.Files.Get (printf "config/%s" $component.config)) $ | sha256sum }}
+        checksum/dashboards: {{ $.Files.Get "dashboards/overview.json" | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ $component.uid }}
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: {{ $name }}
+          image: {{ $component.image | quote }}
+          {{- if $component.args }}
+          args: {{ $component.args | toJson }}
+          {{- end }}
+          ports:
+            {{- range $component.ports }}
+            - {name: {{ .name }}, containerPort: {{ .port }}}
+            {{- end }}
+          resources:
+            requests: {cpu: 10m, memory: {{ $component.memoryRequest }}}
+            limits: {cpu: 200m, memory: {{ $component.memoryLimit }}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          startupProbe:
+            httpGet: {path: {{ $component.readyPath }}, port: http}
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            httpGet: {path: {{ $component.readyPath }}, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: {{ if eq $name "prometheus" }}/-/healthy{{ else if eq $name "loki" }}/metrics{{ else }}{{ $component.readyPath }}{{ end }}, port: http}
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 6
+          {{- if eq $name "grafana" }}
+          env:
+            - {name: GF_SECURITY_ADMIN_USER, value: admin}
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ $.Values.grafanaSecret }}, key: password}}
+            - {name: GF_AUTH_ANONYMOUS_ENABLED, value: "false"}
+            - {name: GF_USERS_ALLOW_SIGN_UP, value: "false"}
+            - {name: GF_ANALYTICS_REPORTING_ENABLED, value: "false"}
+            - {name: GF_ANALYTICS_CHECK_FOR_UPDATES, value: "false"}
+            - {name: GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES, value: "false"}
+            - {name: GF_PLUGINS_PREINSTALL_DISABLED, value: "true"}
+          {{- end }}
+          volumeMounts:
+            - {name: config, mountPath: {{ if eq $name "grafana" }}/etc/grafana/provisioning/datasources/bank.yaml{{ else }}/etc/bank/config.yaml{{ end }}, subPath: config.yaml, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+            {{- if $component.storage }}
+            - {name: data, mountPath: {{ $component.dataPath }}}
+            {{- end }}
+            {{- if eq $name "grafana" }}
+            - {name: dashboards, mountPath: /etc/grafana/provisioning/dashboards/bank.yaml, subPath: provider.yaml, readOnly: true}
+            - {name: dashboards, mountPath: /etc/grafana/bank-dashboards/overview.json, subPath: overview.json, readOnly: true}
+            {{- end }}
+      volumes:
+        - name: config
+          configMap: {name: {{ $name }}-config}
+        - {name: tmp, emptyDir: {sizeLimit: 64Mi}}
+        {{- if $component.storage }}
+        - name: data
+          persistentVolumeClaim: {claimName: {{ $name }}-data}
+        {{- end }}
+        {{- if eq $name "grafana" }}
+        - name: dashboards
+          configMap: {name: grafana-dashboards}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+spec:
+  type: ClusterIP
+  selector: {app.kubernetes.io/name: {{ $name }}}
+  ports:
+    {{- range $component.ports }}
+    - {name: {{ .name }}, port: {{ .port }}, targetPort: {{ .name }}}
+    {{- end }}
+{{- if $component.storage }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}-data
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: {{ $.Values.storageClass }}
+  resources:
+    requests:
+      storage: {{ $component.storage }}
+{{- end }}
+{{- end }}

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/Proyecto-SA-B-3/account-service/internal/recovery"
 	"github.com/Proyecto-SA-B-3/account-service/internal/telemetry"
 	"log/slog"
 	"os"
@@ -41,73 +42,75 @@ func main() {
 	}
 	defer conexionBaseDatos.Close()
 
-	conexionRabbitMQ, err := messaging.ConectarRabbitMQ(configuracion.URLRabbitMQ)
-	if err != nil {
-		slog.Error("no se pudo iniciar RabbitMQ", "error", err)
-		os.Exit(1)
-	}
-	defer conexionRabbitMQ.Close()
-
-	canalTopologia, err := conexionRabbitMQ.Channel()
-	if err != nil {
-		slog.Error("no se pudo crear el canal de topologia", "error", err)
-		os.Exit(1)
-	}
-	if err := messaging.DeclararTopologia(canalTopologia); err != nil {
-		_ = canalTopologia.Close()
-		slog.Error("no se pudo declarar la topologia RabbitMQ", "error", err)
-		os.Exit(1)
-	}
-	_ = canalTopologia.Close()
-
-	repositorioCuentas := repositories.NuevoRepositorioCuentasPostgres(conexionBaseDatos)
-	repositorioSalida := repositories.NuevoRepositorioSalidaPostgres(conexionBaseDatos)
-	repositorioSolicitudes := repositories.NuevoRepositorioSolicitudesPostgres(conexionBaseDatos)
-	servicioCuentas := services.NuevoServicioCuentas(repositorioCuentas)
-	servicioCreacion := services.NuevoServicioCreacionCuentas(repositorioSolicitudes)
-	publicadorComandos, err := messaging.NuevoPublicador(conexionRabbitMQ)
-	if err != nil {
-		slog.Error("no se pudo crear el publicador de comandos", "error", err)
-		os.Exit(1)
-	}
-	defer publicadorComandos.Cerrar()
-	publicadorEventos, err := messaging.NuevoPublicador(conexionRabbitMQ)
-	if err != nil {
-		slog.Error("no se pudo crear el publicador de eventos", "error", err)
-		os.Exit(1)
-	}
-	defer publicadorEventos.Cerrar()
-
-	consumidor, err := consumers.NuevoConsumidorCuentas(
-		conexionRabbitMQ, servicioCuentas, servicioCreacion, repositorioSalida, publicadorComandos, configuracion.MaximoReintentos,
-	)
-	if err != nil {
-		slog.Error("no se pudo crear el consumidor", "error", err)
-		os.Exit(1)
-	}
-	defer consumidor.Cerrar()
-	consumidorValidacion, err := consumers.NuevoConsumidorValidacionCliente(conexionRabbitMQ, servicioCreacion)
-	if err != nil {
-		slog.Error("no se pudo crear el consumidor de validaciones", "error", err)
-		os.Exit(1)
-	}
-	defer consumidorValidacion.Cerrar()
-
-	publicadorOutbox := publishers.NuevoPublicadorOutbox(repositorioSalida, publicadorEventos, configuracion.IntervaloOutbox)
-	go publicadorOutbox.Ejecutar(ctx)
+	mensajeriaFin := make(chan struct{})
 	go func() {
-		if err := consumidor.Ejecutar(ctx); err != nil && ctx.Err() == nil {
-			slog.Error("el consumidor termino inesperadamente", "error", err)
-			cancelar()
-		}
+		defer close(mensajeriaFin)
+		recovery.Run(ctx, func(ctx context.Context) error {
+			conexionRabbitMQ, err := messaging.ConectarRabbitMQ(configuracion.URLRabbitMQ)
+			if err != nil {
+				slog.Error("no se pudo iniciar RabbitMQ", "error", err)
+				return err
+			}
+			defer conexionRabbitMQ.Close()
+
+			canalTopologia, err := conexionRabbitMQ.Channel()
+			if err != nil {
+				slog.Error("no se pudo crear el canal de topologia", "error", err)
+				return err
+			}
+			if err := messaging.DeclararTopologia(canalTopologia); err != nil {
+				_ = canalTopologia.Close()
+				slog.Error("no se pudo declarar la topologia RabbitMQ", "error", err)
+				return err
+			}
+			_ = canalTopologia.Close()
+
+			repositorioCuentas := repositories.NuevoRepositorioCuentasPostgres(conexionBaseDatos)
+			repositorioSalida := repositories.NuevoRepositorioSalidaPostgres(conexionBaseDatos)
+			repositorioSolicitudes := repositories.NuevoRepositorioSolicitudesPostgres(conexionBaseDatos)
+			servicioCuentas := services.NuevoServicioCuentas(repositorioCuentas)
+			servicioCreacion := services.NuevoServicioCreacionCuentas(repositorioSolicitudes)
+			publicadorComandos, err := messaging.NuevoPublicador(conexionRabbitMQ)
+			if err != nil {
+				slog.Error("no se pudo crear el publicador de comandos", "error", err)
+				return err
+			}
+			defer publicadorComandos.Cerrar()
+			publicadorEventos, err := messaging.NuevoPublicador(conexionRabbitMQ)
+			if err != nil {
+				slog.Error("no se pudo crear el publicador de eventos", "error", err)
+				return err
+			}
+			defer publicadorEventos.Cerrar()
+
+			consumidor, err := consumers.NuevoConsumidorCuentas(
+				conexionRabbitMQ, servicioCuentas, servicioCreacion, repositorioSalida, publicadorComandos, configuracion.MaximoReintentos,
+			)
+			if err != nil {
+				slog.Error("no se pudo crear el consumidor", "error", err)
+				return err
+			}
+			defer consumidor.Cerrar()
+			consumidorValidacion, err := consumers.NuevoConsumidorValidacionCliente(conexionRabbitMQ, servicioCreacion)
+			if err != nil {
+				slog.Error("no se pudo crear el consumidor de validaciones", "error", err)
+				return err
+			}
+			defer consumidorValidacion.Cerrar()
+
+			publicadorOutbox := publishers.NuevoPublicadorOutbox(repositorioSalida, publicadorEventos, configuracion.IntervaloOutbox)
+			return recovery.Serve(ctx, func() { _ = conexionRabbitMQ.CloseDeadline(time.Now().Add(time.Second)) },
+				[]func() bool{conexionRabbitMQ.IsClosed, publicadorComandos.Cerrado, publicadorEventos.Cerrado, consumidor.Cerrado, consumidorValidacion.Cerrado},
+				consumidor.Ejecutar, consumidorValidacion.Ejecutar,
+				func(ctx context.Context) error { publicadorOutbox.Ejecutar(ctx); return nil },
+				func(ctx context.Context) error {
+					services.EjecutarProcesoInactividad(ctx, servicioCuentas, configuracion.IntervaloInactividad)
+					return nil
+				})
+
+		})
 	}()
-	go func() {
-		if err := consumidorValidacion.Ejecutar(ctx); err != nil && ctx.Err() == nil {
-			slog.Error("el consumidor de validaciones termino", "error", err)
-			cancelar()
-		}
-	}()
-	go services.EjecutarProcesoInactividad(ctx, servicioCuentas, configuracion.IntervaloInactividad)
+	defer func() { cancelar(); <-mensajeriaFin }()
 
 	aplicacion := fiber.New(fiber.Config{
 		AppName:               "account-service",

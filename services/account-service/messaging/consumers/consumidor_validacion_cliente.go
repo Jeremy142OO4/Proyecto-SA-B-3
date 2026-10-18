@@ -70,3 +70,5 @@ func (c *ConsumidorValidacionCliente) procesarEntrega(ctx context.Context, entre
 	}
 	processErr = entrega.Ack(false)
 }
+
+func (c *ConsumidorValidacionCliente) Cerrado() bool { return c.canal.IsClosed() }

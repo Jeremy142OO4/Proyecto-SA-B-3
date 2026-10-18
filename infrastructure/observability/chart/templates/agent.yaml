@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: otel-logs
+spec:
+  selector:
+    matchLabels: {app.kubernetes.io/name: otel-logs}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: otel-logs}
+      annotations:
+        checksum/config: {{ tpl (.Files.Get "config/agent.yaml") . | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: otel-logs
+          image: {{ .Values.agent.image }}
+          args: ["--config=/etc/bank/config.yaml"]
+          ports: [{name: http, containerPort: 13133}]
+          resources:
+            requests: {cpu: 5m, memory: {{ .Values.agent.memoryRequest }}}
+            limits: {cpu: 100m, memory: {{ .Values.agent.memoryLimit }}}
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+            seccompProfile: {type: RuntimeDefault}
+          readinessProbe:
+            httpGet: {path: /, port: http}
+          livenessProbe:
+            httpGet: {path: /, port: http}
+            periodSeconds: 20
+          volumeMounts:
+            - {name: config, mountPath: /etc/bank/config.yaml, subPath: config.yaml, readOnly: true}
+            - {name: podlogs, mountPath: /var/log/pods, readOnly: true}
+            - {name: offsets, mountPath: /var/lib/otel-offsets}
+      volumes:
+        - name: config
+          configMap: {name: otel-logs-config}
+        - name: podlogs
+          hostPath: {path: /var/log/pods, type: Directory}
+        - name: offsets
+          hostPath: {path: /var/lib/bank-usac-otel-offsets, type: DirectoryOrCreate}

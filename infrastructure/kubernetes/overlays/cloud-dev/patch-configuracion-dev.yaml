@@ -5,6 +5,7 @@ metadata:
   namespace: bank-usac
 data:
   ENTORNO: desarrollo
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.bank-usac-observability.svc.cluster.local:4318"
   CORS_ORIGINS: "__FRONTEND_URL__"
 ---
 apiVersion: v1

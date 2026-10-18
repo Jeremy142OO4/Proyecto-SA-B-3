@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/Proyecto-SA-B-3/transaction-service/config"
 	"github.com/Proyecto-SA-B-3/transaction-service/database"
+	"github.com/Proyecto-SA-B-3/transaction-service/internal/recovery"
 	"github.com/Proyecto-SA-B-3/transaction-service/internal/telemetry"
 	"github.com/Proyecto-SA-B-3/transaction-service/messaging"
 	"github.com/Proyecto-SA-B-3/transaction-service/messaging/consumers"
@@ -17,6 +18,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 func main() {
@@ -35,44 +37,51 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
-	rabbit, e := messaging.Conectar(cfg.URLRabbitMQ)
-	if e != nil {
-		slog.Error("RabbitMQ no disponible", "error", e)
-		os.Exit(1)
-	}
-	defer rabbit.Close()
-	ch, e := rabbit.Channel()
-	if e != nil {
-		panic(e)
-	}
-	if e = messaging.DeclararTopologia(ch); e != nil {
-		panic(e)
-	}
-	ch.Close()
-	repo := repositories.NuevoPostgres(db)
-	serv := services.Nuevo(repo)
-	pubComandos, e := messaging.NuevoPublicador(rabbit)
-	if e != nil {
-		panic(e)
-	}
-	defer pubComandos.Cerrar()
-	pubEventos, e := messaging.NuevoPublicador(rabbit)
-	if e != nil {
-		panic(e)
-	}
-	defer pubEventos.Cerrar()
-	cons, e := consumers.Nuevo(rabbit, serv, pubComandos, cfg.MaximoReintentos)
-	if e != nil {
-		panic(e)
-	}
-	defer cons.Cerrar()
+	mensajeriaFin := make(chan struct{})
 	go func() {
-		if e := cons.Ejecutar(ctx); e != nil && ctx.Err() == nil {
-			slog.Error("consumidor detenido", "error", e)
-			cancel()
-		}
+		defer close(mensajeriaFin)
+		recovery.Run(ctx, func(ctx context.Context) error {
+			rabbit, e := messaging.Conectar(cfg.URLRabbitMQ)
+			if e != nil {
+				slog.Error("RabbitMQ no disponible", "error", e)
+				return e
+			}
+			defer rabbit.Close()
+			ch, e := rabbit.Channel()
+			if e != nil {
+				return e
+			}
+			if e = messaging.DeclararTopologia(ch); e != nil {
+				return e
+			}
+			ch.Close()
+			repo := repositories.NuevoPostgres(db)
+			serv := services.Nuevo(repo)
+			pubComandos, e := messaging.NuevoPublicador(rabbit)
+			if e != nil {
+				return e
+			}
+			defer pubComandos.Cerrar()
+			pubEventos, e := messaging.NuevoPublicador(rabbit)
+			if e != nil {
+				return e
+			}
+			defer pubEventos.Cerrar()
+			cons, e := consumers.Nuevo(rabbit, serv, pubComandos, cfg.MaximoReintentos)
+			if e != nil {
+				return e
+			}
+			defer cons.Cerrar()
+
+			outbox := publishers.Nuevo(repo, pubEventos, cfg.IntervaloOutbox)
+			return recovery.Serve(ctx, func() { _ = rabbit.CloseDeadline(time.Now().Add(time.Second)) },
+				[]func() bool{rabbit.IsClosed, pubComandos.Cerrado, pubEventos.Cerrado, cons.Cerrado},
+				cons.Ejecutar, func(ctx context.Context) error { outbox.Ejecutar(ctx); return nil })
+
+		})
 	}()
-	go publishers.Nuevo(repo, pubEventos, cfg.IntervaloOutbox).Ejecutar(ctx)
+	defer func() { cancel(); <-mensajeriaFin }()
+
 	app := fiber.New(fiber.Config{AppName: "transaction-service", DisableStartupMessage: true})
 
 	routes.Registrar(app)

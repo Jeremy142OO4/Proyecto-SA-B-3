@@ -46,6 +46,6 @@ Los eventos anteriores conservan contexto vacío. No eliminar columnas durante u
 
 Las pruebas comunes entran en los jobs CI existentes por componente. Las reales necesitan TEST_RABBITMQ_URL y TEST_DATABASE_URL; sin ellas se omiten expresamente. Las pruebas previas de repositorio necesitan además URL_BASE_DATOS_PRUEBAS sobre una base migrada. Nunca utilizar bases con clientes reales.
 
-Las dependencias temporales y los ejecutables se eliminan al terminar. No se modificó la nube. Queda pendiente probar los Jobs en el cluster, instalar Collector/backends e implementar métricas de dominio, alertas y dashboards. La definición del SLO no demuestra su cumplimiento.
+Las dependencias temporales y los ejecutables se eliminan al terminar. Posteriormente se desplegó el commit `1e28285` en dev y se verificaron las cuatro columnas Outbox y los seis componentes. El punto 4 conecta Collector/backends y el tablero inicial; consultar [plataforma](plataforma.md). Siguen pendientes métricas de dominio y alertas. La definición del SLO no demuestra su cumplimiento.
 
 Referencias: [OpenTelemetry Go](https://opentelemetry.io/docs/languages/go/getting-started/) y [exportadores](https://opentelemetry.io/docs/languages/go/exporters/).

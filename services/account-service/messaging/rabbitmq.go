@@ -22,7 +22,7 @@ const (
 )
 
 func ConectarRabbitMQ(urlRabbitMQ string) (*amqp.Connection, error) {
-	conexion, err := amqp.Dial(urlRabbitMQ)
+	conexion, err := amqp.DialConfig(urlRabbitMQ, amqp.Config{Heartbeat: 10 * time.Second, Dial: amqp.DefaultDial(5 * time.Second)})
 	if err != nil {
 		return nil, fmt.Errorf("conectar con RabbitMQ: %w", err)
 	}
@@ -139,3 +139,5 @@ func (p *Publicador) publicarCuerpo(ctx context.Context, intercambio, clave stri
 	}
 	return nil
 }
+
+func (p *Publicador) Cerrado() bool { return p.canal.IsClosed() }

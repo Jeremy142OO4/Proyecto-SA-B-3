@@ -1,0 +1,6 @@
+apiVersion: v2
+name: bank-observability
+description: Compact private observability for Bank USAC dev
+type: application
+version: 0.1.0
+appVersion: "1"

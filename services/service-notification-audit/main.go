@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bank-usac/service-notification-audit/internal/recovery"
 	"bank-usac/service-notification-audit/internal/telemetry"
 	"context"
 	"log"
@@ -53,15 +54,19 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	rabbitConsumer, err := messaging.NewRabbitMQConsumer(cfg.RabbitMQURL, auditSvc)
-	if err != nil {
-		log.Fatalf("Fallo al inicializar RabbitMQ Consumer: %v", err)
-	}
-	defer rabbitConsumer.Close()
-
-	if err := rabbitConsumer.StartConsuming(ctx); err != nil {
-		log.Fatalf("Fallo al iniciar consumo de eventos: %v", err)
-	}
+	messagingDone := make(chan struct{})
+	go func() {
+		defer close(messagingDone)
+		recovery.Run(ctx, func(ctx context.Context) error {
+			consumer, err := messaging.NewRabbitMQConsumer(cfg.RabbitMQURL, auditSvc)
+			if err != nil {
+				return err
+			}
+			defer consumer.Close()
+			return consumer.StartConsuming(ctx)
+		})
+	}()
+	defer func() { cancel(); <-messagingDone }()
 
 	// 4. Servidor HTTP Fiber
 	app := fiber.New(fiber.Config{

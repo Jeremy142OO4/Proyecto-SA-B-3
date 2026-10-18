@@ -21,7 +21,7 @@ const (
 )
 
 func Conectar(url string) (*amqp.Connection, error) {
-	c, e := amqp.Dial(url)
+	c, e := amqp.DialConfig(url, amqp.Config{Heartbeat: 10 * time.Second, Dial: amqp.DefaultDial(5 * time.Second)})
 	if e != nil {
 		return nil, fmt.Errorf("conectar RabbitMQ: %w", e)
 	}
@@ -98,3 +98,5 @@ func (p *Publicador) publicar(ctx context.Context, x, k string, b []byte, h amqp
 	}
 	return nil
 }
+
+func (p *Publicador) Cerrado() bool { return p.ch.IsClosed() }

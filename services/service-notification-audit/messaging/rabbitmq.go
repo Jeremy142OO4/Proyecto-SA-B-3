@@ -1,6 +1,7 @@
 package messaging
 
 import (
+	"bank-usac/service-notification-audit/internal/recovery"
 	"bank-usac/service-notification-audit/internal/telemetry"
 	"context"
 	"encoding/json"
@@ -26,11 +27,17 @@ type RabbitMQConsumer struct {
 }
 
 func NewRabbitMQConsumer(url string, auditSvc services.AuditService) (*RabbitMQConsumer, error) {
-	conn, err := amqp.Dial(url)
+	conn, err := amqp.DialConfig(url, amqp.Config{Heartbeat: 10 * time.Second, Dial: amqp.DefaultDial(5 * time.Second)})
 	if err != nil {
 		return nil, err
 	}
 
+	success := false
+	defer func() {
+		if !success {
+			_ = conn.CloseDeadline(time.Now().Add(time.Second))
+		}
+	}()
 	ch, err := conn.Channel()
 	if err != nil {
 		return nil, err
@@ -106,6 +113,7 @@ func NewRabbitMQConsumer(url string, auditSvc services.AuditService) (*RabbitMQC
 	}
 	auditSvc.SetRecipientResolver(resolver)
 
+	success = true
 	return &RabbitMQConsumer{conn: conn, channel: ch, auditSvc: auditSvc, customerResolver: resolver}, nil
 }
 
@@ -115,7 +123,7 @@ func (r *RabbitMQConsumer) StartConsuming(ctx context.Context) error {
 			return err
 		}
 	}
-	msgs, err := r.channel.Consume(
+	msgs, err := r.channel.ConsumeWithContext(ctx,
 		"notification-audit.events.q",
 		"notification-audit-worker",
 		false, // Manual Ack obligatorio por SRE
@@ -136,48 +144,24 @@ func (r *RabbitMQConsumer) StartConsuming(ctx context.Context) error {
 		return err
 	}
 
-	go func() {
-		log.Println("[RabbitMQ] Consumidor de Notification & Audit iniciado. Escuchando eventos...")
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case msg, ok := <-msgs:
-				if !ok {
-					return
+	loop := func(deliveries <-chan amqp.Delivery, handle func(context.Context, amqp.Delivery)) func(context.Context) error {
+		return func(ctx context.Context) error {
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case delivery, ok := <-deliveries:
+					if !ok {
+						return errors.New("audit AMQP consumer closed")
+					}
+					handle(ctx, delivery)
 				}
-				r.handleDelivery(ctx, msg)
 			}
 		}
-	}()
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case msg, ok := <-dlq:
-				if !ok {
-					return
-				}
-				r.handleDLQDelivery(ctx, msg)
-			}
-		}
-	}()
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case msg, ok := <-comandos:
-				if !ok {
-					return
-				}
-				r.handleCommand(ctx, msg)
-			}
-		}
-	}()
-
-	return nil
+	}
+	return recovery.Serve(ctx, func() { _ = r.conn.CloseDeadline(time.Now().Add(time.Second)) },
+		[]func() bool{r.conn.IsClosed, r.channel.IsClosed, r.customerResolver.publish.IsClosed, r.customerResolver.consume.IsClosed},
+		loop(msgs, r.handleDelivery), loop(dlq, r.handleDLQDelivery), loop(comandos, r.handleCommand))
 }
 
 type respuestaRPC struct {
@@ -337,6 +321,9 @@ func headerString(headers amqp.Table, key string) string {
 }
 
 func (r *RabbitMQConsumer) Close() {
+	if r.conn != nil {
+		_ = r.conn.CloseDeadline(time.Now().Add(time.Second))
+	}
 	if r.customerResolver != nil {
 		r.customerResolver.Close()
 	}

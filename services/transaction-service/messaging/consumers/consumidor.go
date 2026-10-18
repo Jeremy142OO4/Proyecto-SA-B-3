@@ -12,6 +12,7 @@ import (
 	"github.com/Proyecto-SA-B-3/transaction-service/services"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"log/slog"
+	"sync"
 )
 
 type Consumidor struct {
@@ -34,12 +35,19 @@ func Nuevo(c *amqp.Connection, s *services.Servicio, p *messaging.Publicador, ma
 }
 func (c *Consumidor) Cerrar() error { return c.ch.Close() }
 func (c *Consumidor) Ejecutar(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	var group sync.WaitGroup
+	defer func() { cancel(); group.Wait() }()
+	stopped := make(chan struct{}, 2)
 	for _, q := range []string{messaging.ColaComandos, messaging.ColaEventosCuenta} {
 		d, e := c.ch.ConsumeWithContext(ctx, q, "transaction-service."+q, false, false, false, false, nil)
 		if e != nil {
 			return e
 		}
+		group.Add(1)
 		go func(entregas <-chan amqp.Delivery) {
+			defer group.Done()
+			defer func() { stopped <- struct{}{} }()
 			for d := range entregas {
 				if e := c.procesar(ctx, d); e != nil {
 					slog.Error("mensaje no resuelto", "tipo", d.RoutingKey, "error", e)
@@ -47,8 +55,12 @@ func (c *Consumidor) Ejecutar(ctx context.Context) error {
 			}
 		}(d)
 	}
-	<-ctx.Done()
-	return nil
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-stopped:
+		return errors.New("transaction AMQP consumer closed")
+	}
 }
 func (c *Consumidor) procesar(ctx context.Context, d amqp.Delivery) (resultErr error) {
 	ctx, finish := telemetry.Consume(ctx, d)
@@ -170,3 +182,5 @@ func copiar(h amqp.Table) amqp.Table {
 	}
 	return o
 }
+
+func (c *Consumidor) Cerrado() bool { return c.ch.IsClosed() }

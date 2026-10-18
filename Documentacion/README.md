@@ -54,6 +54,7 @@ El catálogo de CDU se mantiene dentro de `uml/casos-de-uso.md`. Cada caso conse
 - [Matriz de medición](observabilidad/matriz-medicion.md): fuentes por SLI, denominadores y alcance del punto 2.
 - [Contrato JSON](observabilidad/telemetria.json): constantes comunes de telemetría y disponibilidad.
 - [Implementación y pruebas del punto 3](observabilidad/implementacion.md): instrumentación, configuración y alcance validado.
+- [Plataforma del punto 4](observabilidad/plataforma.md): despliegue privado, acceso, retención y CI/CD.
 
 - [SLI](sre/sli.md): indicadores medibles.
 - [SLO](sre/slo.md): objetivos para los indicadores.

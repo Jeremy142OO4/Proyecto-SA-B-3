@@ -7,6 +7,7 @@ import (
 	"html"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"bank-usac/service-notification-audit/events"
@@ -32,14 +33,17 @@ type RecipientResolver interface {
 }
 
 type auditService struct {
-	auditRepo        repositories.AuditRepository
-	notificationRepo repositories.NotificationRepository
-	idempotencyRepo  repositories.IdempotencyRepository
-	emailSender      EmailSender
+	auditRepo         repositories.AuditRepository
+	notificationRepo  repositories.NotificationRepository
+	idempotencyRepo   repositories.IdempotencyRepository
+	emailSender       EmailSender
+	resolverMu        sync.RWMutex
 	recipientResolver RecipientResolver
 }
 
 func (s *auditService) SetRecipientResolver(resolver RecipientResolver) {
+	s.resolverMu.Lock()
+	defer s.resolverMu.Unlock()
 	s.recipientResolver = resolver
 }
 
@@ -128,12 +132,15 @@ func (s *auditService) handleNotificationDispatch(
 		errorDetail := ""
 		if !isEmail(recipient) {
 			customerID := extractCustomerID(envelope.Payload)
-			if s.recipientResolver == nil || customerID == uuid.Nil {
+			s.resolverMu.RLock()
+			resolver := s.recipientResolver
+			s.resolverMu.RUnlock()
+			if resolver == nil || customerID == uuid.Nil {
 				errorDetail = "destinatario de correo no disponible en el evento"
 			} else {
 				var err error
 				resolverCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-				recipient, fullName, err = s.recipientResolver.ResolveCustomer(resolverCtx, customerID)
+				recipient, fullName, err = resolver.ResolveCustomer(resolverCtx, customerID)
 				cancel()
 				if err != nil {
 					errorDetail = fmt.Sprintf("no fue posible consultar el correo del cliente: %v", err)
@@ -148,36 +155,36 @@ type notificationRule struct {
 	notificationType string
 	subject          string
 	bodySummary      string
-	defaultRecipient  string
+	defaultRecipient string
 }
 
 func notificationRuleFor(eventType string) (notificationRule, bool) {
 	rules := map[string]notificationRule{
-		"cliente.creado":                    {"CLIENT_CREATED", "Registro de cliente recibido", "El cliente fue registrado correctamente.", "customer"},
-		"cliente.activado":                  {"CLIENT_ACTIVATED", "Cliente activado", "El cliente fue activado correctamente.", "customer"},
-		"cliente.actualizado":               {"CLIENT_UPDATED", "Perfil actualizado", "El perfil del cliente fue actualizado.", "customer"},
-		"cliente.estado.actualizado":        {"CLIENT_STATUS_UPDATED", "Estado de cliente actualizado", "El estado del cliente fue actualizado.", "customer"},
-		"cliente.rechazado":                 {"CLIENT_VALIDATION_REJECTED", "Validación de cliente rechazada", "El cliente no pudo validarse para la operación solicitada.", "customer"},
-		"cliente.kyc.verificado":            {"KYC_VERIFIED", "Validación KYC aprobada", "La validación KYC fue aprobada.", "customer"},
-		"cliente.kyc.rechazado":             {"KYC_REJECTED", "Validación KYC rechazada", "La validación KYC fue rechazada.", "customer"},
-		"cliente.kyc.estado.actualizado":    {"KYC_UPDATED", "Estado KYC actualizado", "El estado KYC fue actualizado.", "customer"},
-		"cuenta.creada":                     {"ACCOUNT_CREATED", "Cuenta creada", "La cuenta bancaria fue creada correctamente.", "account-owner"},
-		"cuenta.creacion.rechazada":         {"ACCOUNT_REJECTED", "Creación de cuenta rechazada", "La solicitud de cuenta no pudo completarse.", "account-owner"},
-		"cuenta.debitada":                   {"ACCOUNT_DEBITED", "Débito aplicado", "El débito fue aplicado correctamente.", "account-owner"},
-		"cuenta.debito.rechazado":           {"ACCOUNT_DEBIT_REJECTED", "Débito rechazado", "El débito no pudo aplicarse.", "account-owner"},
-		"cuenta.acreditada":                 {"ACCOUNT_CREDITED", "Crédito aplicado", "El crédito fue aplicado correctamente.", "account-owner"},
-		"cuenta.credito.rechazado":          {"ACCOUNT_CREDIT_REJECTED", "Crédito rechazado", "El crédito no pudo aplicarse.", "account-owner"},
-		"cuenta.compensada":                 {"ACCOUNT_COMPENSATED", "Cuenta compensada", "La operación fue compensada correctamente.", "account-owner"},
-		"cuenta.compensacion.rechazada":     {"ACCOUNT_COMPENSATION_REJECTED", "Compensación rechazada", "La compensación no pudo aplicarse.", "account-owner"},
-		"cuenta.desactivada":                {"ACCOUNT_DEACTIVATED", "Cuenta desactivada", "La cuenta fue desactivada por inactividad.", "account-owner"},
-		"cuenta.transferencia.rechazada":    {"ACCOUNT_TRANSFER_REJECTED", "Validación de transferencia rechazada", "La transferencia no cumplió las reglas de las cuentas.", "accounts-involved"},
-		"transferencia.completada":          {"TRANSFER_COMPLETED", "Transferencia completada", "La transferencia fue completada satisfactoriamente.", "accounts-involved"},
-		"transferencia.rechazada":           {"TRANSFER_REJECTED", "Transferencia rechazada", "La transferencia fue rechazada sin aplicar cambios definitivos.", "accounts-involved"},
-		"transferencia.compensando":         {"TRANSFER_COMPENSATING", "Transferencia en compensación", "La transferencia está siendo compensada.", "accounts-involved"},
-		"transferencia.compensada":          {"TRANSFER_COMPENSATED", "Transferencia compensada", "La transferencia fue compensada y los fondos regresaron a la cuenta origen.", "accounts-involved"},
+		"cliente.creado":                     {"CLIENT_CREATED", "Registro de cliente recibido", "El cliente fue registrado correctamente.", "customer"},
+		"cliente.activado":                   {"CLIENT_ACTIVATED", "Cliente activado", "El cliente fue activado correctamente.", "customer"},
+		"cliente.actualizado":                {"CLIENT_UPDATED", "Perfil actualizado", "El perfil del cliente fue actualizado.", "customer"},
+		"cliente.estado.actualizado":         {"CLIENT_STATUS_UPDATED", "Estado de cliente actualizado", "El estado del cliente fue actualizado.", "customer"},
+		"cliente.rechazado":                  {"CLIENT_VALIDATION_REJECTED", "Validación de cliente rechazada", "El cliente no pudo validarse para la operación solicitada.", "customer"},
+		"cliente.kyc.verificado":             {"KYC_VERIFIED", "Validación KYC aprobada", "La validación KYC fue aprobada.", "customer"},
+		"cliente.kyc.rechazado":              {"KYC_REJECTED", "Validación KYC rechazada", "La validación KYC fue rechazada.", "customer"},
+		"cliente.kyc.estado.actualizado":     {"KYC_UPDATED", "Estado KYC actualizado", "El estado KYC fue actualizado.", "customer"},
+		"cuenta.creada":                      {"ACCOUNT_CREATED", "Cuenta creada", "La cuenta bancaria fue creada correctamente.", "account-owner"},
+		"cuenta.creacion.rechazada":          {"ACCOUNT_REJECTED", "Creación de cuenta rechazada", "La solicitud de cuenta no pudo completarse.", "account-owner"},
+		"cuenta.debitada":                    {"ACCOUNT_DEBITED", "Débito aplicado", "El débito fue aplicado correctamente.", "account-owner"},
+		"cuenta.debito.rechazado":            {"ACCOUNT_DEBIT_REJECTED", "Débito rechazado", "El débito no pudo aplicarse.", "account-owner"},
+		"cuenta.acreditada":                  {"ACCOUNT_CREDITED", "Crédito aplicado", "El crédito fue aplicado correctamente.", "account-owner"},
+		"cuenta.credito.rechazado":           {"ACCOUNT_CREDIT_REJECTED", "Crédito rechazado", "El crédito no pudo aplicarse.", "account-owner"},
+		"cuenta.compensada":                  {"ACCOUNT_COMPENSATED", "Cuenta compensada", "La operación fue compensada correctamente.", "account-owner"},
+		"cuenta.compensacion.rechazada":      {"ACCOUNT_COMPENSATION_REJECTED", "Compensación rechazada", "La compensación no pudo aplicarse.", "account-owner"},
+		"cuenta.desactivada":                 {"ACCOUNT_DEACTIVATED", "Cuenta desactivada", "La cuenta fue desactivada por inactividad.", "account-owner"},
+		"cuenta.transferencia.rechazada":     {"ACCOUNT_TRANSFER_REJECTED", "Validación de transferencia rechazada", "La transferencia no cumplió las reglas de las cuentas.", "accounts-involved"},
+		"transferencia.completada":           {"TRANSFER_COMPLETED", "Transferencia completada", "La transferencia fue completada satisfactoriamente.", "accounts-involved"},
+		"transferencia.rechazada":            {"TRANSFER_REJECTED", "Transferencia rechazada", "La transferencia fue rechazada sin aplicar cambios definitivos.", "accounts-involved"},
+		"transferencia.compensando":          {"TRANSFER_COMPENSATING", "Transferencia en compensación", "La transferencia está siendo compensada.", "accounts-involved"},
+		"transferencia.compensada":           {"TRANSFER_COMPENSATED", "Transferencia compensada", "La transferencia fue compensada y los fondos regresaron a la cuenta origen.", "accounts-involved"},
 		"transferencia.compensacion.fallida": {"TRANSFER_COMPENSATION_FAILED", "Error al compensar transferencia", "La compensación requiere revisión administrativa.", "accounts-involved"},
-		"pago.completado":                   {"PAYMENT_COMPLETED", "Pago completado", "El pago fue procesado correctamente.", "customer"},
-		"pago.rechazado":                    {"PAYMENT_REJECTED", "Pago rechazado", "El pago no pudo completarse.", "customer"},
+		"pago.completado":                    {"PAYMENT_COMPLETED", "Pago completado", "El pago fue procesado correctamente.", "customer"},
+		"pago.rechazado":                     {"PAYMENT_REJECTED", "Pago rechazado", "El pago no pudo completarse.", "customer"},
 	}
 	rule, ok := rules[eventType]
 	return rule, ok

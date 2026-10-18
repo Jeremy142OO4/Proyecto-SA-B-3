@@ -22,6 +22,7 @@ type customerResolver struct {
 	consume *amqp.Channel
 	pending map[uuid.UUID]chan customerProfileResponse
 	mutex   sync.Mutex
+	workers sync.WaitGroup
 }
 
 type customerProfileResponse struct {
@@ -55,11 +56,13 @@ func newCustomerResolver(conn *amqp.Connection) (*customerResolver, error) {
 }
 
 func (r *customerResolver) Start(ctx context.Context) error {
-	deliveries, err := r.consume.Consume("notification-audit.customer-responses.q", "notification-audit-customer-resolver", false, false, false, false, nil)
+	deliveries, err := r.consume.ConsumeWithContext(ctx, "notification-audit.customer-responses.q", "notification-audit-customer-resolver", false, false, false, false, nil)
 	if err != nil {
 		return err
 	}
+	r.workers.Add(1)
 	go func() {
+		defer r.workers.Done()
 		for {
 			select {
 			case <-ctx.Done():
@@ -163,5 +166,12 @@ func (r *customerResolver) Close() {
 	}
 	if r.consume != nil {
 		_ = r.consume.Close()
+	}
+	r.workers.Wait()
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	for id, pending := range r.pending {
+		pending <- customerProfileResponse{err: fmt.Errorf("customer resolver connection closed")}
+		delete(r.pending, id)
 	}
 }
