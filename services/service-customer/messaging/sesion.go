@@ -1,6 +1,7 @@
 package messaging
 
 import (
+	"bank-usac/service-customer/internal/telemetry"
 	"context"
 	"errors"
 	"fmt"
@@ -54,7 +55,10 @@ func (s *sesionAMQP) listo() bool {
 		s.consumidor != nil && !s.consumidor.IsClosed()
 }
 
-func (s *sesionAMQP) publicar(ctx context.Context, intercambio, clave string, mensaje amqp.Publishing) error {
+func (s *sesionAMQP) publicar(ctx context.Context, intercambio, clave string, mensaje amqp.Publishing) (resultErr error) {
+	var finish func(error)
+	ctx, mensaje.Headers, finish = telemetry.Publish(ctx, mensaje.Headers, mensaje.Body, clave)
+	defer func() { finish(resultErr) }()
 	ctx, cancelar := context.WithTimeout(ctx, 5*time.Second)
 	defer cancelar()
 	s.publicarMu.Lock()
@@ -187,7 +191,9 @@ func (s *sesionAMQP) consumir(ctx context.Context, url, cola string, qos int, to
 				return
 			}
 			procesarCtx, cancelar := context.WithTimeout(ctx, 15*time.Second)
+			procesarCtx, finish := telemetry.Consume(procesarCtx, entrega)
 			err = manejar(procesarCtx, entrega)
+			finish(err)
 			cancelar()
 			if err != nil {
 				log.Printf("RabbitMQ: error procesando mensaje en %s: %v", cola, err)

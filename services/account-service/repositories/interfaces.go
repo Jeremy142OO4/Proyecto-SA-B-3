@@ -24,6 +24,7 @@ type RepositorioMensajes interface {
 }
 
 type MensajeSalida struct {
+	TraceContext     string
 	IDMensaje        uuid.UUID
 	TipoEvento       string
 	VersionEvento    int

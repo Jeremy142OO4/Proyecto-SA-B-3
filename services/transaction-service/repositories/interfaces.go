@@ -18,6 +18,7 @@ type Repositorio interface {
 	ResponderConsulta(context.Context, events.SobreMensaje, string, any) (bool, error)
 }
 type MensajeSalida struct {
+	TraceContext  string
 	IDMensaje     uuid.UUID
 	Tipo          string
 	Contenido     []byte

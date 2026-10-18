@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"bank-usac/service-customer/internal/telemetry"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -23,6 +24,8 @@ func NewCustomerRepository(db *sqlx.DB) CustomerRepository {
 }
 
 func (r *customerRepo) CreateWithOutbox(ctx context.Context, customer *models.Customer, token *models.ActivationToken, outboxEvents []*models.OutboxMessage) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "CreateWithOutbox")
+	defer finishDatabase()
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
@@ -48,11 +51,11 @@ func (r *customerRepo) CreateWithOutbox(ctx context.Context, customer *models.Cu
 	}
 
 	queryOutbox := `
-		INSERT INTO outbox_messages (id, event_type, payload, correlation_id, causation_id, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO outbox_messages (id, event_type, payload, correlation_id, causation_id, created_at,trace_context)
+		VALUES ($1, $2, $3, $4, $5, $6,$7)
 	`
 	for _, ev := range outboxEvents {
-		if _, err := tx.ExecContext(ctx, queryOutbox, ev.ID, ev.EventType, ev.Payload, ev.CorrelationID, ev.CausationID, ev.CreatedAt); err != nil {
+		if _, err := tx.ExecContext(ctx, queryOutbox, ev.ID, ev.EventType, ev.Payload, ev.CorrelationID, ev.CausationID, ev.CreatedAt, telemetry.Serialize(ctx)); err != nil {
 			return err
 		}
 	}
@@ -61,6 +64,8 @@ func (r *customerRepo) CreateWithOutbox(ctx context.Context, customer *models.Cu
 }
 
 func (r *customerRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.Customer, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "GetByID")
+	defer finishDatabase()
 	var c models.Customer
 	err := r.db.GetContext(ctx, &c, "SELECT * FROM customers WHERE customer_id = $1", id)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -70,6 +75,8 @@ func (r *customerRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.Custo
 }
 
 func (r *customerRepo) GetByUsername(ctx context.Context, username string) (*models.Customer, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "GetByUsername")
+	defer finishDatabase()
 	var c models.Customer
 	err := r.db.GetContext(ctx, &c, "SELECT * FROM customers WHERE username = $1", username)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -79,6 +86,8 @@ func (r *customerRepo) GetByUsername(ctx context.Context, username string) (*mod
 }
 
 func (r *customerRepo) GetByEmail(ctx context.Context, email string) (*models.Customer, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "GetByEmail")
+	defer finishDatabase()
 	var c models.Customer
 	err := r.db.GetContext(ctx, &c, "SELECT * FROM customers WHERE email = $1", email)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -88,6 +97,8 @@ func (r *customerRepo) GetByEmail(ctx context.Context, email string) (*models.Cu
 }
 
 func (r *customerRepo) GetByDocumentID(ctx context.Context, docID string) (*models.Customer, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "GetByDocumentID")
+	defer finishDatabase()
 	var c models.Customer
 	err := r.db.GetContext(ctx, &c, "SELECT * FROM customers WHERE document_id = $1", docID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -97,6 +108,8 @@ func (r *customerRepo) GetByDocumentID(ctx context.Context, docID string) (*mode
 }
 
 func (r *customerRepo) UpdateWithOutbox(ctx context.Context, customer *models.Customer, outboxEvent *models.OutboxMessage) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "UpdateWithOutbox")
+	defer finishDatabase()
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
@@ -116,8 +129,8 @@ func (r *customerRepo) UpdateWithOutbox(ctx context.Context, customer *models.Cu
 	}
 	if outboxEvent != nil {
 		if _, err = tx.ExecContext(ctx, `INSERT INTO outbox_messages
-			(id,event_type,payload,correlation_id,causation_id,created_at)
-			VALUES($1,$2,$3,$4,$5,$6)`, outboxEvent.ID, outboxEvent.EventType, outboxEvent.Payload, outboxEvent.CorrelationID, outboxEvent.CausationID, outboxEvent.CreatedAt); err != nil {
+			(id,event_type,payload,correlation_id,causation_id,created_at,trace_context)
+			VALUES($1,$2,$3,$4,$5,$6,$7)`, outboxEvent.ID, outboxEvent.EventType, outboxEvent.Payload, outboxEvent.CorrelationID, outboxEvent.CausationID, outboxEvent.CreatedAt, telemetry.Serialize(ctx)); err != nil {
 			return err
 		}
 	}
@@ -125,6 +138,8 @@ func (r *customerRepo) UpdateWithOutbox(ctx context.Context, customer *models.Cu
 }
 
 func (r *customerRepo) FindActivationToken(ctx context.Context, tokenHash string) (*models.ActivationToken, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "FindActivationToken")
+	defer finishDatabase()
 	var t models.ActivationToken
 	query := "SELECT * FROM activation_tokens WHERE token_hash = $1"
 	err := r.db.GetContext(ctx, &t, query, tokenHash)
@@ -135,6 +150,8 @@ func (r *customerRepo) FindActivationToken(ctx context.Context, tokenHash string
 }
 
 func (r *customerRepo) ActivateCustomer(ctx context.Context, customerID uuid.UUID, tokenID uuid.UUID, outboxEvent *models.OutboxMessage) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "ActivateCustomer")
+	defer finishDatabase()
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
@@ -152,10 +169,10 @@ func (r *customerRepo) ActivateCustomer(ctx context.Context, customerID uuid.UUI
 
 	if outboxEvent != nil {
 		queryOutbox := `
-			INSERT INTO outbox_messages (id, event_type, payload, correlation_id, causation_id, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6)
+			INSERT INTO outbox_messages (id, event_type, payload, correlation_id, causation_id, created_at,trace_context)
+			VALUES ($1, $2, $3, $4, $5, $6,$7)
 		`
-		if _, err := tx.ExecContext(ctx, queryOutbox, outboxEvent.ID, outboxEvent.EventType, outboxEvent.Payload, outboxEvent.CorrelationID, outboxEvent.CausationID, outboxEvent.CreatedAt); err != nil {
+		if _, err := tx.ExecContext(ctx, queryOutbox, outboxEvent.ID, outboxEvent.EventType, outboxEvent.Payload, outboxEvent.CorrelationID, outboxEvent.CausationID, outboxEvent.CreatedAt, telemetry.Serialize(ctx)); err != nil {
 			return err
 		}
 	}
@@ -164,12 +181,16 @@ func (r *customerRepo) ActivateCustomer(ctx context.Context, customerID uuid.UUI
 }
 
 func (r *customerRepo) IsMessageProcessed(ctx context.Context, messageID uuid.UUID) (bool, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "IsMessageProcessed")
+	defer finishDatabase()
 	var count int
 	err := r.db.GetContext(ctx, &count, "SELECT COUNT(1) FROM processed_messages WHERE message_id = $1", messageID)
 	return count > 0, err
 }
 
 func (r *customerRepo) MarkMessageProcessed(ctx context.Context, tx *sqlx.Tx, messageID uuid.UUID, consumerName, ref string) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "MarkMessageProcessed")
+	defer finishDatabase()
 	query := `INSERT INTO processed_messages (message_id, consumer_name, result_reference)
 		VALUES ($1, $2, $3) ON CONFLICT (message_id) DO NOTHING`
 	if tx != nil {
@@ -181,6 +202,8 @@ func (r *customerRepo) MarkMessageProcessed(ctx context.Context, tx *sqlx.Tx, me
 }
 
 func (r *customerRepo) GetProcessedMessageResult(ctx context.Context, messageID uuid.UUID) (bool, string, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "GetProcessedMessageResult")
+	defer finishDatabase()
 	var result string
 	err := r.db.GetContext(ctx, &result, "SELECT result_reference FROM processed_messages WHERE message_id = $1", messageID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -190,6 +213,8 @@ func (r *customerRepo) GetProcessedMessageResult(ctx context.Context, messageID 
 }
 
 func (r *customerRepo) RecordProcessedMessage(ctx context.Context, messageID uuid.UUID, consumerName, ref string) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "RecordProcessedMessage")
+	defer finishDatabase()
 	_, err := r.db.ExecContext(ctx, `INSERT INTO processed_messages
 		(message_id, consumer_name, result_reference) VALUES ($1,$2,$3)
 		ON CONFLICT (message_id) DO NOTHING`, messageID, consumerName, ref)
@@ -197,6 +222,8 @@ func (r *customerRepo) RecordProcessedMessage(ctx context.Context, messageID uui
 }
 
 func (r *customerRepo) GetPendingOutbox(ctx context.Context, limit int) ([]*models.OutboxMessage, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "GetPendingOutbox")
+	defer finishDatabase()
 	var msgs []*models.OutboxMessage
 	query := "SELECT * FROM outbox_messages WHERE published_at IS NULL ORDER BY created_at ASC LIMIT $1"
 	err := r.db.SelectContext(ctx, &msgs, query, limit)
@@ -204,23 +231,31 @@ func (r *customerRepo) GetPendingOutbox(ctx context.Context, limit int) ([]*mode
 }
 
 func (r *customerRepo) MarkOutboxPublished(ctx context.Context, id uuid.UUID) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "MarkOutboxPublished")
+	defer finishDatabase()
 	now := time.Now().UTC()
 	_, err := r.db.ExecContext(ctx, "UPDATE outbox_messages SET published_at = $1 WHERE id = $2", now, id)
 	return err
 }
 
 func (r *customerRepo) IncrementOutboxAttempt(ctx context.Context, id uuid.UUID, errStr string) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "IncrementOutboxAttempt")
+	defer finishDatabase()
 	_, err := r.db.ExecContext(ctx, "UPDATE outbox_messages SET attempts = attempts + 1, last_error = $1 WHERE id = $2", errStr, id)
 	return err
 }
 
 func (r *customerRepo) List(ctx context.Context, limit, offset int) ([]*models.Customer, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "List")
+	defer finishDatabase()
 	customers := make([]*models.Customer, 0)
 	err := r.db.SelectContext(ctx, &customers, `SELECT * FROM customers ORDER BY created_at DESC LIMIT $1 OFFSET $2`, limit, offset)
 	return customers, err
 }
 
 func (r *customerRepo) UpdateStatusWithOutbox(ctx context.Context, id uuid.UUID, status models.CustomerStatus, outboxEvent *models.OutboxMessage) (*models.Customer, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "UpdateStatusWithOutbox")
+	defer finishDatabase()
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -237,8 +272,8 @@ func (r *customerRepo) UpdateStatusWithOutbox(ctx context.Context, id uuid.UUID,
 	}
 	if outboxEvent != nil {
 		if _, err = tx.ExecContext(ctx, `INSERT INTO outbox_messages
-			(id,event_type,payload,correlation_id,causation_id,created_at)
-			VALUES($1,$2,$3,$4,$5,$6)`, outboxEvent.ID, outboxEvent.EventType, outboxEvent.Payload, outboxEvent.CorrelationID, outboxEvent.CausationID, outboxEvent.CreatedAt); err != nil {
+			(id,event_type,payload,correlation_id,causation_id,created_at,trace_context)
+			VALUES($1,$2,$3,$4,$5,$6,$7)`, outboxEvent.ID, outboxEvent.EventType, outboxEvent.Payload, outboxEvent.CorrelationID, outboxEvent.CausationID, outboxEvent.CreatedAt, telemetry.Serialize(ctx)); err != nil {
 			return nil, err
 		}
 	}
@@ -249,6 +284,8 @@ func (r *customerRepo) UpdateStatusWithOutbox(ctx context.Context, id uuid.UUID,
 }
 
 func (r *customerRepo) UpdateKYCStatusWithOutbox(ctx context.Context, id uuid.UUID, status models.KYCStatus, outboxEvent *models.OutboxMessage) (*models.Customer, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "UpdateKYCStatusWithOutbox")
+	defer finishDatabase()
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -265,8 +302,8 @@ func (r *customerRepo) UpdateKYCStatusWithOutbox(ctx context.Context, id uuid.UU
 	}
 	if outboxEvent != nil {
 		_, err = tx.ExecContext(ctx, `INSERT INTO outbox_messages
-			(id,event_type,payload,correlation_id,causation_id,created_at)
-			VALUES($1,$2,$3,$4,$5,$6)`, outboxEvent.ID, outboxEvent.EventType, outboxEvent.Payload, outboxEvent.CorrelationID, outboxEvent.CausationID, outboxEvent.CreatedAt)
+			(id,event_type,payload,correlation_id,causation_id,created_at,trace_context)
+			VALUES($1,$2,$3,$4,$5,$6,$7)`, outboxEvent.ID, outboxEvent.EventType, outboxEvent.Payload, outboxEvent.CorrelationID, outboxEvent.CausationID, outboxEvent.CreatedAt, telemetry.Serialize(ctx))
 		if err != nil {
 			return nil, err
 		}
@@ -278,6 +315,8 @@ func (r *customerRepo) UpdateKYCStatusWithOutbox(ctx context.Context, id uuid.UU
 }
 
 func (r *customerRepo) RegistrarValidacionCliente(ctx context.Context, mensajeID, correlacionID uuid.UUID, solicitudID, clienteID uuid.UUID) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "RegistrarValidacionCliente")
+	defer finishDatabase()
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
@@ -317,8 +356,8 @@ func (r *customerRepo) RegistrarValidacionCliente(ctx context.Context, mensajeID
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO outbox_messages
-		(id,event_type,payload,correlation_id,causation_id,created_at)
-		VALUES($1,$2,$3,$4,$5,$6)`, uuid.New(), tipo, contenido, correlacionID, mensajeID, time.Now().UTC()); err != nil {
+		(id,event_type,payload,correlation_id,causation_id,created_at,trace_context)
+		VALUES($1,$2,$3,$4,$5,$6,$7)`, uuid.New(), tipo, contenido, correlacionID, mensajeID, time.Now().UTC(), telemetry.Serialize(ctx)); err != nil {
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO processed_messages
@@ -330,6 +369,8 @@ func (r *customerRepo) RegistrarValidacionCliente(ctx context.Context, mensajeID
 }
 
 func (r *customerRepo) RegistrarValidacionKYC(ctx context.Context, mensajeID, correlacionID, operacionID, clienteID uuid.UUID) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "RegistrarValidacionKYC")
+	defer finishDatabase()
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
@@ -369,7 +410,7 @@ func (r *customerRepo) RegistrarValidacionKYC(ctx context.Context, mensajeID, co
 	if err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO outbox_messages(id,event_type,payload,correlation_id,causation_id,created_at) VALUES($1,$2,$3,$4,$5,$6)`, uuid.New(), tipo, contenido, correlacionID, mensajeID, time.Now().UTC()); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO outbox_messages(id,event_type,payload,correlation_id,causation_id,created_at,trace_context) VALUES($1,$2,$3,$4,$5,$6,$7)`, uuid.New(), tipo, contenido, correlacionID, mensajeID, time.Now().UTC(), telemetry.Serialize(ctx)); err != nil {
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO processed_messages(message_id,consumer_name,result_reference) VALUES($1,'customer-service.validacion-kyc',$2)

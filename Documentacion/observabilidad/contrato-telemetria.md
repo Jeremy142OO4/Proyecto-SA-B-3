@@ -1,6 +1,6 @@
 # Contrato común de telemetría — Fase 3
 
-Estado: **diseño aprobado para implementación, todavía no instrumentado ni desplegado**. Alcance: Gateway y cinco microservicios. No modifica el contrato OpenAPI ni los payloads de negocio.
+Estado: **contrato definido; instrumentación común implementada y probada, pendiente de despliegue**. Ver [implementación y límites](implementacion.md). Alcance: Gateway y cinco microservicios. No modifica OpenAPI ni los payloads de negocio. Las pruebas interbancarias completas esperan la integración futura.
 
 ## Identidad
 

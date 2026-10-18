@@ -31,6 +31,8 @@ spec:
           ports:
             - name: http
               containerPort: 8085
+          envFrom:
+            - configMapRef: { name: bank-usac-config }
           env:
             - name: PORT
               value: "8085"

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Proyecto-SA-B-3/account-service/internal/telemetry"
 	"log/slog"
 
 	"github.com/Proyecto-SA-B-3/account-service/events"
@@ -62,7 +63,9 @@ func (c *ConsumidorCuentas) Ejecutar(ctx context.Context) error {
 	return nil
 }
 
-func (c *ConsumidorCuentas) procesar(ctx context.Context, entrega amqp.Delivery) error {
+func (c *ConsumidorCuentas) procesar(ctx context.Context, entrega amqp.Delivery) (resultErr error) {
+	ctx, finish := telemetry.Consume(ctx, entrega)
+	defer func() { finish(resultErr) }()
 	var mensaje events.SobreMensaje
 	if err := json.Unmarshal(entrega.Body, &mensaje); err != nil {
 		return c.enviarFallidoYAceptar(ctx, entrega, fmt.Errorf("mensaje JSON invalido: %w", err))
@@ -153,7 +156,7 @@ func esErrorPermanente(err error) bool {
 	return errors.Is(err, services.ErrMontoInvalido) ||
 		errors.Is(err, services.ErrMensajeInvalido) ||
 		errors.Is(err, repositories.ErrCuentaNoEncontrada) ||
-		 errors.Is(err, repositories.ErrCuentaNoActiva) ||
+		errors.Is(err, repositories.ErrCuentaNoActiva) ||
 		errors.Is(err, repositories.ErrFondosInsuficientes) ||
 		errors.Is(err, repositories.ErrSaldoMinimo) ||
 		errors.Is(err, repositories.ErrMovimientoNoEncontrado)

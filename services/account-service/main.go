@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/Proyecto-SA-B-3/account-service/internal/telemetry"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -21,8 +22,8 @@ import (
 )
 
 func main() {
-	registrador := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	slog.SetDefault(registrador)
+	shutdownTelemetry := telemetry.Setup("account-service")
+	defer shutdownTelemetry()
 
 	configuracion, err := config.CargarConfiguracion()
 	if err != nil {
@@ -112,6 +113,7 @@ func main() {
 		AppName:               "account-service",
 		DisableStartupMessage: true,
 	})
+
 	routes.RegistrarRutas(aplicacion)
 
 	erroresServidor := make(chan error, 1)

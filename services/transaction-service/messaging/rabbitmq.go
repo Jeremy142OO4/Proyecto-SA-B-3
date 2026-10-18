@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Proyecto-SA-B-3/transaction-service/events"
+	"github.com/Proyecto-SA-B-3/transaction-service/internal/telemetry"
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"time"
@@ -85,7 +86,9 @@ func (p *Publicador) Republicar(ctx context.Context, x, k string, b []byte, h am
 func (p *Publicador) Fallido(ctx context.Context, b []byte, h amqp.Table) error {
 	return p.publicar(ctx, IntercambioFallidos, "transaccion.mensaje.fallido", b, h, true)
 }
-func (p *Publicador) publicar(ctx context.Context, x, k string, b []byte, h amqp.Table, mandatory bool) error {
+func (p *Publicador) publicar(ctx context.Context, x, k string, b []byte, h amqp.Table, mandatory bool) (resultErr error) {
+	ctx, h, finish := telemetry.Publish(ctx, h, b, k)
+	defer func() { finish(resultErr) }()
 	conf, e := p.ch.PublishWithDeferredConfirmWithContext(ctx, x, k, mandatory, false, amqp.Publishing{Headers: h, ContentType: "application/json", DeliveryMode: amqp.Persistent, Timestamp: time.Now().UTC(), MessageId: uuid.NewString(), Body: b})
 	if e != nil {
 		return e

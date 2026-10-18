@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"bank-usac/service-notification-audit/internal/telemetry"
 	"context"
 
 	"bank-usac/service-notification-audit/models"
@@ -18,6 +19,8 @@ func NewAuditRepository(db *sqlx.DB) AuditRepository {
 }
 
 func (r *auditRepo) SaveAuditLog(ctx context.Context, log *models.AuditLog) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "SaveAuditLog")
+	defer finishDatabase()
 	query := `
 		INSERT INTO audit_logs (id, event_id, correlation_id, causation_id, event_type, severity, producer, version, payload, occurred_at, recorded_at)
 		VALUES (:id, :event_id, :correlation_id, :causation_id, :event_type, :severity, :producer, :version, :payload, :occurred_at, :recorded_at)
@@ -28,6 +31,8 @@ func (r *auditRepo) SaveAuditLog(ctx context.Context, log *models.AuditLog) erro
 }
 
 func (r *auditRepo) GetAuditLogsByCorrelationID(ctx context.Context, correlationID uuid.UUID) ([]*models.AuditLog, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "GetAuditLogsByCorrelationID")
+	defer finishDatabase()
 	logs := make([]*models.AuditLog, 0)
 	query := `SELECT * FROM audit_logs WHERE correlation_id = $1 ORDER BY occurred_at ASC`
 	err := r.db.SelectContext(ctx, &logs, query, correlationID)
@@ -35,6 +40,8 @@ func (r *auditRepo) GetAuditLogsByCorrelationID(ctx context.Context, correlation
 }
 
 func (r *auditRepo) GetRecentAuditLogs(ctx context.Context, limit int) ([]*models.AuditLog, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "GetRecentAuditLogs")
+	defer finishDatabase()
 	logs := make([]*models.AuditLog, 0)
 	query := `SELECT * FROM audit_logs ORDER BY occurred_at DESC LIMIT $1`
 	err := r.db.SelectContext(ctx, &logs, query, limit)

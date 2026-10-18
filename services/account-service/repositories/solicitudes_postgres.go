@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Proyecto-SA-B-3/account-service/internal/telemetry"
 	"time"
 
 	"github.com/Proyecto-SA-B-3/account-service/events"
@@ -21,6 +22,8 @@ func NuevoRepositorioSolicitudesPostgres(conexion *pgxpool.Pool) *RepositorioSol
 }
 
 func (r *RepositorioSolicitudesPostgres) Iniciar(ctx context.Context, mensaje events.SobreMensaje, solicitud events.SolicitudCrearCuenta) (bool, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "Iniciar")
+	defer finishDatabase()
 	tx, err := r.conexion.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("iniciar solicitud de cuenta: %w", err)
@@ -48,9 +51,8 @@ func (r *RepositorioSolicitudesPostgres) Iniciar(ctx context.Context, mensaje ev
 	}
 
 	contenido, _ := json.Marshal(events.SolicitudValidarCliente{IDSolicitud: solicitud.IDSolicitud, IDCliente: solicitud.IDCliente})
-	_, err = tx.Exec(ctx, `INSERT INTO mensajes_salida
-		(id_mensaje,tipo_evento,version_evento,contenido,id_correlacion)
-		VALUES ($1,$2,1,$3,$4)`, uuid.New(), events.ComandoValidarCliente, contenido, mensaje.IDCorrelacion)
+	_, err = tx.Exec(ctx, `INSERT INTO mensajes_salida(id_mensaje,tipo_evento,version_evento,contenido,id_correlacion,trace_context)
+		VALUES ($1,$2,1,$3,$4,$5)`, uuid.New(), events.ComandoValidarCliente, contenido, mensaje.IDCorrelacion, telemetry.Serialize(ctx))
 	if err != nil {
 		return false, fmt.Errorf("guardar validacion de cliente en Outbox: %w", err)
 	}
@@ -61,6 +63,8 @@ func (r *RepositorioSolicitudesPostgres) Iniciar(ctx context.Context, mensaje ev
 }
 
 func (r *RepositorioSolicitudesPostgres) Completar(ctx context.Context, mensaje events.SobreMensaje, resultado events.ResultadoValidacionCliente) (*models.Cuenta, bool, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "Completar")
+	defer finishDatabase()
 	tx, err := r.conexion.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {
 		return nil, false, fmt.Errorf("iniciar confirmacion de cuenta: %w", err)
@@ -105,9 +109,9 @@ func (r *RepositorioSolicitudesPostgres) Completar(ctx context.Context, mensaje 
 	ahora := time.Now().UTC()
 	cuenta := &models.Cuenta{IDCuenta: uuid.New(), IDCliente: solicitud.IDCliente, NumeroCuenta: numero,
 		TipoCuenta: solicitud.TipoCuenta, SaldoCentavos: 0,
-		SaldoMinimoCentavos: solicitud.SaldoMinimoCentavos,
+		SaldoMinimoCentavos:         solicitud.SaldoMinimoCentavos,
 		ComisionTransaccionCentavos: solicitud.ComisionTransaccionCentavos,
-		Moneda: "GTQ", Estado: models.EstadoCuentaActiva,
+		Moneda:                      "GTQ", Estado: models.EstadoCuentaActiva,
 		FechaCreacion: ahora, FechaActualizacion: ahora, Version: 1}
 	_, err = tx.Exec(ctx, `INSERT INTO cuentas
 		(id_cuenta,id_cliente,numero_cuenta,tipo_cuenta,saldo_centavos,saldo_minimo_centavos,comision_transaccion_centavos,moneda,estado,fecha_creacion,fecha_actualizacion,version)
@@ -122,9 +126,8 @@ func (r *RepositorioSolicitudesPostgres) Completar(ctx context.Context, mensaje 
 		return nil, false, fmt.Errorf("completar solicitud: %w", err)
 	}
 	contenido, _ := json.Marshal(cuenta)
-	_, err = tx.Exec(ctx, `INSERT INTO mensajes_salida
-		(id_mensaje,tipo_evento,version_evento,contenido,id_correlacion) VALUES ($1,$2,1,$3,$4)`,
-		uuid.New(), events.EventoCuentaCreada, contenido, solicitud.IDCorrelacion)
+	_, err = tx.Exec(ctx, `INSERT INTO mensajes_salida(id_mensaje,tipo_evento,version_evento,contenido,id_correlacion,trace_context) VALUES ($1,$2,1,$3,$4,$5)`,
+		uuid.New(), events.EventoCuentaCreada, contenido, solicitud.IDCorrelacion, telemetry.Serialize(ctx))
 	if err != nil {
 		return nil, false, fmt.Errorf("guardar cuenta creada en Outbox: %w", err)
 	}
@@ -135,6 +138,8 @@ func (r *RepositorioSolicitudesPostgres) Completar(ctx context.Context, mensaje 
 }
 
 func (r *RepositorioSolicitudesPostgres) Rechazar(ctx context.Context, mensaje events.SobreMensaje, resultado events.ResultadoValidacionCliente) (bool, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "Rechazar")
+	defer finishDatabase()
 	tx, err := r.conexion.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("iniciar rechazo de cuenta: %w", err)
@@ -157,9 +162,8 @@ func (r *RepositorioSolicitudesPostgres) Rechazar(ctx context.Context, mensaje e
 		return false, ErrSolicitudNoPendiente
 	}
 	contenido, _ := json.Marshal(resultado)
-	_, err = tx.Exec(ctx, `INSERT INTO mensajes_salida
-		(id_mensaje,tipo_evento,version_evento,contenido,id_correlacion) VALUES ($1,$2,1,$3,$4)`,
-		uuid.New(), events.EventoCreacionCuentaRechazada, contenido, mensaje.IDCorrelacion)
+	_, err = tx.Exec(ctx, `INSERT INTO mensajes_salida(id_mensaje,tipo_evento,version_evento,contenido,id_correlacion,trace_context) VALUES ($1,$2,1,$3,$4,$5)`,
+		uuid.New(), events.EventoCreacionCuentaRechazada, contenido, mensaje.IDCorrelacion, telemetry.Serialize(ctx))
 	if err != nil {
 		return false, fmt.Errorf("guardar rechazo en Outbox: %w", err)
 	}
@@ -170,6 +174,8 @@ func (r *RepositorioSolicitudesPostgres) Rechazar(ctx context.Context, mensaje e
 }
 
 func registrarRespuestaCliente(ctx context.Context, tx pgx.Tx, mensaje events.SobreMensaje) (bool, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "registrarRespuestaCliente")
+	defer finishDatabase()
 	resultado, err := tx.Exec(ctx, `INSERT INTO mensajes_procesados
 		(id_mensaje,nombre_consumidor,tipo_mensaje,id_correlacion,resultado)
 		VALUES ($1,'account-service.validacion-cliente',$2,$3,'{}') ON CONFLICT DO NOTHING`,
@@ -181,6 +187,8 @@ func registrarRespuestaCliente(ctx context.Context, tx pgx.Tx, mensaje events.So
 }
 
 func buscarCuentaDeSolicitud(ctx context.Context, tx pgx.Tx, idSolicitud uuid.UUID) (*models.Cuenta, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "buscarCuentaDeSolicitud")
+	defer finishDatabase()
 	cuenta, err := escanearCuenta(tx.QueryRow(ctx, `SELECT `+columnasCuenta+` FROM cuentas c
 		JOIN solicitudes_creacion_cuenta s ON s.id_cuenta=c.id_cuenta WHERE s.id_solicitud=$1`, idSolicitud))
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -190,6 +198,8 @@ func buscarCuentaDeSolicitud(ctx context.Context, tx pgx.Tx, idSolicitud uuid.UU
 }
 
 func generarNumeroCuentaPostgres(ctx context.Context, tx pgx.Tx) (string, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "generarNumeroCuentaPostgres")
+	defer finishDatabase()
 	for intento := 0; intento < 5; intento++ {
 		var numero string
 		if err := tx.QueryRow(ctx, `SELECT '10'||LPAD(FLOOR(RANDOM()*10000000000)::BIGINT::TEXT,10,'0')`).Scan(&numero); err != nil {

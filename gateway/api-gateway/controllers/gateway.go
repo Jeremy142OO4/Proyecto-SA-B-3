@@ -36,10 +36,10 @@ func NuevoGateway(p Publicador, o *operations.Store, r *responses.Gestor, t time
 }
 
 type entradaCuenta struct {
-	TipoCuenta                    string `json:"tipoCuenta"`
-	Documento                     string `json:"documento"`
-	SaldoMinimoQuetzales          string `json:"saldoMinimoQuetzales"`
-	ComisionTransaccionQuetzales  string `json:"comisionTransaccionQuetzales"`
+	TipoCuenta                   string `json:"tipoCuenta"`
+	Documento                    string `json:"documento"`
+	SaldoMinimoQuetzales         string `json:"saldoMinimoQuetzales"`
+	ComisionTransaccionQuetzales string `json:"comisionTransaccionQuetzales"`
 }
 type entradaPago struct {
 	IDCuentaOrigen    uuid.UUID `json:"idCuentaOrigen"`
@@ -88,7 +88,7 @@ func (g *Gateway) CrearCuenta(c *fiber.Ctx) error {
 	id := uuid.New()
 	return g.aceptar(c, events.ComandoCrearCuenta, id, events.SolicitudCrearCuenta{
 		IDSolicitud: id, IDCliente: idCliente, TipoCuenta: tipo,
-		SaldoMinimoCentavos: saldoMinimoCentavos,
+		SaldoMinimoCentavos:         saldoMinimoCentavos,
 		ComisionTransaccionCentavos: comisionTransaccionCentavos,
 	})
 }
@@ -434,7 +434,7 @@ func (g *Gateway) solicitar(c *fiber.Ctx, cmd, esperado string, p any, adaptar f
 	if e != nil {
 		return nil, e
 	}
-	ctx, fin := context.WithTimeout(c.Context(), g.timeout)
+	ctx, fin := context.WithTimeout(c.UserContext(), g.timeout)
 	defer fin()
 	if e = g.publicador.Publicar(ctx, m); e != nil {
 		return nil, fiber.NewError(503, "mensajeria no disponible")
@@ -455,7 +455,7 @@ func (g *Gateway) aceptar(c *fiber.Ctx, tipo string, id uuid.UUID, p any) error 
 	if e != nil {
 		return e
 	}
-	ctx, fin := context.WithTimeout(c.Context(), g.timeout)
+	ctx, fin := context.WithTimeout(c.UserContext(), g.timeout)
 	defer fin()
 	if e = g.publicador.Publicar(ctx, m); e != nil {
 		return fiber.NewError(503, "mensajeria no disponible")

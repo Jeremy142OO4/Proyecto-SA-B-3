@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Proyecto-SA-B-3/transaction-service/events"
+	"github.com/Proyecto-SA-B-3/transaction-service/internal/telemetry"
 	"github.com/Proyecto-SA-B-3/transaction-service/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -21,6 +22,8 @@ type Postgres struct{ db *pgxpool.Pool }
 func NuevoPostgres(db *pgxpool.Pool) *Postgres { return &Postgres{db} }
 
 func (r *Postgres) Iniciar(ctx context.Context, m events.SobreMensaje, t models.Transferencia) (bool, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "Iniciar")
+	defer finishDatabase()
 	tx, e := r.db.Begin(ctx)
 	if e != nil {
 		return false, e
@@ -45,6 +48,8 @@ func (r *Postgres) Iniciar(ctx context.Context, m events.SobreMensaje, t models.
 }
 
 func (r *Postgres) ProcesarResultadoKYC(ctx context.Context, m events.SobreMensaje, res events.ResultadoValidacionKYC) (bool, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "ProcesarResultadoKYC")
+	defer finishDatabase()
 	tx, e := r.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if e != nil {
 		return false, e
@@ -89,6 +94,8 @@ func (r *Postgres) ProcesarResultadoKYC(ctx context.Context, m events.SobreMensa
 }
 
 func (r *Postgres) ProcesarResultadoCuentas(ctx context.Context, m events.SobreMensaje, res events.ResultadoValidacionCuentas) (bool, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "ProcesarResultadoCuentas")
+	defer finishDatabase()
 	tx, e := r.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if e != nil {
 		return false, e
@@ -136,6 +143,8 @@ func (r *Postgres) ProcesarResultadoCuentas(ctx context.Context, m events.SobreM
 }
 
 func (r *Postgres) ProcesarResultado(ctx context.Context, m events.SobreMensaje, res events.ResultadoMovimiento) (bool, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "ProcesarResultado")
+	defer finishDatabase()
 	tx, e := r.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if e != nil {
 		return false, e
@@ -246,14 +255,14 @@ func (r *Postgres) ProcesarResultado(ctx context.Context, m events.SobreMensaje,
 
 func datosTransferencia(t models.Transferencia, estado models.Estado, codigo, motivo string) map[string]any {
 	datos := map[string]any{
-		"idTransferencia":  t.IDTransferencia,
-		"idCliente":        t.IDCliente,
-		"idCuentaOrigen":   t.IDCuentaOrigen,
-		"idCuentaDestino":  t.IDCuentaDestino,
-		"montoCentavos":    t.MontoCentavos,
-		"moneda":           t.Moneda,
-		"estado":           estado,
-		"descripcion":      t.Descripcion,
+		"idTransferencia": t.IDTransferencia,
+		"idCliente":       t.IDCliente,
+		"idCuentaOrigen":  t.IDCuentaOrigen,
+		"idCuentaDestino": t.IDCuentaDestino,
+		"montoCentavos":   t.MontoCentavos,
+		"moneda":          t.Moneda,
+		"estado":          estado,
+		"descripcion":     t.Descripcion,
 	}
 	if codigo != "" {
 		datos["codigo"] = codigo
@@ -265,6 +274,8 @@ func datosTransferencia(t models.Transferencia, estado models.Estado, codigo, mo
 }
 
 func (r *Postgres) Consultar(ctx context.Context, id uuid.UUID) (models.Transferencia, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "Consultar")
+	defer finishDatabase()
 	var t models.Transferencia
 	e := r.db.QueryRow(ctx, `SELECT id_transferencia,id_cliente,id_cuenta_origen,id_cuenta_destino,id_correlacion,monto_centavos,moneda,descripcion,estado,codigo_error,resultado_externo_simulado,fecha_creacion,fecha_actualizacion FROM transferencias WHERE id_transferencia=$1`, id).Scan(&t.IDTransferencia, &t.IDCliente, &t.IDCuentaOrigen, &t.IDCuentaDestino, &t.IDCorrelacion, &t.MontoCentavos, &t.Moneda, &t.Descripcion, &t.Estado, &t.CodigoError, &t.ResultadoExternoSimulado, &t.FechaCreacion, &t.FechaActualizacion)
 	if errors.Is(e, pgx.ErrNoRows) {
@@ -273,6 +284,8 @@ func (r *Postgres) Consultar(ctx context.Context, id uuid.UUID) (models.Transfer
 	return t, e
 }
 func (r *Postgres) Historial(ctx context.Context, p events.SolicitudHistorial) ([]models.Transferencia, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "Historial")
+	defer finishDatabase()
 	lim, off := p.Limite, p.Desplazamiento
 	if lim <= 0 || lim > 100 {
 		lim = 25
@@ -363,6 +376,8 @@ func normalizarEstado(estado string) string {
 	}
 }
 func (r *Postgres) ResponderConsulta(ctx context.Context, m events.SobreMensaje, tipo string, p any) (bool, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "ResponderConsulta")
+	defer finishDatabase()
 	tx, e := r.db.Begin(ctx)
 	if e != nil {
 		return false, e
@@ -382,19 +397,25 @@ func (r *Postgres) ResponderConsulta(ctx context.Context, m events.SobreMensaje,
 }
 
 func registrarMensaje(ctx context.Context, tx pgx.Tx, m events.SobreMensaje, c string) (bool, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "registrarMensaje")
+	defer finishDatabase()
 	res, e := tx.Exec(ctx, `INSERT INTO mensajes_procesados(id_mensaje,nombre_consumidor,tipo_mensaje,id_correlacion) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`, m.IDMensaje, c, m.Tipo, m.IDCorrelacion)
 	return res.RowsAffected() == 1, e
 }
 func insertarSalida(ctx context.Context, tx pgx.Tx, tipo string, c uuid.UUID, p any, cmd bool) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "insertarSalida")
+	defer finishDatabase()
 	b, e := json.Marshal(p)
 	if e != nil {
 		return e
 	}
-	_, e = tx.Exec(ctx, `INSERT INTO mensajes_salida(id_mensaje,tipo_evento,contenido,id_correlacion,es_comando) VALUES($1,$2,$3,$4,$5)`, uuid.New(), tipo, b, c, cmd)
+	_, e = tx.Exec(ctx, `INSERT INTO mensajes_salida(id_mensaje,tipo_evento,contenido,id_correlacion,es_comando,trace_context) VALUES($1,$2,$3,$4,$5,$6)`, uuid.New(), tipo, b, c, cmd, telemetry.Serialize(ctx))
 	return e
 }
 func (r *Postgres) ListarPendientes(ctx context.Context, lim int) ([]MensajeSalida, error) {
-	rows, e := r.db.Query(ctx, `SELECT id_mensaje,tipo_evento,contenido,id_correlacion,es_comando,fecha_creacion,cantidad_intentos FROM mensajes_salida WHERE estado='PENDIENTE' ORDER BY fecha_creacion LIMIT $1`, lim)
+	ctx, finishDatabase := telemetry.Database(ctx, "ListarPendientes")
+	defer finishDatabase()
+	rows, e := r.db.Query(ctx, `SELECT id_mensaje,tipo_evento,contenido,id_correlacion,es_comando,fecha_creacion,cantidad_intentos,trace_context FROM mensajes_salida WHERE estado='PENDIENTE' ORDER BY fecha_creacion LIMIT $1`, lim)
 	if e != nil {
 		return nil, e
 	}
@@ -402,7 +423,7 @@ func (r *Postgres) ListarPendientes(ctx context.Context, lim int) ([]MensajeSali
 	var out []MensajeSalida
 	for rows.Next() {
 		var m MensajeSalida
-		if e = rows.Scan(&m.IDMensaje, &m.Tipo, &m.Contenido, &m.IDCorrelacion, &m.EsComando, &m.FechaCreacion, &m.Intentos); e != nil {
+		if e = rows.Scan(&m.IDMensaje, &m.Tipo, &m.Contenido, &m.IDCorrelacion, &m.EsComando, &m.FechaCreacion, &m.Intentos, &m.TraceContext); e != nil {
 			return nil, e
 		}
 		out = append(out, m)
@@ -410,10 +431,14 @@ func (r *Postgres) ListarPendientes(ctx context.Context, lim int) ([]MensajeSali
 	return out, rows.Err()
 }
 func (r *Postgres) MarcarPublicado(ctx context.Context, id uuid.UUID) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "MarcarPublicado")
+	defer finishDatabase()
 	_, e := r.db.Exec(ctx, `UPDATE mensajes_salida SET estado='PUBLICADO',fecha_publicacion=NOW() WHERE id_mensaje=$1`, id)
 	return e
 }
 func (r *Postgres) RegistrarFallo(ctx context.Context, id uuid.UUID) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "RegistrarFallo")
+	defer finishDatabase()
 	_, e := r.db.Exec(ctx, `UPDATE mensajes_salida SET cantidad_intentos=cantidad_intentos+1 WHERE id_mensaje=$1`, id)
 	return e
 }

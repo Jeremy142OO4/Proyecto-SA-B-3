@@ -527,6 +527,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: gateway/api-gateway
+          build-args: SERVICE_VERSION=${{ steps.version.outputs.tag }}
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/bank-usac-api-gateway:${{ steps.version.outputs.tag }}
           cache-from: type=gha,scope=bank-usac-api-gateway
@@ -573,6 +574,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: services/service-customer
+          build-args: SERVICE_VERSION=${{ steps.version.outputs.tag }}
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/bank-usac-customer-service:${{ steps.version.outputs.tag }}
           cache-from: type=gha,scope=bank-usac-customer-service
@@ -619,6 +621,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: services/account-service
+          build-args: SERVICE_VERSION=${{ steps.version.outputs.tag }}
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/bank-usac-account-service:${{ steps.version.outputs.tag }}
           cache-from: type=gha,scope=bank-usac-account-service
@@ -665,6 +668,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: services/transaction-service
+          build-args: SERVICE_VERSION=${{ steps.version.outputs.tag }}
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/bank-usac-transaction-service:${{ steps.version.outputs.tag }}
           cache-from: type=gha,scope=bank-usac-transaction-service
@@ -711,6 +715,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: services/payment-service
+          build-args: SERVICE_VERSION=${{ steps.version.outputs.tag }}
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/bank-usac-payment-service:${{ steps.version.outputs.tag }}
           cache-from: type=gha,scope=bank-usac-payment-service
@@ -757,6 +762,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: services/service-notification-audit
+          build-args: SERVICE_VERSION=${{ steps.version.outputs.tag }}
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/bank-usac-notification-audit-service:${{ steps.version.outputs.tag }}
           cache-from: type=gha,scope=bank-usac-notification-audit-service
@@ -961,6 +967,9 @@ jobs:
             deployment/frontend \
             --replicas=0 --timeout=60s || true
           kubectl -n bank-usac delete service frontend --ignore-not-found
+
+      - name: Preparar esquema de telemetria
+        run: bash infrastructure/scripts/prepare-telemetry-schema.sh
 
       - name: Aplicar manifiestos dev con rolling update
         env:
@@ -1184,6 +1193,9 @@ jobs:
           gcloud run services delete bank-usac-frontend-dev \
             --region us-central1 \
             --quiet || true
+
+      - name: Preparar esquema de telemetria
+        run: bash infrastructure/scripts/prepare-telemetry-schema.sh
 
       - name: Aplicar imagen publicada y rolling update
         env:

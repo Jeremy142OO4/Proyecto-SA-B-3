@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"bank-usac/service-notification-audit/internal/telemetry"
 	"context"
 
 	"github.com/google/uuid"
@@ -16,12 +17,16 @@ func NewIdempotencyRepository(db *sqlx.DB) IdempotencyRepository {
 }
 
 func (r *idempotencyRepo) IsMessageProcessed(ctx context.Context, messageID uuid.UUID) (bool, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "IsMessageProcessed")
+	defer finishDatabase()
 	var count int
 	err := r.db.GetContext(ctx, &count, "SELECT COUNT(1) FROM processed_messages WHERE message_id = $1", messageID)
 	return count > 0, err
 }
 
 func (r *idempotencyRepo) MarkMessageProcessed(ctx context.Context, messageID uuid.UUID, consumerName, ref string) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "MarkMessageProcessed")
+	defer finishDatabase()
 	query := `INSERT INTO processed_messages (message_id, consumer_name, result_reference)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (message_id) DO NOTHING`

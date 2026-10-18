@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bank-usac/service-customer/internal/telemetry"
 	"context"
 	"log"
 	"os"
@@ -17,11 +18,12 @@ import (
 	"bank-usac/service-customer/services"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 )
 
 func main() {
+	shutdownTelemetry := telemetry.Setup("customer-service")
+	defer shutdownTelemetry()
 	cfg := config.LoadConfig()
 
 	// 1. Conexión a Base de Datos
@@ -49,10 +51,11 @@ func main() {
 
 	// 4. Servidor HTTP Fiber
 	app := fiber.New(fiber.Config{
-		AppName: "Bank USAC - Customer Service",
+		AppName:               "Bank USAC - Customer Service",
+		DisableStartupMessage: true,
 	})
 	app.Use(recover.New())
-	app.Use(logger.New())
+	app.Use(telemetry.HTTP())
 
 	routes.SetupRoutes(app, controller, cfg, rabbit.Listo)
 

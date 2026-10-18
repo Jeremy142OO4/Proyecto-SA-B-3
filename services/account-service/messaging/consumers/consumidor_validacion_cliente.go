@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Proyecto-SA-B-3/account-service/internal/telemetry"
 	"log/slog"
 
 	"github.com/Proyecto-SA-B-3/account-service/events"
@@ -37,25 +38,35 @@ func (c *ConsumidorValidacionCliente) Ejecutar(ctx context.Context) error {
 		return fmt.Errorf("consumir validaciones de cliente: %w", err)
 	}
 	for entrega := range entregas {
-		var mensaje events.SobreMensaje
-		if err := json.Unmarshal(entrega.Body, &mensaje); err != nil {
-			_ = entrega.Nack(false, false)
-			continue
-		}
-		if mensaje.Tipo == "" {
-			mensaje.Tipo = entrega.RoutingKey
-		}
-		var resultado events.ResultadoValidacionCliente
-		if err := json.Unmarshal(mensaje.Contenido, &resultado); err != nil {
-			_ = entrega.Nack(false, false)
-			continue
-		}
-		if err := c.servicio.ProcesarValidacionCliente(ctx, mensaje, resultado); err != nil {
-			slog.Error("fallo la validacion de cliente", "error", err, "idCorrelacion", mensaje.IDCorrelacion)
-			_ = entrega.Nack(false, true)
-			continue
-		}
-		_ = entrega.Ack(false)
+		c.procesarEntrega(ctx, entrega)
 	}
 	return nil
+}
+
+func (c *ConsumidorValidacionCliente) procesarEntrega(ctx context.Context, entrega amqp.Delivery) {
+	ctx, finish := telemetry.Consume(ctx, entrega)
+	var processErr error
+	defer func() { finish(processErr) }()
+	var mensaje events.SobreMensaje
+	if err := json.Unmarshal(entrega.Body, &mensaje); err != nil {
+		processErr = err
+		_ = entrega.Nack(false, false)
+		return
+	}
+	if mensaje.Tipo == "" {
+		mensaje.Tipo = entrega.RoutingKey
+	}
+	var resultado events.ResultadoValidacionCliente
+	if err := json.Unmarshal(mensaje.Contenido, &resultado); err != nil {
+		processErr = err
+		_ = entrega.Nack(false, false)
+		return
+	}
+	if err := c.servicio.ProcesarValidacionCliente(ctx, mensaje, resultado); err != nil {
+		processErr = err
+		slog.ErrorContext(ctx, "fallo la validacion de cliente", "error", err, "idCorrelacion", mensaje.IDCorrelacion)
+		_ = entrega.Nack(false, true)
+		return
+	}
+	processErr = entrega.Ack(false)
 }

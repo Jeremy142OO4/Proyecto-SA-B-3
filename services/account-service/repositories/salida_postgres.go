@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Proyecto-SA-B-3/account-service/internal/telemetry"
 
 	"github.com/Proyecto-SA-B-3/account-service/events"
 	"github.com/google/uuid"
@@ -19,8 +20,10 @@ func NuevoRepositorioSalidaPostgres(conexion *pgxpool.Pool) *RepositorioSalidaPo
 }
 
 func (r *RepositorioSalidaPostgres) ListarPendientes(ctx context.Context, limite int) ([]MensajeSalida, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "ListarPendientes")
+	defer finishDatabase()
 	filas, err := r.conexion.Query(ctx, `SELECT id_mensaje, tipo_evento, version_evento,
-		contenido, id_correlacion, fecha_creacion, cantidad_intentos
+		contenido, id_correlacion, fecha_creacion, cantidad_intentos, trace_context
 		FROM mensajes_salida WHERE estado = 'PENDIENTE'
 		ORDER BY fecha_creacion LIMIT $1`, limite)
 	if err != nil {
@@ -32,7 +35,7 @@ func (r *RepositorioSalidaPostgres) ListarPendientes(ctx context.Context, limite
 	for filas.Next() {
 		var mensaje MensajeSalida
 		if err := filas.Scan(&mensaje.IDMensaje, &mensaje.TipoEvento, &mensaje.VersionEvento,
-			&mensaje.Contenido, &mensaje.IDCorrelacion, &mensaje.FechaCreacion, &mensaje.CantidadIntentos); err != nil {
+			&mensaje.Contenido, &mensaje.IDCorrelacion, &mensaje.FechaCreacion, &mensaje.CantidadIntentos, &mensaje.TraceContext); err != nil {
 			return nil, fmt.Errorf("leer mensaje de salida: %w", err)
 		}
 		mensajes = append(mensajes, mensaje)
@@ -44,6 +47,8 @@ func (r *RepositorioSalidaPostgres) ListarPendientes(ctx context.Context, limite
 }
 
 func (r *RepositorioSalidaPostgres) MarcarPublicado(ctx context.Context, idMensaje uuid.UUID) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "MarcarPublicado")
+	defer finishDatabase()
 	_, err := r.conexion.Exec(ctx, `UPDATE mensajes_salida SET estado = 'PUBLICADO',
 		fecha_publicacion = NOW() WHERE id_mensaje = $1`, idMensaje)
 	if err != nil {
@@ -53,6 +58,8 @@ func (r *RepositorioSalidaPostgres) MarcarPublicado(ctx context.Context, idMensa
 }
 
 func (r *RepositorioSalidaPostgres) RegistrarFalloPublicacion(ctx context.Context, idMensaje uuid.UUID) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "RegistrarFalloPublicacion")
+	defer finishDatabase()
 	_, err := r.conexion.Exec(ctx, `UPDATE mensajes_salida SET cantidad_intentos = cantidad_intentos + 1
 		WHERE id_mensaje = $1`, idMensaje)
 	if err != nil {
@@ -92,9 +99,9 @@ func (r *RepositorioSalidaPostgres) RegistrarRechazo(
 	if err != nil {
 		return false, fmt.Errorf("serializar evento de rechazo: %w", err)
 	}
-	_, err = transaccion.Exec(ctx, `INSERT INTO mensajes_salida (
+	_, err = transaccion.Exec(ctx, `INSERT INTO mensajes_salida(
 		id_mensaje, tipo_evento, version_evento, contenido, id_correlacion
-	) VALUES ($1,$2,1,$3,$4)`, uuid.New(), tipoEvento, contenidoJSON, mensaje.IDCorrelacion)
+	,trace_context) VALUES ($1,$2,1,$3,$4,$5)`, uuid.New(), tipoEvento, contenidoJSON, mensaje.IDCorrelacion, telemetry.Serialize(ctx))
 	if err != nil {
 		return false, fmt.Errorf("guardar evento de rechazo: %w", err)
 	}
@@ -106,6 +113,8 @@ func (r *RepositorioSalidaPostgres) RegistrarRechazo(
 }
 
 func (r *RepositorioSalidaPostgres) RegistrarRespuesta(ctx context.Context, mensaje events.SobreMensaje, consumidor, tipoEvento string, contenido any) (bool, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "RegistrarRespuesta")
+	defer finishDatabase()
 	tx, err := r.conexion.Begin(ctx)
 	if err != nil {
 		return false, err
@@ -124,8 +133,8 @@ func (r *RepositorioSalidaPostgres) RegistrarRespuesta(ctx context.Context, mens
 	if err != nil {
 		return false, err
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO mensajes_salida(id_mensaje,tipo_evento,version_evento,contenido,id_correlacion)
-		VALUES($1,$2,1,$3,$4)`, uuid.New(), tipoEvento, jsonContenido, mensaje.IDCorrelacion)
+	_, err = tx.Exec(ctx, `INSERT INTO mensajes_salida(id_mensaje,tipo_evento,version_evento,contenido,id_correlacion,trace_context)
+		VALUES($1,$2,1,$3,$4,$5)`, uuid.New(), tipoEvento, jsonContenido, mensaje.IDCorrelacion, telemetry.Serialize(ctx))
 	if err != nil {
 		return false, err
 	}

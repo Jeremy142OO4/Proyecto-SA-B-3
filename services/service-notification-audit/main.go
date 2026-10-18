@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bank-usac/service-notification-audit/internal/telemetry"
 	"context"
 	"log"
 	"os"
@@ -17,11 +18,12 @@ import (
 	"bank-usac/service-notification-audit/services"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 )
 
 func main() {
+	shutdownTelemetry := telemetry.Setup("notification-audit-service")
+	defer shutdownTelemetry()
 	cfg := config.LoadConfig()
 
 	// 1. Conexión a Base de Datos
@@ -63,10 +65,11 @@ func main() {
 
 	// 4. Servidor HTTP Fiber
 	app := fiber.New(fiber.Config{
-		AppName: "Bank USAC - Notification & Audit Service",
+		AppName:               "Bank USAC - Notification & Audit Service",
+		DisableStartupMessage: true,
 	})
 	app.Use(recover.New())
-	app.Use(logger.New())
+	app.Use(telemetry.HTTP())
 
 	routes.SetupRoutes(app, controller, cfg)
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/Proyecto-SA-B-3/payment-service/config"
 	"github.com/Proyecto-SA-B-3/payment-service/database"
+	"github.com/Proyecto-SA-B-3/payment-service/internal/telemetry"
 	"github.com/Proyecto-SA-B-3/payment-service/messaging"
 	"github.com/Proyecto-SA-B-3/payment-service/messaging/consumers"
 	"github.com/Proyecto-SA-B-3/payment-service/messaging/publishers"
@@ -18,7 +19,8 @@ import (
 )
 
 func main() {
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	shutdownTelemetry := telemetry.Setup("payment-service")
+	defer shutdownTelemetry()
 	cfg, e := config.CargarConfiguracion()
 	if e != nil {
 		slog.Error("configuracion invalida", "error", e)
@@ -84,6 +86,7 @@ func main() {
 		}
 	}()
 	app := fiber.New(fiber.Config{AppName: "payment-service", DisableStartupMessage: true})
+
 	routes.RegistrarRutas(app)
 	go func() {
 		slog.Info("servicio de pagos iniciado", "puerto", cfg.PuertoHTTP, "entorno", cfg.Entorno)

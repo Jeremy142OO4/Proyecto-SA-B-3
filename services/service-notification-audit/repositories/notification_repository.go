@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"bank-usac/service-notification-audit/internal/telemetry"
 	"context"
 	"strconv"
 	"strings"
@@ -20,6 +21,8 @@ func NewNotificationRepository(db *sqlx.DB) NotificationRepository {
 }
 
 func (r *notificationRepo) SaveNotificationLog(ctx context.Context, log *models.NotificationLog) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "SaveNotificationLog")
+	defer finishDatabase()
 	query := `
 		INSERT INTO notification_logs (id, correlation_id, recipient, notification_type, subject, body_summary, status, error_detail, sent_at)
 		VALUES (:id, :correlation_id, :recipient, :notification_type, :subject, :body_summary, :status, :error_detail, :sent_at)
@@ -30,6 +33,8 @@ func (r *notificationRepo) SaveNotificationLog(ctx context.Context, log *models.
 }
 
 func (r *notificationRepo) GetNotificationLogs(ctx context.Context, filter models.NotificationFilter) ([]*models.NotificationLog, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "GetNotificationLogs")
+	defer finishDatabase()
 	logs := make([]*models.NotificationLog, 0)
 	conditions := make([]string, 0, 3)
 	args := make([]any, 0, 4)

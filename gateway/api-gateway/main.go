@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"github.com/Proyecto-SA-B-3/api-gateway/internal/telemetry"
 	"log"
 	"os"
 	"os/signal"
@@ -19,11 +20,12 @@ import (
 	"github.com/Proyecto-SA-B-3/api-gateway/routes"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/google/uuid"
 )
 
 func main() {
+	shutdownTelemetry := telemetry.Setup("api-gateway")
+	defer shutdownTelemetry()
 	cfg, err := config.Cargar()
 	if err != nil {
 		log.Fatal(err)
@@ -35,7 +37,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer publicador.Cerrar()
-	app := fiber.New(fiber.Config{ErrorHandler: func(c *fiber.Ctx, e error) error {
+	app := fiber.New(fiber.Config{DisableStartupMessage: true, ErrorHandler: func(c *fiber.Ctx, e error) error {
 		codigo := 500
 		mensaje := "error interno"
 		if fe, ok := e.(*fiber.Error); ok {
@@ -51,11 +53,12 @@ func main() {
 		}
 		return c.Status(codigo).JSON(fiber.Map{"error": mensaje, "correlationId": correlacion.String()})
 	}})
-	app.Use(logger.New(logger.Config{Format: "{\"timestamp\":\"${time}\",\"level\":\"info\",\"service\":\"api-gateway\",\"method\":\"${method}\",\"path\":\"${path}\",\"status\":${status}}\n"}), cors.New(cors.Config{AllowOrigins: cfg.OrigenesCORS, AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Correlation-ID"}))
+	app.Use(telemetry.HTTP(), cors.New(cors.Config{AllowOrigins: cfg.OrigenesCORS, AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Correlation-ID, traceparent, tracestate"}))
 	solicitante := messaging.NuevoSolicitante(publicador, gestorRespuestas, cfg.TiempoPublicacion)
 	gateway := controllers.NuevoGateway(publicador, store, gestorRespuestas, cfg.TiempoPublicacion, solicitante)
 	controladorClientes := controllers.NuevoControladorClientes(solicitante)
 	controladorAuditoria := controllers.NuevoControladorAuditoria(solicitante)
+
 	routes.Registrar(app, gateway, controladorClientes, controladorAuditoria, cfg.SecretoJWT, publicador.Listo)
 	go func() {
 		if err := app.Listen(":" + cfg.PuertoHTTP); err != nil {
@@ -93,7 +96,7 @@ func publicarErrorHTTP(publicador *messaging.Publicador, c *fiber.Ctx, correlaci
 		Productor:     "api-gateway",
 		Contenido:     contenido,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	ctx, cancel := context.WithTimeout(c.UserContext(), 250*time.Millisecond)
 	defer cancel()
 	return publicador.PublicarEvento(ctx, evento)
 }

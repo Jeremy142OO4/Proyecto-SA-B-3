@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Proyecto-SA-B-3/payment-service/events"
+	"github.com/Proyecto-SA-B-3/payment-service/internal/telemetry"
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"time"
@@ -70,7 +71,7 @@ func NuevoPublicador(c *amqp.Connection) (*Publicador, error) {
 	return &Publicador{ch}, nil
 }
 func (p *Publicador) Cerrar() error { return p.canal.Close() }
-func (p *Publicador) Publicar(ctx context.Context, m events.SobreMensaje, comando bool) error {
+func (p *Publicador) Publicar(ctx context.Context, m events.SobreMensaje, comando bool) (resultErr error) {
 	b, e := json.Marshal(m)
 	if e != nil {
 		return e
@@ -79,7 +80,9 @@ func (p *Publicador) Publicar(ctx context.Context, m events.SobreMensaje, comand
 	if comando {
 		x = IntercambioComandos
 	}
-	conf, e := p.canal.PublishWithDeferredConfirmWithContext(ctx, x, m.Tipo, false, false, amqp.Publishing{ContentType: "application/json", DeliveryMode: amqp.Persistent, Timestamp: time.Now().UTC(), MessageId: uuid.NewString(), Body: b})
+	ctx, h, finish := telemetry.Publish(ctx, nil, b, m.Tipo)
+	defer func() { finish(resultErr) }()
+	conf, e := p.canal.PublishWithDeferredConfirmWithContext(ctx, x, m.Tipo, false, false, amqp.Publishing{Headers: h, ContentType: "application/json", DeliveryMode: amqp.Persistent, Timestamp: time.Now().UTC(), MessageId: uuid.NewString(), Body: b})
 	if e != nil {
 		return e
 	}
@@ -89,7 +92,9 @@ func (p *Publicador) Publicar(ctx context.Context, m events.SobreMensaje, comand
 	return nil
 }
 
-func (p *Publicador) Republicar(ctx context.Context, intercambio, clave string, cuerpo []byte, encabezados amqp.Table) error {
+func (p *Publicador) Republicar(ctx context.Context, intercambio, clave string, cuerpo []byte, encabezados amqp.Table) (resultErr error) {
+	ctx, encabezados, finish := telemetry.Publish(ctx, encabezados, cuerpo, clave)
+	defer func() { finish(resultErr) }()
 	confirmacion, err := p.canal.PublishWithDeferredConfirmWithContext(ctx, intercambio, clave, false, false, amqp.Publishing{Headers: encabezados, ContentType: "application/json", DeliveryMode: amqp.Persistent, Timestamp: time.Now().UTC(), MessageId: uuid.NewString(), Body: cuerpo})
 	if err != nil {
 		return err

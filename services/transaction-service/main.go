@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/Proyecto-SA-B-3/transaction-service/config"
 	"github.com/Proyecto-SA-B-3/transaction-service/database"
+	"github.com/Proyecto-SA-B-3/transaction-service/internal/telemetry"
 	"github.com/Proyecto-SA-B-3/transaction-service/messaging"
 	"github.com/Proyecto-SA-B-3/transaction-service/messaging/consumers"
 	"github.com/Proyecto-SA-B-3/transaction-service/messaging/publishers"
@@ -19,7 +20,8 @@ import (
 )
 
 func main() {
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	shutdownTelemetry := telemetry.Setup("transaction-service")
+	defer shutdownTelemetry()
 	cfg, e := config.CargarConfiguracion()
 	if e != nil {
 		slog.Error("configuracion invalida", "error", e)
@@ -72,6 +74,7 @@ func main() {
 	}()
 	go publishers.Nuevo(repo, pubEventos, cfg.IntervaloOutbox).Ejecutar(ctx)
 	app := fiber.New(fiber.Config{AppName: "transaction-service", DisableStartupMessage: true})
+
 	routes.Registrar(app)
 	errores := make(chan error, 1)
 	go func() {

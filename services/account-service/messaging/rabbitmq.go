@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Proyecto-SA-B-3/account-service/internal/telemetry"
 	"time"
 
 	"github.com/Proyecto-SA-B-3/account-service/events"
@@ -119,7 +120,9 @@ func (p *Publicador) publicar(ctx context.Context, intercambio, clave string, me
 	return p.publicarCuerpo(ctx, intercambio, clave, cuerpo, encabezados, obligatorio)
 }
 
-func (p *Publicador) publicarCuerpo(ctx context.Context, intercambio, clave string, cuerpo []byte, encabezados amqp.Table, obligatorio bool) error {
+func (p *Publicador) publicarCuerpo(ctx context.Context, intercambio, clave string, cuerpo []byte, encabezados amqp.Table, obligatorio bool) (resultErr error) {
+	ctx, encabezados, finish := telemetry.Publish(ctx, encabezados, cuerpo, clave)
+	defer func() { finish(resultErr) }()
 	confirmacion, err := p.canal.PublishWithDeferredConfirmWithContext(ctx, intercambio, clave, obligatorio, false, amqp.Publishing{
 		Headers:      encabezados,
 		ContentType:  "application/json",

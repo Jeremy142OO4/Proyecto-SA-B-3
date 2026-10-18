@@ -1,9 +1,10 @@
 FROM golang:1.25-alpine AS compilacion
 WORKDIR /aplicacion
+ARG SERVICE_VERSION=local
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/payment-service .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-X github.com/Proyecto-SA-B-3/payment-service/internal/telemetry.BuildVersion=${SERVICE_VERSION}" -o /bin/payment-service .
 
 FROM alpine:3.22
 RUN addgroup -S aplicacion && adduser -S aplicacion -G aplicacion

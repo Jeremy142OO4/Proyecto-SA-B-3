@@ -1,6 +1,7 @@
 package messaging
 
 import (
+	"bank-usac/service-notification-audit/internal/telemetry"
 	"context"
 	"encoding/json"
 	"errors"
@@ -185,16 +186,26 @@ type respuestaRPC struct {
 }
 
 func (r *RabbitMQConsumer) handleCommand(ctx context.Context, d amqp.Delivery) {
+	ctx, finish := telemetry.Consume(ctx, d)
+	var processErr error
+	defer func() { finish(processErr) }()
 	var sobre events.EventEnvelope
 	if err := json.Unmarshal(d.Body, &sobre); err != nil || sobre.MessageID == uuid.Nil || sobre.CorrelationID == uuid.Nil || strings.TrimSpace(sobre.Type) == "" {
 		_ = d.Nack(false, false)
 		return
 	}
 	estado, cuerpo := r.executeCommand(ctx, sobre)
+	if estado >= 500 {
+		processErr = errors.New("audit command failed")
+	}
 	contenido, _ := json.Marshal(respuestaRPC{Estado: estado, Cuerpo: cuerpo})
 	respuesta := events.EventEnvelope{MessageID: uuid.New(), CorrelationID: sobre.CorrelationID, CausationID: &sobre.MessageID, Type: strings.TrimSuffix(strings.TrimSuffix(sobre.Type, ".solicitados"), ".solicitada") + ".respondida", Version: 1, OccurredAt: time.Now().UTC(), Producer: "notification-audit-service", Payload: contenido}
 	bytes, _ := json.Marshal(respuesta)
-	if err := r.channel.PublishWithContext(ctx, "banco.respuestas", respuesta.Type, false, false, amqp.Publishing{DeliveryMode: amqp.Persistent, ContentType: "application/json", CorrelationId: sobre.CorrelationID.String(), Body: bytes}); err != nil {
+	ctx, responseHeaders, finishPublish := telemetry.Publish(ctx, nil, bytes, respuesta.Type)
+	err := r.channel.PublishWithContext(ctx, "banco.respuestas", respuesta.Type, false, false, amqp.Publishing{Headers: responseHeaders, DeliveryMode: amqp.Persistent, ContentType: "application/json", CorrelationId: sobre.CorrelationID.String(), Body: bytes})
+	finishPublish(err)
+	if err != nil {
+		processErr = err
 		_ = d.Nack(false, true)
 		return
 	}
@@ -231,9 +242,9 @@ func (r *RabbitMQConsumer) executeCommand(ctx context.Context, sobre events.Even
 		return responder(200, registros)
 	case events.ComandoNotificaciones:
 		var req struct {
-			Limite       int    `json:"limite"`
-			Destinatario string `json:"destinatario"`
-			Estado       string `json:"estado"`
+			Limite        int       `json:"limite"`
+			Destinatario  string    `json:"destinatario"`
+			Estado        string    `json:"estado"`
 			IDCorrelacion uuid.UUID `json:"idCorrelacion"`
 		}
 		if err := json.Unmarshal(sobre.Payload, &req); err != nil {
@@ -254,6 +265,9 @@ func (r *RabbitMQConsumer) executeCommand(ctx context.Context, sobre events.Even
 }
 
 func (r *RabbitMQConsumer) handleDelivery(ctx context.Context, d amqp.Delivery) {
+	ctx, finish := telemetry.Consume(ctx, d)
+	var processErr error
+	defer func() { finish(processErr) }()
 	var envelope events.EventEnvelope
 	if err := json.Unmarshal(d.Body, &envelope); err != nil || envelope.MessageID == uuid.Nil || envelope.CorrelationID == uuid.Nil || strings.TrimSpace(envelope.Type) == "" {
 		log.Printf("[RabbitMQ] Error deserializando sobre de mensaje: %v. Enviando a DLQ.", err)
@@ -262,6 +276,7 @@ func (r *RabbitMQConsumer) handleDelivery(ctx context.Context, d amqp.Delivery) 
 	}
 
 	if err := r.auditSvc.ProcessEvent(ctx, &envelope); err != nil {
+		processErr = err
 		log.Printf("[RabbitMQ] Error procesando evento %s (MessageID: %s): %v", envelope.Type, envelope.MessageID, err)
 		// En caso de error no permanente, se podría reintentar o enviar a DLQ según política
 		_ = d.Nack(false, false)
@@ -273,6 +288,9 @@ func (r *RabbitMQConsumer) handleDelivery(ctx context.Context, d amqp.Delivery) 
 }
 
 func (r *RabbitMQConsumer) handleDLQDelivery(ctx context.Context, d amqp.Delivery) {
+	ctx, finish := telemetry.Consume(ctx, d)
+	var processErr error
+	defer func() { finish(processErr) }()
 	var original events.EventEnvelope
 	if err := json.Unmarshal(d.Body, &original); err != nil || original.MessageID == uuid.Nil || original.CorrelationID == uuid.Nil {
 		_ = d.Ack(false)
@@ -303,6 +321,7 @@ func (r *RabbitMQConsumer) handleDLQDelivery(ctx context.Context, d amqp.Deliver
 		Payload:       payload,
 	}
 	if err := r.auditSvc.ProcessEvent(ctx, failure); err != nil {
+		processErr = err
 		_ = d.Nack(false, false)
 		return
 	}

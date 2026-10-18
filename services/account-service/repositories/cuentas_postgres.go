@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Proyecto-SA-B-3/account-service/internal/telemetry"
 	"time"
 
 	"github.com/Proyecto-SA-B-3/account-service/events"
@@ -23,6 +24,8 @@ func NuevoRepositorioCuentasPostgres(conexion *pgxpool.Pool) *RepositorioCuentas
 }
 
 func (r *RepositorioCuentasPostgres) Crear(ctx context.Context, cuenta *models.Cuenta) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "Crear")
+	defer finishDatabase()
 	const consulta = `
 		INSERT INTO cuentas (
 			id_cuenta, id_cliente, numero_cuenta, tipo_cuenta, saldo_centavos,
@@ -43,14 +46,20 @@ func (r *RepositorioCuentasPostgres) Crear(ctx context.Context, cuenta *models.C
 }
 
 func (r *RepositorioCuentasPostgres) BuscarPorID(ctx context.Context, idCuenta uuid.UUID) (*models.Cuenta, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "BuscarPorID")
+	defer finishDatabase()
 	return r.buscarUna(ctx, `SELECT `+columnasCuenta+` FROM cuentas WHERE id_cuenta = $1`, idCuenta)
 }
 
 func (r *RepositorioCuentasPostgres) BuscarPorNumero(ctx context.Context, numeroCuenta string) (*models.Cuenta, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "BuscarPorNumero")
+	defer finishDatabase()
 	return r.buscarUna(ctx, `SELECT `+columnasCuenta+` FROM cuentas WHERE numero_cuenta = $1`, numeroCuenta)
 }
 
 func (r *RepositorioCuentasPostgres) ListarPorCliente(ctx context.Context, idCliente uuid.UUID) ([]models.Cuenta, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "ListarPorCliente")
+	defer finishDatabase()
 	filas, err := r.conexion.Query(ctx, `SELECT `+columnasCuenta+` FROM cuentas WHERE id_cliente = $1 ORDER BY fecha_creacion`, idCliente)
 	if err != nil {
 		return nil, fmt.Errorf("listar cuentas del cliente: %w", err)
@@ -72,6 +81,8 @@ func (r *RepositorioCuentasPostgres) ListarPorCliente(ctx context.Context, idCli
 }
 
 func (r *RepositorioCuentasPostgres) ProcesarMovimiento(ctx context.Context, solicitud SolicitudMovimientoCuenta) (ResultadoMovimiento, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "ProcesarMovimiento")
+	defer finishDatabase()
 	transaccion, err := r.conexion.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {
 		return ResultadoMovimiento{}, fmt.Errorf("iniciar transaccion de movimiento: %w", err)
@@ -145,6 +156,8 @@ func (r *RepositorioCuentasPostgres) ProcesarMovimiento(ctx context.Context, sol
 }
 
 func (r *RepositorioCuentasPostgres) ListarMovimientos(ctx context.Context, idCuenta uuid.UUID, limite, desplazamiento int) ([]models.MovimientoCuenta, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "ListarMovimientos")
+	defer finishDatabase()
 	filas, err := r.conexion.Query(ctx, `SELECT id_movimiento,id_cuenta,id_operacion,id_correlacion,
 		tipo_movimiento,monto_centavos,saldo_anterior_centavos,saldo_nuevo_centavos,
 		COALESCE(descripcion,''),fecha_creacion FROM movimientos_cuenta WHERE id_cuenta=$1
@@ -167,6 +180,8 @@ func (r *RepositorioCuentasPostgres) ListarMovimientos(ctx context.Context, idCu
 }
 
 func (r *RepositorioCuentasPostgres) DesactivarCuentasInactivas(ctx context.Context, fechaLimite time.Time, saldoMaximoCentavos int64) (int64, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "DesactivarCuentasInactivas")
+	defer finishDatabase()
 	var cantidad int64
 	err := r.conexion.QueryRow(ctx, `WITH desactivadas AS (
 		UPDATE cuentas SET estado='INACTIVA',fecha_actualizacion=NOW(),version=version+1
@@ -174,11 +189,11 @@ func (r *RepositorioCuentasPostgres) DesactivarCuentasInactivas(ctx context.Cont
 		AND COALESCE(ultima_actividad,fecha_creacion) < $2
 		RETURNING id_cuenta,id_cliente,numero_cuenta,estado
 	), eventos AS (
-		INSERT INTO mensajes_salida (id_mensaje,tipo_evento,version_evento,contenido,id_correlacion)
+		INSERT INTO mensajes_salida (id_mensaje,tipo_evento,version_evento,contenido,id_correlacion,trace_context)
 		SELECT gen_random_uuid(),$3,1,jsonb_build_object('idCuenta',id_cuenta,'idCliente',id_cliente,
-		'numeroCuenta',numero_cuenta,'estado',estado),gen_random_uuid() FROM desactivadas
+		'numeroCuenta',numero_cuenta,'estado',estado),gen_random_uuid(),$4 FROM desactivadas
 		RETURNING 1
-	) SELECT COUNT(*) FROM eventos`, saldoMaximoCentavos, fechaLimite, events.EventoCuentaDesactivada).Scan(&cantidad)
+	) SELECT COUNT(*) FROM eventos`, saldoMaximoCentavos, fechaLimite, events.EventoCuentaDesactivada, telemetry.Serialize(ctx)).Scan(&cantidad)
 	if err != nil {
 		return 0, fmt.Errorf("desactivar cuentas inactivas: %w", err)
 	}
@@ -194,6 +209,8 @@ type escaneador interface {
 }
 
 func (r *RepositorioCuentasPostgres) buscarUna(ctx context.Context, consulta string, argumento any) (*models.Cuenta, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "buscarUna")
+	defer finishDatabase()
 	cuenta, err := escanearCuenta(r.conexion.QueryRow(ctx, consulta, argumento))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrCuentaNoEncontrada
@@ -216,6 +233,8 @@ func escanearCuenta(fila escaneador) (*models.Cuenta, error) {
 }
 
 func mensajeYaProcesado(ctx context.Context, tx pgx.Tx, idMensaje uuid.UUID, consumidor string) (bool, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "mensajeYaProcesado")
+	defer finishDatabase()
 	var existe bool
 	err := tx.QueryRow(ctx, `SELECT EXISTS(
 		SELECT 1 FROM mensajes_procesados WHERE id_mensaje = $1 AND nombre_consumidor = $2
@@ -227,6 +246,8 @@ func mensajeYaProcesado(ctx context.Context, tx pgx.Tx, idMensaje uuid.UUID, con
 }
 
 func bloquearCuenta(ctx context.Context, tx pgx.Tx, idCuenta uuid.UUID) (models.Cuenta, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "bloquearCuenta")
+	defer finishDatabase()
 	cuenta, err := escanearCuenta(tx.QueryRow(ctx, `SELECT `+columnasCuenta+` FROM cuentas WHERE id_cuenta = $1 FOR UPDATE`, idCuenta))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return models.Cuenta{}, ErrCuentaNoEncontrada
@@ -238,6 +259,8 @@ func bloquearCuenta(ctx context.Context, tx pgx.Tx, idCuenta uuid.UUID) (models.
 }
 
 func calcularSaldoNuevo(ctx context.Context, tx pgx.Tx, cuenta models.Cuenta, solicitud SolicitudMovimientoCuenta) (int64, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "calcularSaldoNuevo")
+	defer finishDatabase()
 	switch solicitud.TipoMovimiento {
 	case models.TipoMovimientoDebito:
 		montoTotal := solicitud.MontoCentavos + cuenta.ComisionTransaccionCentavos
@@ -272,6 +295,8 @@ func calcularSaldoNuevo(ctx context.Context, tx pgx.Tx, cuenta models.Cuenta, so
 }
 
 func actualizarSaldo(ctx context.Context, tx pgx.Tx, idCuenta uuid.UUID, saldoNuevo int64, ahora time.Time, version int64) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "actualizarSaldo")
+	defer finishDatabase()
 	resultado, err := tx.Exec(ctx, `UPDATE cuentas SET saldo_centavos = $1, ultima_actividad = $2,
 		fecha_actualizacion = $2, version = version + 1 WHERE id_cuenta = $3 AND version = $4`,
 		saldoNuevo, ahora, idCuenta, version)
@@ -285,6 +310,8 @@ func actualizarSaldo(ctx context.Context, tx pgx.Tx, idCuenta uuid.UUID, saldoNu
 }
 
 func insertarMovimiento(ctx context.Context, tx pgx.Tx, movimiento models.MovimientoCuenta) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "insertarMovimiento")
+	defer finishDatabase()
 	_, err := tx.Exec(ctx, `INSERT INTO movimientos_cuenta (
 		id_movimiento, id_cuenta, id_operacion, id_correlacion, tipo_movimiento,
 		monto_centavos, saldo_anterior_centavos, saldo_nuevo_centavos, descripcion, fecha_creacion
@@ -300,6 +327,8 @@ func insertarMovimiento(ctx context.Context, tx pgx.Tx, movimiento models.Movimi
 }
 
 func registrarMensajeProcesado(ctx context.Context, tx pgx.Tx, solicitud SolicitudMovimientoCuenta, idMovimiento uuid.UUID) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "registrarMensajeProcesado")
+	defer finishDatabase()
 	resultado, err := json.Marshal(map[string]any{"idMovimiento": idMovimiento})
 	if err != nil {
 		return fmt.Errorf("serializar resultado del mensaje: %w", err)
@@ -315,13 +344,15 @@ func registrarMensajeProcesado(ctx context.Context, tx pgx.Tx, solicitud Solicit
 }
 
 func insertarEventoSalida(ctx context.Context, tx pgx.Tx, solicitud SolicitudMovimientoCuenta, movimiento models.MovimientoCuenta) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "insertarEventoSalida")
+	defer finishDatabase()
 	contenido, err := json.Marshal(movimiento)
 	if err != nil {
 		return fmt.Errorf("serializar evento de movimiento: %w", err)
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO mensajes_salida (
+	_, err = tx.Exec(ctx, `INSERT INTO mensajes_salida(
 		id_mensaje, tipo_evento, version_evento, contenido, id_correlacion
-	) VALUES ($1,$2,1,$3,$4)`, uuid.New(), solicitud.TipoEventoExitoso, contenido, solicitud.IDCorrelacion)
+	,trace_context) VALUES ($1,$2,1,$3,$4,$5)`, uuid.New(), solicitud.TipoEventoExitoso, contenido, solicitud.IDCorrelacion, telemetry.Serialize(ctx))
 	if err != nil {
 		return fmt.Errorf("registrar evento de salida: %w", err)
 	}
@@ -329,6 +360,8 @@ func insertarEventoSalida(ctx context.Context, tx pgx.Tx, solicitud SolicitudMov
 }
 
 func buscarMovimientoPorOperacion(ctx context.Context, tx pgx.Tx, idOperacion uuid.UUID, tipo models.TipoMovimiento) (models.MovimientoCuenta, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "buscarMovimientoPorOperacion")
+	defer finishDatabase()
 	var movimiento models.MovimientoCuenta
 	err := tx.QueryRow(ctx, `SELECT id_movimiento, id_cuenta, id_operacion, id_correlacion,
 		tipo_movimiento, monto_centavos, saldo_anterior_centavos, saldo_nuevo_centavos,

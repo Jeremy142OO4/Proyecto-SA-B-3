@@ -64,6 +64,7 @@ func TestSesionReconectaCanalesYConexion(t *testing.T) {
 		}
 		t.Fatal("no se recupero la sesion RabbitMQ")
 	}
+	seen := map[string]bool{}
 	publicar := func(valor string) {
 		t.Helper()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -71,14 +72,22 @@ func TestSesionReconectaCanalesYConexion(t *testing.T) {
 		if err := s.publicar(ctx, "qa.recuperacion", cola, amqp.Publishing{Body: []byte(valor)}); err != nil {
 			t.Fatal(err)
 		}
-		select {
-		case recibido := <-recibidos:
-			if recibido != valor {
-				t.Fatalf("mensaje inesperado %s", recibido)
+		for {
+			select {
+			case recibido := <-recibidos:
+				if recibido == valor {
+					seen[valor] = true
+					return
+				}
+				if !seen[recibido] {
+					t.Fatalf("mensaje inesperado %s", recibido)
+				}
+				t.Log("reentrega valida tras cierre antes del ACK")
+			case <-ctx.Done():
+				t.Fatal("consumidor no recuperado")
 			}
-		case <-ctx.Done():
-			t.Fatal("consumidor no recuperado")
 		}
+
 	}
 	esperar(s.listo)
 	publicar("inicial")

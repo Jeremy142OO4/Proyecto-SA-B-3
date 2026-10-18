@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/Proyecto-SA-B-3/transaction-service/events"
+	"github.com/Proyecto-SA-B-3/transaction-service/internal/telemetry"
 	"github.com/Proyecto-SA-B-3/transaction-service/messaging"
 	"github.com/Proyecto-SA-B-3/transaction-service/repositories"
 	"log/slog"
@@ -39,8 +40,9 @@ func (o *Outbox) publicar(ctx context.Context) {
 		return
 	}
 	for _, x := range lista {
+		publishCtx := telemetry.Restore(ctx, x.TraceContext)
 		m := events.SobreMensaje{IDMensaje: x.IDMensaje, IDCorrelacion: x.IDCorrelacion, Tipo: x.Tipo, Version: 1, OcurridoEn: x.FechaCreacion, Productor: "transaction-service", Contenido: json.RawMessage(x.Contenido)}
-		if e = o.pub.Publicar(ctx, m, x.EsComando); e != nil {
+		if e = o.pub.Publicar(publishCtx, m, x.EsComando); e != nil {
 			slog.Error("publicar outbox", "tipo", x.Tipo, "error", e)
 			_ = o.repo.RegistrarFallo(ctx, x.IDMensaje)
 			continue

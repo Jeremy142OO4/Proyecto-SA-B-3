@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/Proyecto-SA-B-3/payment-service/events"
+	"github.com/Proyecto-SA-B-3/payment-service/internal/telemetry"
 	"github.com/Proyecto-SA-B-3/payment-service/messaging"
 	"github.com/Proyecto-SA-B-3/payment-service/repositories"
 	"log/slog"
@@ -38,6 +39,7 @@ func (p *PublicadorOutbox) publicar(ctx context.Context) {
 		return
 	}
 	for _, s := range lista {
+		publishCtx := telemetry.Restore(ctx, s.TraceContext)
 		m := events.SobreMensaje{IDMensaje: s.IDMensaje, IDCorrelacion: s.IDCorrelacion, Tipo: s.TipoEvento, Version: s.VersionEvento, OcurridoEn: s.FechaCreacion, Productor: "payment-service", Contenido: json.RawMessage(s.Contenido)}
 		// Los mensajes de validación también deben viajar por el intercambio de
 		// comandos; de lo contrario quedan publicados como eventos y Customer /
@@ -46,7 +48,7 @@ func (p *PublicadorOutbox) publicar(ctx context.Context) {
 			s.TipoEvento == events.ComandoSolicitarCompensacion ||
 			s.TipoEvento == events.ComandoValidarKYC ||
 			s.TipoEvento == events.ComandoValidarCuenta
-		if e = p.publicador.Publicar(ctx, m, comando); e != nil {
+		if e = p.publicador.Publicar(publishCtx, m, comando); e != nil {
 			_ = p.repo.RegistrarFallo(ctx, s.IDMensaje)
 			continue
 		}

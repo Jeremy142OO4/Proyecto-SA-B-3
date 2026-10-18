@@ -1,6 +1,7 @@
 package messaging
 
 import (
+	"bank-usac/service-customer/internal/telemetry"
 	"context"
 	"encoding/json"
 	"errors"
@@ -292,11 +293,12 @@ func (r *RabbitMQClient) processPendingOutbox(ctx context.Context) {
 	}
 
 	for _, msg := range msgs {
+		publishCtx := telemetry.Restore(ctx, msg.TraceContext)
 		exchange := intercambioEventos
 		routingKey := msg.EventType
 
 		err := r.sesion.publicar(
-			ctx,
+			publishCtx,
 			exchange,
 			routingKey,
 			amqp.Publishing{

@@ -3,6 +3,7 @@ package publishers
 import (
 	"context"
 	"encoding/json"
+	"github.com/Proyecto-SA-B-3/account-service/internal/telemetry"
 	"log/slog"
 	"time"
 
@@ -43,6 +44,7 @@ func (p *PublicadorOutbox) publicarPendientes(ctx context.Context) {
 		return
 	}
 	for _, salida := range mensajes {
+		publishCtx := telemetry.Restore(ctx, salida.TraceContext)
 		mensaje := events.SobreMensaje{
 			IDMensaje: salida.IDMensaje, IDCorrelacion: salida.IDCorrelacion,
 			Tipo: salida.TipoEvento, Version: salida.VersionEvento,
@@ -51,9 +53,9 @@ func (p *PublicadorOutbox) publicarPendientes(ctx context.Context) {
 		}
 		var errorPublicacion error
 		if salida.TipoEvento == events.ComandoValidarCliente {
-			errorPublicacion = p.publicador.PublicarComando(ctx, mensaje)
+			errorPublicacion = p.publicador.PublicarComando(publishCtx, mensaje)
 		} else {
-			errorPublicacion = p.publicador.PublicarEvento(ctx, mensaje)
+			errorPublicacion = p.publicador.PublicarEvento(publishCtx, mensaje)
 		}
 		if errorPublicacion != nil {
 			slog.Error("fallo la publicacion Outbox", "idMensaje", salida.IDMensaje, "error", errorPublicacion)

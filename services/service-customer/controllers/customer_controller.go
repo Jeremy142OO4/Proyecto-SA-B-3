@@ -16,7 +16,7 @@ type CustomerController struct {
 func (cc *CustomerController) ListCustomers(c *fiber.Ctx) error {
 	limit, _ := strconv.Atoi(c.Query("limit", "50"))
 	offset, _ := strconv.Atoi(c.Query("offset", "0"))
-	customers, err := cc.svc.ListCustomers(c.Context(), limit, offset)
+	customers, err := cc.svc.ListCustomers(c.UserContext(), limit, offset)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "No fue posible consultar los clientes"})
 	}
@@ -34,7 +34,7 @@ func (cc *CustomerController) UpdateCustomerStatus(c *fiber.Ctx) error {
 	if c.BodyParser(&input) != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Cuerpo de solicitud invalido"})
 	}
-	customer, err := cc.svc.UpdateCustomerStatus(c.Context(), id, input.Status, middleware.GetCorrelationID(c))
+	customer, err := cc.svc.UpdateCustomerStatus(c.UserContext(), id, input.Status, middleware.GetCorrelationID(c))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -56,7 +56,7 @@ func (cc *CustomerController) UpdateCustomerKYCStatus(c *fiber.Ctx) error {
 	if input.KYCStatus == "" {
 		input.KYCStatus = input.Status
 	}
-	customer, err := cc.svc.UpdateCustomerKYCStatus(c.Context(), id, input.KYCStatus, middleware.GetCorrelationID(c))
+	customer, err := cc.svc.UpdateCustomerKYCStatus(c.UserContext(), id, input.KYCStatus, middleware.GetCorrelationID(c))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -74,7 +74,7 @@ func (cc *CustomerController) Register(c *fiber.Ctx) error {
 	}
 
 	corrID := middleware.GetCorrelationID(c)
-	customer, err := cc.svc.RegisterCustomer(c.Context(), req, corrID)
+	customer, err := cc.svc.RegisterCustomer(c.UserContext(), req, corrID)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -92,7 +92,7 @@ func (cc *CustomerController) Activate(c *fiber.Ctx) error {
 	}
 
 	corrID := middleware.GetCorrelationID(c)
-	if err := cc.svc.ActivateCustomer(c.Context(), token, corrID); err != nil {
+	if err := cc.svc.ActivateCustomer(c.UserContext(), token, corrID); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
@@ -110,7 +110,7 @@ func (cc *CustomerController) Login(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Formato de credenciales inválido"})
 	}
 
-	res, err := cc.svc.Login(c.Context(), req.Username, req.Password)
+	res, err := cc.svc.Login(c.UserContext(), req.Username, req.Password)
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -124,7 +124,7 @@ func (cc *CustomerController) GetProfile(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "No autorizado"})
 	}
 
-	cust, err := cc.svc.GetProfile(c.Context(), customerID)
+	cust, err := cc.svc.GetProfile(c.UserContext(), customerID)
 	if err != nil || cust == nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Perfil no encontrado"})
 	}
@@ -144,7 +144,7 @@ func (cc *CustomerController) UpdateProfile(c *fiber.Ctx) error {
 	}
 
 	corrID := middleware.GetCorrelationID(c)
-	cust, err := cc.svc.UpdateCustomer(c.Context(), customerID, req, corrID)
+	cust, err := cc.svc.UpdateCustomer(c.UserContext(), customerID, req, corrID)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}

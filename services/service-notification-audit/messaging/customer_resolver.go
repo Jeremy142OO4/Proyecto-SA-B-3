@@ -1,6 +1,7 @@
 package messaging
 
 import (
+	"bank-usac/service-notification-audit/internal/telemetry"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -17,10 +18,10 @@ import (
 const customerProfileCommand = "cliente.perfil.solicitado"
 
 type customerResolver struct {
-	publish  *amqp.Channel
-	consume  *amqp.Channel
-	pending  map[uuid.UUID]chan customerProfileResponse
-	mutex    sync.Mutex
+	publish *amqp.Channel
+	consume *amqp.Channel
+	pending map[uuid.UUID]chan customerProfileResponse
+	mutex   sync.Mutex
 }
 
 type customerProfileResponse struct {
@@ -75,6 +76,8 @@ func (r *customerResolver) Start(ctx context.Context) error {
 }
 
 func (r *customerResolver) handleResponse(delivery amqp.Delivery) {
+	_, finish := telemetry.Consume(context.Background(), delivery)
+	defer finish(nil)
 	defer delivery.Ack(false)
 	var envelope events.EventEnvelope
 	if json.Unmarshal(delivery.Body, &envelope) != nil || envelope.CorrelationID == uuid.Nil {
@@ -86,7 +89,9 @@ func (r *customerResolver) handleResponse(delivery amqp.Delivery) {
 	}
 	response := customerProfileResponse{status: rpc.Estado}
 	if rpc.Estado < 200 || rpc.Estado >= 300 {
-		var detail struct{ Error string `json:"error"` }
+		var detail struct {
+			Error string `json:"error"`
+		}
 		_ = json.Unmarshal(rpc.Cuerpo, &detail)
 		response.err = fmt.Errorf("customer-service respondió %d: %s", rpc.Estado, detail.Error)
 	} else {
@@ -141,7 +146,7 @@ func (r *customerResolver) ResolveCustomer(ctx context.Context, customerID uuid.
 	if err != nil {
 		return "", "", err
 	}
-	if err = r.publish.PublishWithContext(ctx, "banco.comandos", customerProfileCommand, false, false, amqp.Publishing{DeliveryMode: amqp.Persistent, ContentType: "application/json", CorrelationId: correlationID.String(), Body: body}); err != nil {
+	if err = r.publish.PublishWithContext(ctx, "banco.comandos", customerProfileCommand, false, false, amqp.Publishing{Headers: telemetry.AMQPHeaders(ctx), DeliveryMode: amqp.Persistent, ContentType: "application/json", CorrelationId: correlationID.String(), Body: body}); err != nil {
 		return "", "", err
 	}
 	select {

@@ -2,7 +2,7 @@
 
 Los **Service Level Objectives (SLO)** establecen los valores objetivo que Bank USAC espera alcanzar para los SLI definidos. Para la fase 3, el objetivo oficial de disponibilidad es **99.5 %**, acordado por el equipo. Se evalúa por entorno, sobre una ventana móvil de 30 días. Una prueba corta se reporta como evidencia de esa ejecución, no como cumplimiento mensual.
 
-Este documento es la referencia vigente de objetivos. Las propuestas de fase 2 se conservan como antecedentes; no sustituyen estos umbrales. La instrumentación y medición aún deben implementarse según el [contrato de telemetría](../observabilidad/contrato-telemetria.md).
+Este documento es la referencia vigente de objetivos. Las propuestas de fase 2 se conservan como antecedentes; no sustituyen estos umbrales. La instrumentación común ya está implementada y probada en aislamiento; faltan el despliegue, las métricas de dominio y la medición real. Ver [implementación](../observabilidad/implementacion.md) y [contrato de telemetría](../observabilidad/contrato-telemetria.md).
 
 ## Objetivos generales
 

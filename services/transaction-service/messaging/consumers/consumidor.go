@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Proyecto-SA-B-3/transaction-service/events"
+	"github.com/Proyecto-SA-B-3/transaction-service/internal/telemetry"
 	"github.com/Proyecto-SA-B-3/transaction-service/messaging"
 	"github.com/Proyecto-SA-B-3/transaction-service/repositories"
 	"github.com/Proyecto-SA-B-3/transaction-service/services"
@@ -49,7 +50,9 @@ func (c *Consumidor) Ejecutar(ctx context.Context) error {
 	<-ctx.Done()
 	return nil
 }
-func (c *Consumidor) procesar(ctx context.Context, d amqp.Delivery) error {
+func (c *Consumidor) procesar(ctx context.Context, d amqp.Delivery) (resultErr error) {
+	ctx, finish := telemetry.Consume(ctx, d)
+	defer func() { finish(resultErr) }()
 	m, e := events.DecodificarSobre(d.Body)
 	if e != nil {
 		return c.fallido(ctx, d, e)

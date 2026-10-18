@@ -60,6 +60,7 @@ type ActivationToken struct {
 }
 
 type OutboxMessage struct {
+	TraceContext  string     `db:"trace_context" json:"-"`
 	ID            uuid.UUID  `db:"id"`
 	EventType     string     `db:"event_type"`
 	Payload       []byte     `db:"payload"`

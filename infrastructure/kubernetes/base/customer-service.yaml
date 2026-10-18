@@ -52,6 +52,7 @@ spec:
             - { name: http, containerPort: 8081 }
           envFrom:
             - configMapRef: { name: customer-service-config }
+            - configMapRef: { name: bank-usac-config }
           env:
             - name: DATABASE_URL
               valueFrom: { secretKeyRef: { name: bank-usac-secrets, key: URL_BASE_DATOS_CLIENTES } }

@@ -20,7 +20,7 @@ func NewAuditController(svc services.AuditService) *AuditController {
 
 func (ac *AuditController) GetRecent(c *fiber.Ctx) error {
 	limit, _ := strconv.Atoi(c.Query("limit", "50"))
-	logs, err := ac.svc.GetRecentAudits(c.Context(), limit)
+	logs, err := ac.svc.GetRecentAudits(c.UserContext(), limit)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Error al consultar auditoría"})
 	}
@@ -34,7 +34,7 @@ func (ac *AuditController) GetByCorrelation(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "correlationId inválido"})
 	}
 
-	logs, err := ac.svc.GetAuditByCorrelation(c.Context(), corrID)
+	logs, err := ac.svc.GetAuditByCorrelation(c.UserContext(), corrID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Error al consultar auditoría"})
 	}
@@ -56,7 +56,7 @@ func (ac *AuditController) GetNotifications(c *fiber.Ctx) error {
 		filter.CorrelationID = &correlationID
 	}
 
-	logs, err := ac.svc.GetNotifications(c.Context(), filter)
+	logs, err := ac.svc.GetNotifications(c.UserContext(), filter)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Error al consultar notificaciones"})
 	}

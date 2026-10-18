@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Proyecto-SA-B-3/payment-service/events"
+	"github.com/Proyecto-SA-B-3/payment-service/internal/telemetry"
 	"github.com/Proyecto-SA-B-3/payment-service/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -22,6 +23,8 @@ func NuevoRepositorioPagosPostgres(c *pgxpool.Pool) *RepositorioPagosPostgres {
 }
 
 func (r *RepositorioPagosPostgres) Iniciar(ctx context.Context, m events.SobreMensaje, s events.SolicitudPago) (*models.Pago, bool, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "Iniciar")
+	defer finishDatabase()
 	tx, err := r.conexion.Begin(ctx)
 	if err != nil {
 		return nil, false, err
@@ -59,6 +62,8 @@ func (r *RepositorioPagosPostgres) Iniciar(ctx context.Context, m events.SobreMe
 }
 
 func (r *RepositorioPagosPostgres) ProcesarResultadoKYC(ctx context.Context, m events.SobreMensaje, resultado events.ResultadoValidacionKYC) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "ProcesarResultadoKYC")
+	defer finishDatabase()
 	tx, err := r.conexion.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {
 		return err
@@ -106,6 +111,8 @@ func (r *RepositorioPagosPostgres) ProcesarResultadoKYC(ctx context.Context, m e
 }
 
 func (r *RepositorioPagosPostgres) ProcesarResultadoValidacionCuenta(ctx context.Context, m events.SobreMensaje, resultado events.ResultadoValidacionCuenta) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "ProcesarResultadoValidacionCuenta")
+	defer finishDatabase()
 	tx, err := r.conexion.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {
 		return err
@@ -160,6 +167,8 @@ func (r *RepositorioPagosPostgres) ProcesarResultadoValidacionCuenta(ctx context
 }
 
 func (r *RepositorioPagosPostgres) ProcesarResultadoCuenta(ctx context.Context, m events.SobreMensaje, respuesta events.ResultadoMovimiento) (bool, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "ProcesarResultadoCuenta")
+	defer finishDatabase()
 	tx, err := r.conexion.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {
 		return false, err
@@ -242,6 +251,8 @@ func (r *RepositorioPagosPostgres) ProcesarResultadoCuenta(ctx context.Context, 
 }
 
 func finalizarIntento(ctx context.Context, tx pgx.Tx, idPago uuid.UUID, estado, codigo, detalle string) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "finalizarIntento")
+	defer finishDatabase()
 	_, err := tx.Exec(ctx, `UPDATE intentos_pago
 		SET estado=$1,codigo_respuesta=NULLIF($2,''),detalle_error=NULLIF($3,''),fecha_finalizacion=NOW()
 		WHERE id_pago=$4 AND numero_intento=1 AND fecha_finalizacion IS NULL`, estado, codigo, detalle, idPago)
@@ -258,6 +269,8 @@ func escanearPago(s scanner) (*models.Pago, error) {
 	return &p, err
 }
 func buscarPagoTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*models.Pago, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "buscarPagoTx")
+	defer finishDatabase()
 	p, err := escanearPago(tx.QueryRow(ctx, `SELECT `+columnasPago+` FROM pagos WHERE id_pago=$1`, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrPagoNoEncontrado
@@ -265,6 +278,8 @@ func buscarPagoTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*models.Pago, e
 	return p, err
 }
 func buscarPagoTxBloqueado(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*models.Pago, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "buscarPagoTxBloqueado")
+	defer finishDatabase()
 	p, err := escanearPago(tx.QueryRow(ctx, `SELECT `+columnasPago+` FROM pagos WHERE id_pago=$1 FOR UPDATE`, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrPagoNoEncontrado
@@ -272,6 +287,8 @@ func buscarPagoTxBloqueado(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*model
 	return p, err
 }
 func (r *RepositorioPagosPostgres) BuscarPorID(ctx context.Context, id uuid.UUID) (*models.Pago, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "BuscarPorID")
+	defer finishDatabase()
 	p, err := escanearPago(r.conexion.QueryRow(ctx, `SELECT `+columnasPago+` FROM pagos WHERE id_pago=$1`, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrPagoNoEncontrado
@@ -279,6 +296,8 @@ func (r *RepositorioPagosPostgres) BuscarPorID(ctx context.Context, id uuid.UUID
 	return p, err
 }
 func (r *RepositorioPagosPostgres) ListarPorCliente(ctx context.Context, id uuid.UUID, limite, offset int) ([]models.Pago, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "ListarPorCliente")
+	defer finishDatabase()
 	filas, err := r.conexion.Query(ctx, `SELECT `+columnasPago+` FROM pagos WHERE id_cliente=$1 ORDER BY fecha_creacion DESC LIMIT $2 OFFSET $3`, id, limite, offset)
 	if err != nil {
 		return nil, err
@@ -295,15 +314,21 @@ func (r *RepositorioPagosPostgres) ListarPorCliente(ctx context.Context, id uuid
 	return lista, filas.Err()
 }
 func actualizarPago(ctx context.Context, tx pgx.Tx, p *models.Pago) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "actualizarPago")
+	defer finishDatabase()
 	_, err := tx.Exec(ctx, `UPDATE pagos SET estado=$1,referencia_externa=NULLIF($2,''),motivo_rechazo=NULLIF($3,''),fecha_actualizacion=NOW() WHERE id_pago=$4`, p.Estado, p.ReferenciaExterna, p.MotivoRechazo, p.IDPago)
 	return err
 }
 func insertarSalida(ctx context.Context, tx pgx.Tx, tipo string, contenido []byte, correlacion uuid.UUID) error {
-	_, err := tx.Exec(ctx, `INSERT INTO mensajes_salida(id_mensaje,tipo_evento,version_evento,contenido,id_correlacion)VALUES($1,$2,1,$3,$4)`, uuid.New(), tipo, contenido, correlacion)
+	ctx, finishDatabase := telemetry.Database(ctx, "insertarSalida")
+	defer finishDatabase()
+	_, err := tx.Exec(ctx, `INSERT INTO mensajes_salida(id_mensaje,tipo_evento,version_evento,contenido,id_correlacion,trace_context)VALUES($1,$2,1,$3,$4,$5)`, uuid.New(), tipo, contenido, correlacion, telemetry.Serialize(ctx))
 	return err
 }
 func (r *RepositorioPagosPostgres) ListarSalida(ctx context.Context, limite int) ([]MensajeSalida, error) {
-	filas, err := r.conexion.Query(ctx, `SELECT id_mensaje,tipo_evento,version_evento,contenido,id_correlacion,fecha_creacion FROM mensajes_salida WHERE estado='PENDIENTE' ORDER BY fecha_creacion LIMIT $1`, limite)
+	ctx, finishDatabase := telemetry.Database(ctx, "ListarSalida")
+	defer finishDatabase()
+	filas, err := r.conexion.Query(ctx, `SELECT id_mensaje,tipo_evento,version_evento,contenido,id_correlacion,fecha_creacion,trace_context FROM mensajes_salida WHERE estado='PENDIENTE' ORDER BY fecha_creacion LIMIT $1`, limite)
 	if err != nil {
 		return nil, err
 	}
@@ -311,7 +336,7 @@ func (r *RepositorioPagosPostgres) ListarSalida(ctx context.Context, limite int)
 	lista := []MensajeSalida{}
 	for filas.Next() {
 		var m MensajeSalida
-		if err = filas.Scan(&m.IDMensaje, &m.TipoEvento, &m.VersionEvento, &m.Contenido, &m.IDCorrelacion, &m.FechaCreacion); err != nil {
+		if err = filas.Scan(&m.IDMensaje, &m.TipoEvento, &m.VersionEvento, &m.Contenido, &m.IDCorrelacion, &m.FechaCreacion, &m.TraceContext); err != nil {
 			return nil, err
 		}
 		lista = append(lista, m)
@@ -319,15 +344,21 @@ func (r *RepositorioPagosPostgres) ListarSalida(ctx context.Context, limite int)
 	return lista, filas.Err()
 }
 func (r *RepositorioPagosPostgres) MarcarPublicado(ctx context.Context, id uuid.UUID) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "MarcarPublicado")
+	defer finishDatabase()
 	_, err := r.conexion.Exec(ctx, `UPDATE mensajes_salida SET estado='PUBLICADO',fecha_publicacion=NOW()WHERE id_mensaje=$1`, id)
 	return err
 }
 func (r *RepositorioPagosPostgres) RegistrarFallo(ctx context.Context, id uuid.UUID) error {
+	ctx, finishDatabase := telemetry.Database(ctx, "RegistrarFallo")
+	defer finishDatabase()
 	_, err := r.conexion.Exec(ctx, `UPDATE mensajes_salida SET cantidad_intentos=cantidad_intentos+1 WHERE id_mensaje=$1`, id)
 	return err
 }
 
 func (r *RepositorioPagosPostgres) RegistrarRespuesta(ctx context.Context, mensaje events.SobreMensaje, tipo string, contenido any) (bool, error) {
+	ctx, finishDatabase := telemetry.Database(ctx, "RegistrarRespuesta")
+	defer finishDatabase()
 	tx, err := r.conexion.Begin(ctx)
 	if err != nil {
 		return false, err
