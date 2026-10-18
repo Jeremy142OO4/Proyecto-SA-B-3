@@ -1,12 +1,14 @@
 # Objetivos de nivel de servicio - SLO
 
-Los **Service Level Objectives (SLO)** establecen los valores objetivo que Bank USAC espera alcanzar para los SLI definidos. Estos objetivos corresponden al ambiente local de demostración y deben evaluarse sobre una ventana móvil de 30 días o sobre una ejecución completa de pruebas cuando no exista operación continua.
+Los **Service Level Objectives (SLO)** establecen los valores objetivo que Bank USAC espera alcanzar para los SLI definidos. Para la fase 3, el objetivo oficial de disponibilidad es **99.5 %**, acordado por el equipo. Se evalúa por entorno, sobre una ventana móvil de 30 días. Una prueba corta se reporta como evidencia de esa ejecución, no como cumplimiento mensual.
+
+Este documento es la referencia vigente de objetivos. Las propuestas de fase 2 se conservan como antecedentes; no sustituyen estos umbrales. La instrumentación y medición aún deben implementarse según el [contrato de telemetría](../observabilidad/contrato-telemetria.md).
 
 ## Objetivos generales
 
 | ID | SLI relacionado | Objetivo | Ventana |
 |---|---|---:|---|
-| SLO-01 | SLI-01 Disponibilidad del punto de entrada | Mayor o igual a 99.0 % | 30 días |
+| SLO-01 | SLI-01 Disponibilidad del punto de entrada | Mayor o igual a 99.5 % | 30 días |
 | SLO-02 | SLI-02 Disponibilidad por microservicio | Mayor o igual a 98.5 % por servicio | 30 días |
 | SLO-03 | SLI-03 Latencia del API Gateway | `p95` menor o igual a 500 ms para aceptar o consultar una solicitud | 30 días |
 | SLO-04 | SLI-04 Procesamiento asíncrono | `p95` menor o igual a 10 s para operaciones sin compensación | 30 días |
@@ -36,19 +38,21 @@ Los rechazos por reglas válidas del negocio cuentan como respuestas correctas s
 
 ## Presupuesto de error
 
-Para el SLO de disponibilidad general de 99.0 %, el presupuesto de error es 1.0 % de la ventana observada.
+Para el SLO de disponibilidad general de 99.5 %, el presupuesto de error es 0.5 % de las solicitudes elegibles observadas.
 
 ```text
 Presupuesto de error = 100 % - objetivo de disponibilidad
 ```
 
-En una ventana de 30 días, un objetivo de 99.0 % admite aproximadamente 7 horas y 12 minutos de indisponibilidad acumulada. Este valor se usa como referencia de diseño; el proyecto académico se valida principalmente mediante periodos controlados de prueba.
+Para N solicitudes elegibles, el presupuesto es `0.005 × N` fallos. El presupuesto restante es `0.005 × N - fallos observados`; puede ser negativo. Sin tráfico se informa «sin datos», no 100 %. Si se mide por tiempo mediante una sonda independiente, 30 días equivalen a 216 minutos (3 h 36 min) permitidos; ese presupuesto temporal no sustituye el basado en solicitudes.
+
+El 99.5 % aplica a disponibilidad: no cambia automáticamente los objetivos independientes de entrega, compensación, notificaciones o latencia de las tablas anteriores.
 
 ## Condiciones de medición
 
-- Se excluyen periodos de mantenimiento anunciados antes de iniciar la ventana.
-- Se excluyen solicitudes inválidas, no autenticadas o no autorizadas rechazadas correctamente.
-- Los fallos provocados deliberadamente durante pruebas de resiliencia deben reportarse por separado.
+- Se cuentan todas las respuestas HTTP de negocio del Gateway; una respuesta no 5xx cuenta como disponible, incluidos los rechazos 4xx. Esto no demuestra que el resultado de negocio sea correcto: SLI-05 lo mide por separado.
+- Se excluyen únicamente endpoints de salud, readiness y métricas. El mantenimiento y los fallos reales no se eliminan retrospectivamente.
+- Dev y prod se evalúan por separado. Las pruebas de carga y resiliencia se identifican y se muestran también en su ventana completa, incluidos los fallos; no se oculta su consumo de presupuesto.
 - Se incluyen fallos internos, timeouts, pérdida de mensajes y errores inesperados.
 - Todo valor debe indicar periodo, cantidad de muestras y fuente de medición.
 - No se declara cumplimiento cuando no existen muestras suficientes.

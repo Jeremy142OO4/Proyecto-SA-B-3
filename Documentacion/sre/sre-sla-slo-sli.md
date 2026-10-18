@@ -1,5 +1,7 @@
 # SRE, SLA, SLI y SLO — Bank USAC (Fase 2)
 
+> **Antecedente histórico:** las tablas siguientes son propuestas de fase 2, no objetivos adicionales vigentes. Para fase 3 prevalecen [SLI](sli.md) y [SLO](slo.md): disponibilidad oficial de **99.5 %**, presupuesto **0.5 %**, ventana móvil de 30 días por entorno. Los SLA propuestos no son SLO ni compromisos aprobados. No usar la ventana calendario ni las exclusiones HTTP de este antecedente para calcular el indicador vigente.
+
 
 > **Alcance de despliegue:** cinco microservicios en GKE y un frontend previsto para Cloud Run, según la decisión más reciente del equipo. El traslado del frontend desde Kubernetes debe validarse en el despliegue y el pipeline antes de considerarlo realizado. Las bases por servicio se proyectan en Cloud SQL.
 

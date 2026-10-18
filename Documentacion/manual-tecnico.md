@@ -277,6 +277,8 @@ gcloud run deploy bank-usac-frontend   --image docker.io/<ORGANIZACION>/bank-usa
 
 ## 8. Ingeniería de Confiabilidad del Sitio (SRE)
 
+> Actualización fase 3: la referencia vigente es [SLO](sre/slo.md) y [SLI](sre/sli.md), con disponibilidad de 99.5 % en 30 días móviles. Las tablas históricas de esta sección no sustituyen esos objetivos. El diseño de instrumentación está en el [contrato de telemetría](observabilidad/contrato-telemetria.md); su definición no implica que esté desplegado ni que los objetivos se cumplan.
+
 Para asegurar la observabilidad y calidad del sistema en producción, se establecen los marcos de SRE documentados formalmente en `sre-sla-slo-sli.md`:
 
 ### 8.1. Métricas e indicadores (SLI / SLO)

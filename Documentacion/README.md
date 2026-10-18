@@ -49,6 +49,11 @@ El catálogo de CDU se mantiene dentro de `uml/casos-de-uso.md`. Cada caso conse
 
 ## SRE y operación
 
+- [Contrato de telemetría de fase 3](observabilidad/contrato-telemetria.md): logs, trazas, propagación y criterios de aceptación.
+- [Catálogo de métricas de fase 3](observabilidad/catalogo-metricas.md): instrumentos, etiquetas y alertas previstas.
+- [Matriz de medición](observabilidad/matriz-medicion.md): fuentes por SLI, denominadores y alcance del punto 2.
+- [Contrato JSON](observabilidad/telemetria.json): constantes comunes de telemetría y disponibilidad.
+
 - [SLI](sre/sli.md): indicadores medibles.
 - [SLO](sre/slo.md): objetivos para los indicadores.
 - [SLA](sre/sla.md): compromisos del entorno académico.

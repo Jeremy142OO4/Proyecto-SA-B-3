@@ -16,13 +16,13 @@ Las mediciones se realizan sobre ventanas móviles de 30 días. Durante la evalu
 
 ## SLI-01 - Disponibilidad del punto de entrada
 
-Mide la proporción de solicitudes válidas al frontend y API Gateway que reciben una respuesta técnica correcta. Una operación aceptada con estado asíncrono cuenta como disponible aunque el procesamiento continúe después.
+Para fase 3, mide las respuestas HTTP no 5xx del API Gateway sobre todas sus respuestas de negocio. Frontend y sondas de extremo a extremo se reportan como series independientes. Una aceptación asíncrona no demuestra la finalización de la operación.
 
 ```text
-Disponibilidad (%) = solicitudes atendidas / solicitudes válidas totales × 100
+Disponibilidad Gateway (%) = respuestas no 5xx / respuestas HTTP elegibles × 100
 ```
 
-Se excluyen solicitudes rechazadas correctamente por datos inválidos, falta de autenticación o permisos insuficientes.
+Se incluyen respuestas 4xx. Se excluyen salud, readiness y métricas. Una caída sin respuesta no aparece en este cociente: debe detectarse mediante una sonda externa y reportarse junto al SLI, nunca presentarse como disponibilidad perfecta. El objetivo es 99.5 % en 30 días móviles, por entorno.
 
 ## SLI-02 - Disponibilidad de los microservicios
 
