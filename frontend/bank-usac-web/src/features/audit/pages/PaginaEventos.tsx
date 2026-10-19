@@ -30,6 +30,8 @@ const iconosSeveridad = {
 };
 
 const nombresEventos: Record<string, string> = {
+ 'AccountAnomalyDetected': 'Alta frecuencia de operaciones en cuenta',
+ 'cuenta.bloqueada': 'Cuenta bloqueada por administración',
   'cuenta.consultada': 'Cuenta consultada',
   'cuenta.historial.consultado': 'Historial de cuentas consultado',
   'cuenta.movimientos.consultados': 'Movimientos de cuenta consultados',
@@ -61,7 +63,11 @@ const formatearNombreEvento = (tipo: string) => {
 };
 
 const etiquetaCampo: Record<string, string> = {
-  idCuenta: 'ID de cuenta',
+  operaciones: 'Operaciones detectadas',
+ maxOperaciones: 'Límite de operaciones',
+ ventanaMinutos: 'Ventana en minutos',
+ nivel: 'Nivel',
+ idCuenta: 'ID de cuenta',
   idCuentaOrigen: 'Cuenta origen',
   idCuentaDestino: 'Cuenta destino',
   numeroCuenta: 'Número de cuenta',
@@ -82,7 +88,7 @@ const etiquetaCampo: Record<string, string> = {
   concepto: 'Concepto',
 };
 
-const camposDetalle = [
+const camposDetalle = ['operaciones', 'maxOperaciones', 'ventanaMinutos', 'nivel',
   'idCuenta', 'idCuentaOrigen', 'idCuentaDestino', 'numeroCuenta', 'tipoCuenta', 'saldoCentavos', 'saldoMinimoCentavos',
   'montoCentavos', 'montoTotalCentavos', 'moneda', 'estado', 'idCliente',
   'idOperacion', 'idTransferencia', 'codigo', 'motivo', 'descripcion',

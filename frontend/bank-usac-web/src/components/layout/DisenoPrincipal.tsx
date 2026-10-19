@@ -1,4 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { MensajeriaCuentas } from '../../features/admin/components/MensajeriaCuentas';
 import { useAutenticacion } from '../../features/auth/context/ContextoAutenticacion';
 
 export function DisenoPrincipal() {
@@ -12,7 +13,7 @@ export function DisenoPrincipal() {
       <nav>
         {usuario?.rol === 'CLIENTE' && <><NavLink to="/cuentas">Cuentas</NavLink><NavLink to="/transferencias">Transferencias</NavLink><NavLink to="/transferencias/nueva">Nueva transferencia</NavLink><NavLink to="/pagos">Pagos</NavLink><NavLink to="/pagos/nuevo">Nuevo pago</NavLink></>}
         {usuario?.rol === 'TELLER' && <><NavLink to="/cajero/clientes/nuevo">Registrar cliente</NavLink><NavLink to="/cajero/cuentas/nueva">Crear cuenta</NavLink></>}
-        {usuario?.rol === 'ADMIN' && <><NavLink to="/administracion/clientes">Administrar clientes</NavLink><NavLink to="/eventos">Eventos</NavLink><NavLink to="/auditoria">Auditoría</NavLink></>}
+        {usuario?.rol === 'ADMIN' && <><NavLink to="/administracion/clientes">Administrar clientes</NavLink><NavLink to="/administracion/cuentas">Administrar cuentas</NavLink><NavLink to="/eventos">Eventos</NavLink><NavLink to="/auditoria">Auditoría</NavLink></>}
       </nav>
       <div className="usuario">
         <span>{usuario?.rol}</span>
@@ -22,7 +23,7 @@ export function DisenoPrincipal() {
       </div>
     </aside>
     <main>
-      <header className="encabezado"><div><p>Portal bancario</p><h1>{usuario?.rol === 'CLIENTE' ? 'Mis finanzas' : usuario?.rol === 'TELLER' ? 'Operaciones de cajero' : 'Administración'}</h1></div><span className="entorno">Sesión protegida</span></header>
+      <header className="encabezado"><div><p>Portal bancario</p><h1>{usuario?.rol === 'CLIENTE' ? 'Mis finanzas' : usuario?.rol === 'TELLER' ? 'Operaciones de cajero' : 'Administración'}</h1></div><div className="acciones-cabecera">{usuario?.rol === 'ADMIN' && <MensajeriaCuentas key={usuario.clienteId} usuarioId={usuario.clienteId} />}<span className="entorno">Sesión protegida</span></div></header>
       <section className="contenido"><Outlet /></section>
     </main>
   </div>;

@@ -16,6 +16,7 @@ import (
 )
 
 type publicadorFalso struct {
+	estado     string
 	mensaje    events.SobreMensaje
 	respuestas *responses.Gestor
 }
@@ -23,9 +24,14 @@ type publicadorFalso struct {
 func (p *publicadorFalso) Publicar(_ context.Context, m events.SobreMensaje) error {
 	p.mensaje = m
 	if m.Tipo == events.ComandoConsultarCuenta && p.respuestas != nil {
+		estado := p.estado
+		if estado == "" {
+			estado = "ACTIVA"
+		}
 		contenido, _ := json.Marshal(map[string]any{
-			"idCliente": "11111111-1111-4111-8111-111111111111",
-			"idCuenta":  "22222222-2222-4222-8222-222222222222",
+			"estado":     estado,
+			"idCliente":  "11111111-1111-4111-8111-111111111111",
+			"idCuenta":   "22222222-2222-4222-8222-222222222222",
 			"tipoCuenta": "AHORRO",
 		})
 		p.respuestas.Entregar(events.SobreMensaje{
@@ -155,5 +161,32 @@ func TestPagoExternoPropagaResultadoSimulado(t *testing.T) {
 	}
 	if solicitud.ResultadoSimulado != "TIMEOUT" {
 		t.Fatalf("resultado no propagado: %+v", solicitud)
+	}
+}
+
+func TestBlockedAccountAllowsOwnerReadButRejectsWrites(t *testing.T) {
+	for _, operativa := range []bool{false, true} {
+		gestor := responses.Nuevo()
+		p := &publicadorFalso{respuestas: gestor, estado: "BLOQUEADA"}
+		g := NuevoGateway(p, operations.NuevoStore(), gestor, time.Second)
+		app := fiber.New()
+		app.Get("/", middleware.Correlacion, func(c *fiber.Ctx) error {
+			c.Locals("customerId", "11111111-1111-4111-8111-111111111111")
+			if err := g.validarPropiedadCuenta(c, uuid.MustParse("22222222-2222-4222-8222-222222222222"), operativa); err != nil {
+				return err
+			}
+			return c.SendStatus(200)
+		})
+		resp, err := app.Test(httptest.NewRequest("GET", "/", nil))
+		expected := 200
+		if operativa {
+			expected = 409
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != expected {
+			t.Fatalf("operativa=%v: expected %d, got %d", operativa, expected, resp.StatusCode)
+		}
 	}
 }

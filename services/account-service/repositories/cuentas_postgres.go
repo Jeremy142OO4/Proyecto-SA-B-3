@@ -16,11 +16,16 @@ import (
 )
 
 type RepositorioCuentasPostgres struct {
-	conexion *pgxpool.Pool
+	conexion      *pgxpool.Pool
+	monitoreoBase models.ConfiguracionMonitoreo
 }
 
-func NuevoRepositorioCuentasPostgres(conexion *pgxpool.Pool) *RepositorioCuentasPostgres {
-	return &RepositorioCuentasPostgres{conexion: conexion}
+func NuevoRepositorioCuentasPostgres(conexion *pgxpool.Pool, configuraciones ...models.ConfiguracionMonitoreo) *RepositorioCuentasPostgres {
+	base := models.ConfiguracionMonitoreo{MaxOperaciones: 10, VentanaMinutos: 5, Origen: "CONFIGMAP"}
+	if len(configuraciones) > 0 && configuraciones[0].Valida() {
+		base = configuraciones[0]
+	}
+	return &RepositorioCuentasPostgres{conexion: conexion, monitoreoBase: base}
 }
 
 func (r *RepositorioCuentasPostgres) Crear(ctx context.Context, cuenta *models.Cuenta) error {
@@ -81,6 +86,7 @@ func (r *RepositorioCuentasPostgres) ListarPorCliente(ctx context.Context, idCli
 }
 
 func (r *RepositorioCuentasPostgres) ProcesarMovimiento(ctx context.Context, solicitud SolicitudMovimientoCuenta) (ResultadoMovimiento, error) {
+	ctx = telemetry.WithCorrelation(ctx, solicitud.IDCorrelacion.String())
 	ctx, finishDatabase := telemetry.Database(ctx, "ProcesarMovimiento")
 	defer finishDatabase()
 	transaccion, err := r.conexion.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
@@ -108,7 +114,7 @@ func (r *RepositorioCuentasPostgres) ProcesarMovimiento(ctx context.Context, sol
 	if err != nil {
 		return ResultadoMovimiento{}, err
 	}
-	if cuenta.Estado != models.EstadoCuentaActiva {
+	if cuenta.Estado != models.EstadoCuentaActiva && solicitud.TipoMovimiento != models.TipoMovimientoCompensacion {
 		return ResultadoMovimiento{}, ErrCuentaNoActiva
 	}
 
@@ -118,7 +124,10 @@ func (r *RepositorioCuentasPostgres) ProcesarMovimiento(ctx context.Context, sol
 		return ResultadoMovimiento{}, err
 	}
 
-	ahora := time.Now().UTC()
+	var ahora time.Time
+	if err = transaccion.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&ahora); err != nil {
+		return ResultadoMovimiento{}, err
+	}
 	montoMovimiento := solicitud.MontoCentavos
 	if solicitud.TipoMovimiento == models.TipoMovimientoDebito {
 		montoMovimiento += cuenta.ComisionTransaccionCentavos
@@ -149,9 +158,14 @@ func (r *RepositorioCuentasPostgres) ProcesarMovimiento(ctx context.Context, sol
 		return ResultadoMovimiento{}, err
 	}
 
+	anomalia, err := r.detectarAnomalia(ctx, transaccion, cuenta, movimiento)
+	if err != nil {
+		return ResultadoMovimiento{}, err
+	}
 	if err := transaccion.Commit(ctx); err != nil {
 		return ResultadoMovimiento{}, fmt.Errorf("confirmar movimiento: %w", err)
 	}
+	telemetry.AccountMovementCommitted(ctx, string(cuenta.TipoCuenta), string(movimiento.TipoMovimiento), cuenta.IDCuenta.String(), anomalia != nil)
 	return ResultadoMovimiento{Movimiento: movimiento}, nil
 }
 

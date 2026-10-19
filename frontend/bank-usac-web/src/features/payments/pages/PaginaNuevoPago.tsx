@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { servicioCuentas } from '../../accounts/services/servicioCuentas';
 import { servicioPagos } from '../services/servicioPagos';
 import type { ResultadoSimulado } from '../types/pago';
 
@@ -15,6 +16,7 @@ export function PaginaNuevoPago() {
     setError('');
     const formulario = new FormData(evento.currentTarget);
     try {
+      if ((await servicioCuentas.buscar(String(formulario.get('cuenta')))).estado !== 'ACTIVA') throw new Error('La cuenta está bloqueada o inactiva. Solo puedes consultar su historial.');
       await servicioPagos.crear({
         idCuentaOrigen: String(formulario.get('cuenta')),
         beneficiario: String(formulario.get('beneficiario')),

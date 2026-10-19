@@ -31,22 +31,27 @@ const (
 )
 
 type Customer struct {
-	CustomerID       uuid.UUID      `db:"customer_id" json:"customerId"`
-	FirstName        string         `db:"first_name" json:"firstName"`
-	LastName         string         `db:"last_name" json:"lastName"`
-	FullName         string         `db:"full_name" json:"fullName"`
-	DocumentID       string         `db:"document_id" json:"documentId"`
-	DocumentPhotoURL string         `db:"document_photo_url" json:"documentPhotoUrl,omitempty"`
-	Email            string         `db:"email" json:"email"`
-	BirthDate        time.Time      `db:"birth_date" json:"birthDate"`
-	Address          string         `db:"address" json:"address"`
-	Username         string         `db:"username" json:"username"`
-	PasswordHash     string         `db:"password_hash" json:"-"`
-	Role             Role           `db:"role" json:"role"`
-	Status           CustomerStatus `db:"status" json:"status"`
-	KYCStatus        KYCStatus      `db:"kyc_status" json:"kycStatus"`
-	CreatedAt        time.Time      `db:"created_at" json:"createdAt"`
-	UpdatedAt        time.Time      `db:"updated_at" json:"updatedAt"`
+	LifecycleCorrelationID        *uuid.UUID     `db:"lifecycle_correlation_id" json:"-"`
+	LifecycleTraceContext         string         `db:"lifecycle_trace_context" json:"-"`
+	LifecycleObservedFromCreation bool           `db:"lifecycle_observed_from_creation" json:"-"`
+	KYCUpdatedAt                  *time.Time     `db:"kyc_updated_at" json:"kycUpdatedAt,omitempty"`
+	KYCVerifiedAt                 *time.Time     `db:"kyc_verified_at" json:"kycVerifiedAt,omitempty"`
+	CustomerID                    uuid.UUID      `db:"customer_id" json:"customerId"`
+	FirstName                     string         `db:"first_name" json:"firstName"`
+	LastName                      string         `db:"last_name" json:"lastName"`
+	FullName                      string         `db:"full_name" json:"fullName"`
+	DocumentID                    string         `db:"document_id" json:"documentId"`
+	DocumentPhotoURL              string         `db:"document_photo_url" json:"documentPhotoUrl,omitempty"`
+	Email                         string         `db:"email" json:"email"`
+	BirthDate                     time.Time      `db:"birth_date" json:"birthDate"`
+	Address                       string         `db:"address" json:"address"`
+	Username                      string         `db:"username" json:"username"`
+	PasswordHash                  string         `db:"password_hash" json:"-"`
+	Role                          Role           `db:"role" json:"role"`
+	Status                        CustomerStatus `db:"status" json:"status"`
+	KYCStatus                     KYCStatus      `db:"kyc_status" json:"kycStatus"`
+	CreatedAt                     time.Time      `db:"created_at" json:"createdAt"`
+	UpdatedAt                     time.Time      `db:"updated_at" json:"updatedAt"`
 }
 
 type ActivationToken struct {

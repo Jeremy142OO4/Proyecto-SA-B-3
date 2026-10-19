@@ -32,6 +32,11 @@ func main() {
 		log.Fatalf("Fallo al conectar a customer_db: %v", err)
 	}
 	defer db.Close()
+	stopCustomerMetrics, err := repositories.RegisterCustomerKYCMetric(db)
+	if err != nil {
+		log.Fatal("No fue posible registrar las metricas KYC")
+	}
+	defer stopCustomerMetrics()
 
 	// 2. Repositorios y Servicios
 	repo := repositories.NewCustomerRepository(db)

@@ -342,6 +342,10 @@ func ConfigureLogger(w io.Writer, service, environment, version string) {
 			a.Value = slog.StringValue("WARNING")
 		}
 		lower := strings.ToLower(a.Key)
+		if sensitiveCustomerKey(lower) {
+			a.Value = slog.StringValue("[REDACTED]")
+		}
+
 		if _, isError := a.Value.Any().(error); isError {
 			a.Value = slog.StringValue("[REDACTED]")
 		}
@@ -385,4 +389,15 @@ func (t Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	endSpan(span, err)
 	return response, err
+}
+
+// Cover both English and Spanish domain names, including camelCase keys.
+func sensitiveCustomerKey(key string) bool {
+	normalized := strings.NewReplacer("_", "", "-", "", ".", "", " ", "").Replace(strings.ToLower(key))
+	for _, fragment := range []string{"document", "documento", "correo", "email", "photo", "foto", "password", "contras", "token", "jwt", "secret", "authorization", "cookie", "payload", "body"} {
+		if strings.Contains(normalized, fragment) {
+			return true
+		}
+	}
+	return normalized == "dpi" || normalized == "direccion" || normalized == "enlaceactivacion"
 }

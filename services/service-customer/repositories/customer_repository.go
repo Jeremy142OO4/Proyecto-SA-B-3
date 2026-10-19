@@ -24,6 +24,16 @@ func NewCustomerRepository(db *sqlx.DB) CustomerRepository {
 }
 
 func (r *customerRepo) CreateWithOutbox(ctx context.Context, customer *models.Customer, token *models.ActivationToken, outboxEvents []*models.OutboxMessage) error {
+	correlationID := uuid.New()
+	if len(outboxEvents) > 0 && outboxEvents[0].CorrelationID != uuid.Nil {
+		correlationID = outboxEvents[0].CorrelationID
+	}
+	ctx, lifecycleSpan := telemetry.StartCustomerLifecycle(ctx, "", "customer.lifecycle.created", correlationID)
+	defer lifecycleSpan.End()
+	customer.LifecycleCorrelationID = &correlationID
+	customer.LifecycleTraceContext = telemetry.Serialize(ctx)
+	customer.LifecycleObservedFromCreation = true
+
 	ctx, finishDatabase := telemetry.Database(ctx, "CreateWithOutbox")
 	defer finishDatabase()
 	tx, err := r.db.BeginTxx(ctx, nil)
@@ -40,6 +50,12 @@ func (r *customerRepo) CreateWithOutbox(ctx context.Context, customer *models.Cu
 		return err
 	}
 
+	if _, err = tx.ExecContext(ctx, `UPDATE customers SET lifecycle_correlation_id=$1,lifecycle_trace_context=$2,lifecycle_observed_from_creation=TRUE WHERE customer_id=$3`, correlationID, customer.LifecycleTraceContext, customer.CustomerID); err != nil {
+		return err
+	}
+	if err = saveLifecycle(ctx, tx, customer, nil, events.EventoClienteCreado, "CREATION", "", string(customer.Status)); err != nil {
+		return err
+	}
 	if token != nil {
 		queryToken := `
 			INSERT INTO activation_tokens (id, customer_id, token_hash, expires_at, is_used, created_at)
@@ -60,7 +76,11 @@ func (r *customerRepo) CreateWithOutbox(ctx context.Context, customer *models.Cu
 		}
 	}
 
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	telemetry.CustomerLifecycleCommitted(ctx, customer.CustomerID, events.EventoClienteCreado, "CREATION", "", string(customer.Status), nil)
+	return nil
 }
 
 func (r *customerRepo) GetByID(ctx context.Context, id uuid.UUID) (*models.Customer, error) {
@@ -107,36 +127,6 @@ func (r *customerRepo) GetByDocumentID(ctx context.Context, docID string) (*mode
 	return &c, err
 }
 
-func (r *customerRepo) UpdateWithOutbox(ctx context.Context, customer *models.Customer, outboxEvent *models.OutboxMessage) error {
-	ctx, finishDatabase := telemetry.Database(ctx, "UpdateWithOutbox")
-	defer finishDatabase()
-	tx, err := r.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	customer.UpdatedAt = time.Now().UTC()
-	query := `
-		UPDATE customers 
-		SET first_name = :first_name, last_name = :last_name, full_name = :full_name,
-		    email = :email, address = :address, document_photo_url = :document_photo_url, 
-		    status = :status, updated_at = :updated_at
-		WHERE customer_id = :customer_id
-	`
-	if _, err = tx.NamedExecContext(ctx, query, customer); err != nil {
-		return err
-	}
-	if outboxEvent != nil {
-		if _, err = tx.ExecContext(ctx, `INSERT INTO outbox_messages
-			(id,event_type,payload,correlation_id,causation_id,created_at,trace_context)
-			VALUES($1,$2,$3,$4,$5,$6,$7)`, outboxEvent.ID, outboxEvent.EventType, outboxEvent.Payload, outboxEvent.CorrelationID, outboxEvent.CausationID, outboxEvent.CreatedAt, telemetry.Serialize(ctx)); err != nil {
-			return err
-		}
-	}
-	return tx.Commit()
-}
-
 func (r *customerRepo) FindActivationToken(ctx context.Context, tokenHash string) (*models.ActivationToken, error) {
 	ctx, finishDatabase := telemetry.Database(ctx, "FindActivationToken")
 	defer finishDatabase()
@@ -147,37 +137,6 @@ func (r *customerRepo) FindActivationToken(ctx context.Context, tokenHash string
 		return nil, nil
 	}
 	return &t, err
-}
-
-func (r *customerRepo) ActivateCustomer(ctx context.Context, customerID uuid.UUID, tokenID uuid.UUID, outboxEvent *models.OutboxMessage) error {
-	ctx, finishDatabase := telemetry.Database(ctx, "ActivateCustomer")
-	defer finishDatabase()
-	tx, err := r.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	now := time.Now().UTC()
-	if _, err := tx.ExecContext(ctx, "UPDATE activation_tokens SET is_used = true, used_at = $1 WHERE id = $2", now, tokenID); err != nil {
-		return err
-	}
-
-	if _, err := tx.ExecContext(ctx, "UPDATE customers SET status = 'ACTIVO', updated_at = $1 WHERE customer_id = $2", now, customerID); err != nil {
-		return err
-	}
-
-	if outboxEvent != nil {
-		queryOutbox := `
-			INSERT INTO outbox_messages (id, event_type, payload, correlation_id, causation_id, created_at,trace_context)
-			VALUES ($1, $2, $3, $4, $5, $6,$7)
-		`
-		if _, err := tx.ExecContext(ctx, queryOutbox, outboxEvent.ID, outboxEvent.EventType, outboxEvent.Payload, outboxEvent.CorrelationID, outboxEvent.CausationID, outboxEvent.CreatedAt, telemetry.Serialize(ctx)); err != nil {
-			return err
-		}
-	}
-
-	return tx.Commit()
 }
 
 func (r *customerRepo) IsMessageProcessed(ctx context.Context, messageID uuid.UUID) (bool, error) {
@@ -251,67 +210,6 @@ func (r *customerRepo) List(ctx context.Context, limit, offset int) ([]*models.C
 	customers := make([]*models.Customer, 0)
 	err := r.db.SelectContext(ctx, &customers, `SELECT * FROM customers ORDER BY created_at DESC LIMIT $1 OFFSET $2`, limit, offset)
 	return customers, err
-}
-
-func (r *customerRepo) UpdateStatusWithOutbox(ctx context.Context, id uuid.UUID, status models.CustomerStatus, outboxEvent *models.OutboxMessage) (*models.Customer, error) {
-	ctx, finishDatabase := telemetry.Database(ctx, "UpdateStatusWithOutbox")
-	defer finishDatabase()
-	tx, err := r.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-
-	var customer models.Customer
-	err = tx.GetContext(ctx, &customer, `UPDATE customers SET status=$1,updated_at=NOW() WHERE customer_id=$2 RETURNING *`, status, id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if outboxEvent != nil {
-		if _, err = tx.ExecContext(ctx, `INSERT INTO outbox_messages
-			(id,event_type,payload,correlation_id,causation_id,created_at,trace_context)
-			VALUES($1,$2,$3,$4,$5,$6,$7)`, outboxEvent.ID, outboxEvent.EventType, outboxEvent.Payload, outboxEvent.CorrelationID, outboxEvent.CausationID, outboxEvent.CreatedAt, telemetry.Serialize(ctx)); err != nil {
-			return nil, err
-		}
-	}
-	if err = tx.Commit(); err != nil {
-		return nil, err
-	}
-	return &customer, nil
-}
-
-func (r *customerRepo) UpdateKYCStatusWithOutbox(ctx context.Context, id uuid.UUID, status models.KYCStatus, outboxEvent *models.OutboxMessage) (*models.Customer, error) {
-	ctx, finishDatabase := telemetry.Database(ctx, "UpdateKYCStatusWithOutbox")
-	defer finishDatabase()
-	tx, err := r.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-
-	var customer models.Customer
-	err = tx.GetContext(ctx, &customer, `UPDATE customers SET kyc_status=$1,updated_at=NOW() WHERE customer_id=$2 RETURNING *`, status, id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if outboxEvent != nil {
-		_, err = tx.ExecContext(ctx, `INSERT INTO outbox_messages
-			(id,event_type,payload,correlation_id,causation_id,created_at,trace_context)
-			VALUES($1,$2,$3,$4,$5,$6,$7)`, outboxEvent.ID, outboxEvent.EventType, outboxEvent.Payload, outboxEvent.CorrelationID, outboxEvent.CausationID, outboxEvent.CreatedAt, telemetry.Serialize(ctx))
-		if err != nil {
-			return nil, err
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return &customer, nil
 }
 
 func (r *customerRepo) RegistrarValidacionCliente(ctx context.Context, mensajeID, correlacionID uuid.UUID, solicitudID, clienteID uuid.UUID) error {

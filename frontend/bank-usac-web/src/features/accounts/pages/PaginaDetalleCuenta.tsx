@@ -14,13 +14,14 @@ export function PaginaDetalleCuenta() {
   const [depositando, setDepositando] = useState(false);
   const consultarCuenta = useCallback(() => servicioCuentas.buscar(idCuenta), [idCuenta]);
   const consultarMovimientos = useCallback(() => servicioCuentas.movimientos(idCuenta), [idCuenta]);
-  const cuenta = usarConsulta(consultarCuenta);
+  const cuenta = usarConsulta(consultarCuenta, 15_000);
   const movimientos = usarConsulta(consultarMovimientos);
 
   async function depositar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
     setMensaje(''); setErrorDeposito(''); setDepositando(true);
     try {
+      if ((await servicioCuentas.buscar(idCuenta)).estado !== 'ACTIVA') { void cuenta.recargar(); throw new Error('Esta cuenta no permite transacciones. Puedes consultar su historial.'); }
       await servicioCuentas.depositar(idCuenta, monto);
       setMensaje('Fondos agregados. El saldo se actualizará en unos segundos.');
       setMonto('');
@@ -44,7 +45,8 @@ export function PaginaDetalleCuenta() {
       <p>Número de cuenta: {cuenta.datos?.numeroCuenta}</p>
       <p>ID de cuenta: {cuenta.datos?.idCuenta}</p>
     </div>
-    <div className="panel-formulario">
+    <p className="alerta" role="status">Estado: {cuenta.datos?.estado}. {cuenta.datos?.estado === 'BLOQUEADA' && 'Cuenta bloqueada. Puedes consultar tu historial, pero no realizar transacciones.'}</p>
+    {cuenta.datos?.estado === 'ACTIVA' && <div className="panel-formulario">
       <p>Gestión de cuenta</p><h3>Agregar fondos</h3>
       <form className="formulario-deposito" onSubmit={depositar}>
         <label>Monto a agregar (Q)<input required min="0.01" step="0.01" type="number" value={monto} onChange={e => setMonto(e.target.value)} placeholder="100.00" /></label>
@@ -53,6 +55,7 @@ export function PaginaDetalleCuenta() {
       {mensaje && <div className="alerta">{mensaje}</div>}
       {errorDeposito && <div className="alerta error">{errorDeposito}</div>}
     </div>
+    }
     <div className="titulo-seccion"><h2>Movimientos recientes</h2></div>
     {movimientos.cargando ? <EstadoCarga /> : movimientos.error ? <EstadoError mensaje={movimientos.error} /> : !movimientos.datos?.length ? <EstadoVacio mensaje="Esta cuenta aún no tiene movimientos." /> : <div className="lista">{movimientos.datos.map(m => <article key={m.idMovimiento}><div><strong>{m.descripcion || m.tipoMovimiento}</strong><small>{new Date(m.fechaCreacion).toLocaleString('es-GT')}</small></div><span className={m.tipoMovimiento === 'DEBITO' ? 'negativo' : 'positivo'}>{m.tipoMovimiento === 'DEBITO' ? '-' : '+'}{dinero(m.montoCentavos)}</span></article>)}</div>}
   </>;

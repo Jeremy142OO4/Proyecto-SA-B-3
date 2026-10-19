@@ -23,9 +23,15 @@ func NewNotificationRepository(db *sqlx.DB) NotificationRepository {
 func (r *notificationRepo) SaveNotificationLog(ctx context.Context, log *models.NotificationLog) error {
 	ctx, finishDatabase := telemetry.Database(ctx, "SaveNotificationLog")
 	defer finishDatabase()
+	if len(log.Details) == 0 {
+		log.Details = []byte(`{}`)
+	}
+	if log.Severity == "" {
+		log.Severity = models.EventInfo
+	}
 	query := `
-		INSERT INTO notification_logs (id, correlation_id, recipient, notification_type, subject, body_summary, status, error_detail, sent_at)
-		VALUES (:id, :correlation_id, :recipient, :notification_type, :subject, :body_summary, :status, :error_detail, :sent_at)
+		INSERT INTO notification_logs (id, correlation_id, recipient, notification_type, subject, body_summary, status, error_detail, sent_at, severity, account_id, details)
+		VALUES (:id, :correlation_id, :recipient, :notification_type, :subject, :body_summary, :status, :error_detail, :sent_at, :severity, :account_id, :details)
 		ON CONFLICT (id) DO NOTHING
 	`
 	_, err := r.db.NamedExecContext(ctx, query, log)
@@ -40,6 +46,16 @@ func (r *notificationRepo) GetNotificationLogs(ctx context.Context, filter model
 	args := make([]any, 0, 4)
 	argNumber := 1
 
+	if filter.Type != "" {
+		conditions = append(conditions, "notification_type = $"+strconv.Itoa(argNumber))
+		args = append(args, filter.Type)
+		argNumber++
+	}
+	if filter.Severity != "" {
+		conditions = append(conditions, "severity = $"+strconv.Itoa(argNumber))
+		args = append(args, filter.Severity)
+		argNumber++
+	}
 	if strings.TrimSpace(filter.Recipient) != "" {
 		conditions = append(conditions, "recipient = $"+strconv.Itoa(argNumber))
 		args = append(args, strings.TrimSpace(filter.Recipient))

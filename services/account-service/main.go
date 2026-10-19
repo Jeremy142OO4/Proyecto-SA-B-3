@@ -65,7 +65,7 @@ func main() {
 			}
 			_ = canalTopologia.Close()
 
-			repositorioCuentas := repositories.NuevoRepositorioCuentasPostgres(conexionBaseDatos)
+			repositorioCuentas := repositories.NuevoRepositorioCuentasPostgres(conexionBaseDatos, configuracion.Monitoreo)
 			repositorioSalida := repositories.NuevoRepositorioSalidaPostgres(conexionBaseDatos)
 			repositorioSolicitudes := repositories.NuevoRepositorioSolicitudesPostgres(conexionBaseDatos)
 			servicioCuentas := services.NuevoServicioCuentas(repositorioCuentas)
@@ -84,7 +84,7 @@ func main() {
 			defer publicadorEventos.Cerrar()
 
 			consumidor, err := consumers.NuevoConsumidorCuentas(
-				conexionRabbitMQ, servicioCuentas, servicioCreacion, repositorioSalida, publicadorComandos, configuracion.MaximoReintentos,
+				conexionRabbitMQ, servicioCuentas, servicioCreacion, repositorioSalida, publicadorComandos, configuracion.MaximoReintentos, repositorioCuentas,
 			)
 			if err != nil {
 				slog.Error("no se pudo crear el consumidor", "error", err)
