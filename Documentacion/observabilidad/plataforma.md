@@ -1,4 +1,6 @@
-# Punto 4: plataforma de observabilidad
+# Punto 3: plataforma de observabilidad
+
+Estado al 18 de octubre de 2026: **configuración publicada y desplegada en dev mediante el CI/CD del commit `22eef62`**. Se verificaron Grafana, sus fuentes de datos, métricas, logs y trazas. Producción permanece deshabilitada; no se certifica cumplimiento del SLO.
 
 El perfil de desarrollo instala Collector, Prometheus, Loki, Tempo y Grafana mediante el chart de `infrastructure/observability/chart`. Un agente por nodo recoge exclusivamente los logs de los seis componentes backend. Los servicios envían métricas y trazas al Collector; las consultas del negocio siguen usando sus canales habituales.
 
@@ -26,7 +28,7 @@ KUBE_NAMESPACE=bank-usac-dev bash infrastructure/observability/deploy.sh
 
 El script comprueba recursos disponibles, conserva la contraseña existente y usa Helm con espera y rollback automático si falla la instalación. Al cambiar el endpoint reinicia secuencialmente los seis componentes. Durante este reinicio inicial de dev se permite indisponibilidad de una réplica para evitar crear pods adicionales; después se restaura la estrategia anterior.
 
-Los cambios exclusivamente en `infrastructure/observability/` validan y despliegan el chart en develop sin reconstruir imágenes del negocio. Cambios globales siguen activando todas las validaciones. Este perfil no despliega observabilidad en prod y no cambia sus réplicas. El workflow está integrado, pero su ejecución remota requiere hacer push.
+Los cambios exclusivamente en `infrastructure/observability/` validan y despliegan el chart en develop sin reconstruir imágenes del negocio. Cambios globales siguen activando todas las validaciones. Este perfil no despliega observabilidad en prod y no cambia sus réplicas. El workflow ya se ejecutó correctamente: [ejecución de `22eef62`](https://github.com/Jeremy142OO4/Proyecto-SA-B-3/actions/runs/39170446308).
 
 ## Recursos y datos
 

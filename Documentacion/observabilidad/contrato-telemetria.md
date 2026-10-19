@@ -1,6 +1,6 @@
 # Contrato común de telemetría — Fase 3
 
-Estado: **contrato definido; instrumentación común implementada y probada, pendiente de despliegue**. Ver [implementación y límites](implementacion.md). Alcance: Gateway y cinco microservicios. No modifica OpenAPI ni los payloads de negocio. Las pruebas interbancarias completas esperan la integración futura.
+Estado al 18 de octubre de 2026: **contrato definido; instrumentación común implementada, probada y desplegada en dev**. Ver [implementación y límites — punto 4](implementacion.md) y [plataforma — punto 3](plataforma.md). Alcance: Gateway y cinco microservicios. No modifica OpenAPI ni los payloads de negocio. Las pruebas interbancarias completas esperan la integración futura.
 
 ## Identidad
 
@@ -39,7 +39,7 @@ SDK OpenTelemetry en los seis componentes, exportación OTLP al Collector intern
 
 Inicialmente conservar el 100 % de trazas en dev durante validación; producción tendrá muestreo explícito y documentado según capacidad. Métricas SLI no se calculan de trazas muestreadas. Colas de exportación acotadas, envío asíncrono y cierre con plazo limitado: la caída del Collector no debe bloquear una transacción ni cambiar su resultado. Medir pérdida de telemetría. No exponer Collector, métricas ni Grafana públicamente sin control de acceso.
 
-## Pruebas de aceptación pendientes
+## Criterios de aceptación y cobertura
 
 - Registro, cuenta, transferencia, pago y compensación visibles con correlación y traceId entre servicios.
 - Header AMQP y contexto Outbox sobreviven a reentrega, reconexión y reinicio; no hay doble débito/crédito.
@@ -48,4 +48,4 @@ Inicialmente conservar el 100 % de trazas en dev durante validación; producció
 - Collector inaccesible: operación bancaria sigue funcionando y la pérdida de exportación es observable.
 - Métricas sin IDs ni PII en etiquetas; pruebas verifican el catálogo y los límites de cardinalidad.
 
-Estas pruebas deben incorporarse al CI al implementar la instrumentación. La documentación por sí sola no las satisface.
+Las pruebas comunes de instrumentación ya forman parte de los jobs CI de cada componente. Las pruebas que necesitan RabbitMQ y PostgreSQL reales requieren las variables de entorno indicadas en [implementación](implementacion.md); sin ellas se omiten explícitamente. Se verificaron en entorno aislado login, consultas, transferencias, pagos, compensaciones, continuidad de contexto y caída del Collector. En dev se verificaron consultas, exportación real y reconexión tras reiniciar RabbitMQ. No se considera completada toda la lista anterior: siguen pendientes la integración interbancaria con callbacks/reversos y la cobertura del catálogo completo de métricas de dominio. La documentación por sí sola no demuestra estas pruebas ni cumplimiento del SLO.

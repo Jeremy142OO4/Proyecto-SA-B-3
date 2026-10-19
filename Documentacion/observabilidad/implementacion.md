@@ -1,6 +1,6 @@
-# Instrumentación común — Punto 3
+# Instrumentación común — Punto 4
 
-Estado: **implementada y probada en entorno aislado; pendiente de push y despliegue**. No certifica el SLO de 99.5 % ni instala la plataforma de observabilidad.
+Estado al 18 de octubre de 2026: **implementada, publicada y desplegada en dev; pruebas aisladas y verificaciones en la nube completadas**. La instrumentación se publicó en `1e28285`; la plataforma y la recuperación de mensajería, en `22eef62`, con CI/CD exitoso. No certifica el SLO de 99.5 %. La plataforma corresponde al [punto 3](plataforma.md).
 
 ## Alcance implementado
 
@@ -9,7 +9,7 @@ Estado: **implementada y probada en entorno aislado; pendiente de push y desplie
 - Propagación W3C en headers AMQP y transporte HTTP reutilizable para futuras llamadas interbancarias. Se conserva la correlación de negocio; no se acepta baggage externo.
 - Columna `trace_context` en los cuatro Outbox, escrita en la transacción de negocio y restaurada al publicar. Así se conserva la traza al reanudar la Saga mediante eventos; un futuro temporizador autónomo interbancario deberá persistir también su contexto de reanudación.
 - Logs JSON con servicio, entorno, versión, correlación y contexto de span. Errores libres y atributos sensibles redactados. Los mensajes heredados de `log.Printf` se convierten deliberadamente en una señal genérica segura, sin publicar su texto arbitrario.
-- Contadores e histogramas HTTP/AMQP. No incluye todavía métricas de dominio KYC/anomalías, evaluadores durables de SLO ni dashboards.
+- Contadores e histogramas HTTP/AMQP. No incluye todavía métricas de dominio KYC/anomalías ni evaluadores durables de SLO. El tablero inicial de infraestructura y telemetría común está disponible mediante la plataforma del punto 3; no sustituye los dashboards y alertas completos del punto 10.
 
 El código común reside en `internal/telemetry` de cada módulo porque los contextos Docker son independientes. Mantener sincronizadas sus implementaciones y pruebas; extraer un módulo compartido requiere cambiar contextos y filtros.
 
@@ -46,6 +46,6 @@ Los eventos anteriores conservan contexto vacío. No eliminar columnas durante u
 
 Las pruebas comunes entran en los jobs CI existentes por componente. Las reales necesitan TEST_RABBITMQ_URL y TEST_DATABASE_URL; sin ellas se omiten expresamente. Las pruebas previas de repositorio necesitan además URL_BASE_DATOS_PRUEBAS sobre una base migrada. Nunca utilizar bases con clientes reales.
 
-Las dependencias temporales y los ejecutables se eliminan al terminar. Posteriormente se desplegó el commit `1e28285` en dev y se verificaron las cuatro columnas Outbox y los seis componentes. El punto 4 conecta Collector/backends y el tablero inicial; consultar [plataforma](plataforma.md). Siguen pendientes métricas de dominio y alertas. La definición del SLO no demuestra su cumplimiento.
+Las dependencias temporales y los ejecutables se eliminan al terminar. Posteriormente se desplegó el commit `1e28285` en dev y se verificaron las cuatro columnas Outbox y los seis componentes. El punto 3 conecta Collector/backends y el tablero inicial; consultar [plataforma](plataforma.md). Tras desplegar `22eef62`, se reinició RabbitMQ en dev: los seis servicios recuperaron la conexión conservando sus pods y sin reinicios adicionales de los procesos. Después se verificaron consultas, métricas, logs y trazas. Siguen pendientes métricas de dominio y alertas. La definición del SLO no demuestra su cumplimiento.
 
 Referencias: [OpenTelemetry Go](https://opentelemetry.io/docs/languages/go/getting-started/) y [exportadores](https://opentelemetry.io/docs/languages/go/exporters/).
