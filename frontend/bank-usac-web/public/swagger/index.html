@@ -10,7 +10,8 @@
 <body>
   <header class="notice">
     <strong>BANK03 — Documentación interbancaria</strong>
-    <p>Esta documentación está disponible independientemente de BANK14. Su publicación no activa la integración: si está deshabilitada, la API responde 503.</p>
+    <p>BANK03 recibe solicitudes independientemente de la URL o disponibilidad de BANK14. Los envíos y callbacks hacia BANK14 requieren su dirección; los callbacks pendientes se guardan para reintento dentro del plazo del contrato.</p>
+    <p id="api-status" role="status">Comprobando disponibilidad de la API de BANK03…</p>
     <p>«Try it out» realiza solicitudes reales. Ingresá la clave en «Authorize»; no se conserva al recargar. <a href="./generated/openapi.yaml">Descargar contrato original</a>.</p>
   </header>
   <div id="swagger-ui"></div>

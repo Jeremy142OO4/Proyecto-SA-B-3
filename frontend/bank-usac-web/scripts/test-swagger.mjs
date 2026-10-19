@@ -7,11 +7,12 @@ test('Swagger apunta al mismo despliegue sin guardar claves ni modificar el cont
   const original = { servers: [{ url: 'https://{bankHost}/interbank/v1' }], paths: {} };
   const spec = structuredClone(original);
   let options;
+  const status = { textContent: '' };
   const context = {
     fetch: async () => ({ ok: true, json: async () => spec }),
     window: { location: { origin: 'https://bank03.test' } },
     SwaggerUIBundle: (value) => { options = value; },
-    document: { getElementById: () => { throw new Error('Carga inesperadamente fallida'); } },
+    document: { getElementById: (id) => { assert.equal(id, 'api-status'); return status; } },
   };
   runInNewContext(readFileSync(new URL('../public/swagger/init.js', import.meta.url), 'utf8'), context);
   await new Promise((resolve) => setImmediate(resolve));
@@ -20,7 +21,25 @@ test('Swagger apunta al mismo despliegue sin guardar claves ni modificar el cont
   assert.equal(options.validatorUrl, null);
   assert.equal(options.queryConfigEnabled, false);
   assert.equal(options.tryItOutEnabled, false);
+  assert.match(status.textContent, /API de BANK03 disponible/);
   assert.equal(original.servers[0].url, 'https://{bankHost}/interbank/v1');
+});
+
+test('Swagger se muestra incluso si el health de BANK03 devuelve 503', async () => {
+  let rendered = false;
+  const status = { textContent: '' };
+  const context = {
+    fetch: async (url) => url.includes('/health')
+      ? { ok: false }
+      : { ok: true, json: async () => ({ paths: {} }) },
+    window: { location: { origin: 'https://bank03.test' } },
+    SwaggerUIBundle: () => { rendered = true; },
+    document: { getElementById: () => status },
+  };
+  runInNewContext(readFileSync(new URL('../public/swagger/init.js', import.meta.url), 'utf8'), context);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(rendered, true);
+  assert.match(status.textContent, /no disponible/);
 });
 
 test('La especificación generada conserva los ocho paths del contrato original', () => {

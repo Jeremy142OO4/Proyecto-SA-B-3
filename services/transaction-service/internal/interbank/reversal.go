@@ -113,6 +113,9 @@ func (s *Service) reversalStatus(ctx context.Context, r Request) bankrpc.Respons
 }
 
 func (s *Service) StepReversal(parent context.Context) (worked bool, resultErr error) {
+	if !s.partnerReady() {
+		return false, nil
+	}
 	ctx, cancel := context.WithTimeout(parent, 20*time.Second)
 	defer cancel()
 	tx, e := s.DB.Begin(ctx)

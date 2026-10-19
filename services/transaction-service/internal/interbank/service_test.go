@@ -281,13 +281,13 @@ func TestHTTPPartnerNoRedirectOrKeyLeak(t *testing.T) {
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { leaked = true }))
 	defer target.Close()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("X-Api-Key") != "local-only-key" {
+		if r.Header.Get("X-Api-Key") != "local-only-partner-key" {
 			t.Error("missing key")
 		}
 		http.Redirect(w, r, target.URL, 307)
 	}))
 	defer server.Close()
-	p := NewPartner(Config{PartnerURL: server.URL, PartnerKey: "local-only-key"})
+	p := NewPartner(Config{PartnerURL: server.URL, PartnerKey: "local-only-partner-key"})
 	code, _, e := p.Post(context.Background(), "/transfers", "test", map[string]string{})
 	if e != nil || code != 307 || leaked {
 		t.Fatalf("redirect leaked credentials code=%d err=%v leaked=%v", code, e, leaked)

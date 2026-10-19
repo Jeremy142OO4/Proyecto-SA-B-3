@@ -82,6 +82,9 @@ func (s *Service) reconciliation(ctx context.Context, r Request) bankrpc.Respons
 // LOCKED prevent duplicate runs across replicas. Nothing releases or credits
 // money merely because an item is absent from a listing.
 func (s *Service) StepReconciliation(parent context.Context) (bool, error) {
+	if !s.partnerReady() {
+		return false, nil
+	}
 	ctx, cancel := context.WithTimeout(parent, 20*time.Second)
 	defer cancel()
 	now := s.now()

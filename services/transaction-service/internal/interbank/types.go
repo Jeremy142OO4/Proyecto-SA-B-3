@@ -31,11 +31,20 @@ func Load(rabbit string) (Config, error) {
 	if !bankPattern.MatchString(c.Bank) || !bankPattern.MatchString(c.Partner) || c.Bank == c.Partner {
 		return c, errors.New("invalid interbank bank codes")
 	}
-	u, e := url.Parse(c.PartnerURL)
-	if e != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "/interbank/v1" || strings.HasSuffix(u.Hostname(), "example.com") || len(c.PartnerKey) < 16 {
-		return c, errors.New("interbank partner HTTPS URL and secret required")
+	// Receiving requests is independent of the partner's outbound configuration.
+	// Missing values are allowed; supplied URLs must still be safe and valid.
+	if c.PartnerURL != "" && !validPartnerURL(c.PartnerURL) {
+		return c, errors.New("invalid interbank partner HTTPS URL")
+	}
+	if c.PartnerKey != "" && len(c.PartnerKey) < 16 {
+		return c, errors.New("invalid interbank partner secret")
 	}
 	return c, nil
+}
+
+func validPartnerURL(raw string) bool {
+	u, e := url.Parse(raw)
+	return e == nil && u.Scheme == "https" && u.Hostname() != "" && u.User == nil && u.RawQuery == "" && u.Fragment == "" && u.Path == "/interbank/v1" && !strings.HasSuffix(u.Hostname(), "example.com")
 }
 
 var bankPattern = regexp.MustCompile(`^BANK[0-9]{2}$`)

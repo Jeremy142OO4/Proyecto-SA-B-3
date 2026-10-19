@@ -36,6 +36,20 @@ type HTTPPartner struct {
 	Client       *http.Client
 }
 
+var ErrPartnerNotConfigured = errors.New("interbank outbound partner not configured")
+
+func (p *HTTPPartner) Ready() bool { return p.BaseURL != "" && len(p.Key) >= 16 }
+
+func (s *Service) partnerReady() bool {
+	if s.Partner == nil {
+		return false
+	}
+	if p, ok := s.Partner.(interface{ Ready() bool }); ok {
+		return p.Ready()
+	}
+	return true // Alternate transports used by isolated tests.
+}
+
 func NewPartner(c Config) *HTTPPartner {
 	return &HTTPPartner{BaseURL: c.PartnerURL, Key: c.PartnerKey, Client: &http.Client{Timeout: 5 * time.Second, Transport: telemetry.Transport{}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 }
@@ -50,6 +64,9 @@ func (p *HTTPPartner) Get(ctx context.Context, path string) (int, []byte, error)
 	return p.request(ctx, "GET", path, "", nil)
 }
 func (p *HTTPPartner) request(ctx context.Context, method, path, key string, b []byte) (int, []byte, error) {
+	if !p.Ready() {
+		return 0, nil, ErrPartnerNotConfigured
+	}
 	req, e := http.NewRequestWithContext(ctx, method, p.BaseURL+path, bytes.NewReader(b))
 	if e != nil {
 		return 0, nil, e
@@ -195,13 +212,19 @@ func (s *Service) Step(parent context.Context) (worked bool, failureErr error) {
 			if row.Result == nil {
 				return true, errors.New("missing durable callback result")
 			}
-			code, b, err := s.Partner.Post(ctx, "/transfers/"+t.ID+"/result", "", row.Result)
+			code, b, err := 0, []byte(nil), ErrPartnerNotConfigured
+			if s.partnerReady() {
+				code, b, err = s.Partner.Post(ctx, "/transfers/"+t.ID+"/result", "", row.Result)
+			}
 			var ack struct {
 				ID       string `json:"interbankTransferId"`
 				Received bool   `json:"received"`
 			}
 			delivered = err == nil && code == 200 && json.Unmarshal(b, &ack) == nil && ack.ID == t.ID && ack.Received
 			delay = retryDelay(row.Attempts)
+			if errors.Is(err, ErrPartnerNotConfigured) {
+				delay = time.Minute
+			}
 		}
 	} else {
 		cmd.Customer = row.Customer
@@ -230,6 +253,10 @@ func (s *Service) Step(parent context.Context) (worked bool, failureErr error) {
 			} else {
 				return true, errors.New("unexpected reservation settlement state")
 			}
+		case !s.partnerReady():
+			// A local missing URL is not a remote outage. Never reserve new funds
+			// or release existing holds via timeout recovery for this reason.
+			delay = time.Minute
 		case row.State == "PENDING_RESERVATION":
 			cmd.Action = "reserve"
 			if row.RefundOf != "" {

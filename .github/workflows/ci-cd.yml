@@ -630,6 +630,7 @@ jobs:
         run: |
           bash -n infrastructure/scripts/prepare-telemetry-schema.sh
           python3 infrastructure/scripts/test-feature-schema.py
+          python3 infrastructure/scripts/test-interbank-config.py
 
       - name: Validar configuracion de Compose
         run: docker compose config --quiet
@@ -996,6 +997,10 @@ jobs:
       GKE_CLUSTER: ${{ secrets.GKE_CLUSTER }}
       GKE_ZONE: ${{ secrets.GKE_ZONE }}
       KUBE_NAMESPACE: bank-usac-dev
+      INTERBANK_ENABLED: ${{ vars.INTERBANK_ENABLED_DEV || 'false' }}
+      INTERBANK_API_KEY: ${{ secrets.INTERBANK_API_KEY }}
+      INTERBANK_PARTNER_API_KEY: ${{ secrets.INTERBANK_PARTNER_API_KEY }}
+      INTERBANK_PARTNER_BASE_URL: ${{ vars.INTERBANK_PARTNER_BASE_URL }}
       IMAGE_TAG: ${{ github.sha }}
     steps:
       - name: Descargar codigo
@@ -1156,6 +1161,7 @@ jobs:
           COMPONENTES_IMAGENES
 
           kubectl apply -f /tmp/manifiestos-dev.yaml
+          python3 infrastructure/scripts/configure-interbank.py
           # Las variables provenientes de Secrets se leen al crear el pod.
           kubectl -n "$KUBE_NAMESPACE" rollout restart \
             deployment/api-gateway deployment/customer-service deployment/account-service \
@@ -1210,6 +1216,10 @@ jobs:
       GKE_CLUSTER: ${{ secrets.GKE_CLUSTER }}
       GKE_ZONE: ${{ secrets.GKE_ZONE }}
       KUBE_NAMESPACE: bank-usac
+      INTERBANK_ENABLED: ${{ vars.INTERBANK_ENABLED_PROD || 'false' }}
+      INTERBANK_API_KEY: ${{ secrets.INTERBANK_API_KEY }}
+      INTERBANK_PARTNER_API_KEY: ${{ secrets.INTERBANK_PARTNER_API_KEY }}
+      INTERBANK_PARTNER_BASE_URL: ${{ vars.INTERBANK_PARTNER_BASE_URL }}
     steps:
       - name: Descargar codigo con historial y tags
         uses: actions/checkout@v4
@@ -1356,6 +1366,7 @@ jobs:
           kubectl kustomize infrastructure/kubernetes/overlays/prod \
             | sed "s|:v2.0.0|:${IMAGE_TAG}|g; s|__PUBLIC_HOST__|${PUBLIC_HOST:-bank-usac.example.com}|g; s|__FRONTEND_URL__|${FRONTEND_URL}|g" \
             | kubectl apply -f -
+          python3 infrastructure/scripts/configure-interbank.py
           for despliegue in rabbitmq api-gateway customer-service account-service payment-service transaction-service notification-audit-service frontend; do
             kubectl -n "$KUBE_NAMESPACE" rollout status "deployment/$despliegue" --timeout=180s
           done

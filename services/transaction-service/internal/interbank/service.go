@@ -56,6 +56,9 @@ func (s *Service) Handle(ctx context.Context, raw json.RawMessage) bankrpc.Respo
 		if _, e := uuid.Parse(r.Customer); e != nil {
 			return failure(401, "UNAUTHORIZED")
 		}
+		if !s.partnerReady() {
+			return failure(503, "PARTNER_NOT_CONFIGURED")
+		}
 		var t Transfer
 		if strict(r.Body, &t) != nil {
 			return failure(400, "VALIDATION_ERROR")

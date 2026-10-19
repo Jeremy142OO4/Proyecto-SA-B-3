@@ -1,6 +1,6 @@
 # Depósitos y recuperación interbancaria — puntos 7 y 8
 
-Implementación en Gateway, Transacciones y Cuentas. Está desactivada por defecto (`INTERBANK_ENABLED=false`). Antes de habilitarla hay que configurar los Secrets, confirmar URLs/cuentas con BANK14 y ejecutar las pruebas conjuntas. Las pruebas locales y del CI no equivalen a una conexión real con el equipo pareja.
+Implementación en Gateway, Transacciones y Cuentas. La base está desactivada por defecto (`INTERBANK_ENABLED=false`); el CI permite habilitar la recepción por entorno con autenticación propia, sin exigir la URL ni disponibilidad de BANK14. La comunicación saliente requiere su URL y clave. Las pruebas locales y del CI no equivalen a una conexión real con el equipo pareja.
 
 ## Flujo implementado
 
@@ -22,9 +22,13 @@ Internos para clientes con JWT y rol CLIENTE:
 - `POST /api/interbancarias/`: cuerpo basado en TransferRequest con `interbankTransferId`, `originAccount`, `destinationAccount`, `amount`, `currency` y descripción opcional. `Idempotency-Key` debe coincidir con el id. El servidor fija los códigos de banco y las fechas UTC (`createdAt` y `expiresAt` +180 s); no confiar en fechas del navegador.
 - `GET /api/interbancarias/{id}`: consulta exclusivamente las operaciones del cliente autenticado.
 
-El formulario y listado del frontend corresponden al punto 9. Nginx ya tiene una ruta para reenviar `/interbank/v1/` desde Cloud Run al Gateway; falta desplegarla/verificarla y compartir la URL real, no asumirla operativa por existir el frontend.
+El formulario y listado del frontend corresponden al punto 9. Nginx reenvía `/interbank/v1/` desde Cloud Run al Gateway. Swagger está publicado en `/swagger/`, usa el contrato original y muestra la disponibilidad local sin depender de BANK14.
 
 ## Configuración
+
+El CI usa `INTERBANK_ENABLED_DEV` y `INTERBANK_ENABLED_PROD` (variables de GitHub, `false` si no están definidas), `INTERBANK_PARTNER_BASE_URL` (variable, opcional) y las claves `INTERBANK_API_KEY` / `INTERBANK_PARTNER_API_KEY` (Secrets). `configure-interbank.py` aplica el Secret sin imprimir claves y guarda indicador/URL en la revisión de los tres Deployments. La recepción solo requiere el indicador, la clave propia y las dependencias locales operativas. La clave y URL salientes pueden completarse después; se mantienen las validaciones HTTPS cuando se proporciona una URL.
+
+Sin configuración saliente: `/health`, consultas, recepción, callbacks entrantes y cancelaciones siguen operativos. Los depósitos recibidos se procesan normalmente; el resultado y callback se conservan en base de datos y reintentan dentro de las 24 horas del contrato. Los envíos nuevos de clientes responden `503 PARTNER_NOT_CONFIGURED` antes de crear reservas. Las reservas previas no se liberan por confundir configuración local incompleta con una caída remota. Los reversos y conciliación salientes quedan pendientes; no se inicia un depósito de devolución sin tener destino configurado. Después de configurar URL/clave, el despliegue reinicia los servicios y reanuda los trabajos persistidos dentro de su ventana. Si el callback agotó las 24 horas, requiere revisión/conciliación; no se marca entregado ni se reintenta indefinidamente.
 
 Gateway y Transacciones consumen opcionalmente el Secret separado `bank-usac-interbank`, sin valores reales en Git:
 

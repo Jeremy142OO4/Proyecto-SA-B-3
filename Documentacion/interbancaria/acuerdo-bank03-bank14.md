@@ -2,7 +2,7 @@
 
 ## Estado y fuente de verdad
 
-Punto 6: preparación local. La implementación de depósitos, reservas, callbacks, recuperación, reversos y conciliación se describe en [depósitos interbancarios](depositos.md); está desactivada por defecto hasta validar la integración real. No se ha desplegado el mock ni se ha probado una conexión con BANK14.
+La implementación de depósitos, reservas, callbacks, recuperación, reversos y conciliación se describe en [depósitos interbancarios](depositos.md). La recepción se habilita independientemente de la URL de BANK14; la comunicación saliente y las pruebas conjuntas siguen pendientes de esa dirección. No se ha desplegado el mock ni se ha probado una conexión con BANK14.
 
 El [OpenAPI original](../../contracts/interbank/openapi.yaml), versión 1.0.0, es la fuente de verdad. La guía recibida de BANK14 es contexto de integración, no una modificación del contrato. Su archivo original contiene claves y no se incorpora al repositorio.
 
@@ -12,8 +12,8 @@ El [OpenAPI original](../../contracts/interbank/openapi.yaml), versión 1.0.0, e
 | --- | --- | --- |
 | Grupo | 3 | 14 |
 | Código oficial | `BANK03` | `BANK14` |
-| URL HTTPS interbancaria | Pendiente de implementar/exponer y verificar | Pendiente de recibir una dirección real |
-| Credencial de entrada | Intercambiada por privado; pendiente de configurar y probar | Intercambiada por privado; pendiente de probar |
+| URL HTTPS interbancaria | `https://bank-usac-frontend-dev-116700127937.us-central1.run.app/interbank/v1` (Swagger: `/swagger/`) | Pendiente de recibir una dirección real |
+| Credencial de entrada | Intercambiada por privado; configurada como Secret por CI, sin publicarla en Git | Intercambiada por privado; pendiente de probar |
 | Cuentas de prueba | Pendientes de preparar/confirmar, sin asumir que un UUID interno sea número interbancario | Valores abajo; formato aclarado, todavía no verificados contra su API |
 
 BANK14 confirmó retirar los dos últimos caracteres de sus identificadores originales:
