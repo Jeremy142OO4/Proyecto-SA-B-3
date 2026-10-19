@@ -5,6 +5,8 @@ import (
 	"errors"
 	"github.com/Proyecto-SA-B-3/transaction-service/config"
 	"github.com/Proyecto-SA-B-3/transaction-service/database"
+	"github.com/Proyecto-SA-B-3/transaction-service/internal/bankrpc"
+	"github.com/Proyecto-SA-B-3/transaction-service/internal/interbank"
 	"github.com/Proyecto-SA-B-3/transaction-service/internal/recovery"
 	"github.com/Proyecto-SA-B-3/transaction-service/internal/telemetry"
 	"github.com/Proyecto-SA-B-3/transaction-service/messaging"
@@ -37,6 +39,16 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
+	if os.Getenv("INTERBANK_ENABLED") == "true" {
+		bankConfig, err := interbank.Load(cfg.URLRabbitMQ)
+		if err != nil {
+			slog.Error("configuracion interbancaria invalida")
+			os.Exit(1)
+		}
+		bank := &interbank.Service{DB: db, Config: bankConfig, Partner: interbank.NewPartner(bankConfig)}
+		go bankrpc.Run(ctx, cfg.URLRabbitMQ, "transacciones.interbancarias", bank.Handle)
+		go bank.Run(ctx)
+	}
 	mensajeriaFin := make(chan struct{})
 	go func() {
 		defer close(mensajeriaFin)

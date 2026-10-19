@@ -24,17 +24,19 @@ const (
 )
 
 type Cuenta struct {
-	IDCuenta           uuid.UUID    `json:"idCuenta"`
-	IDCliente          uuid.UUID    `json:"idCliente"`
-	NumeroCuenta       string       `json:"numeroCuenta"`
-	TipoCuenta         TipoCuenta   `json:"tipoCuenta"`
-	SaldoCentavos      int64        `json:"saldoCentavos"`
+	IDCuenta                    uuid.UUID    `json:"idCuenta"`
+	IDCliente                   uuid.UUID    `json:"idCliente"`
+	NumeroCuenta                string       `json:"numeroCuenta"`
+	TipoCuenta                  TipoCuenta   `json:"tipoCuenta"`
+	SaldoCentavos               int64        `json:"saldoCentavos"`
+	SaldoReservadoCentavos      int64        `json:"saldoReservadoCentavos"`
+	SaldoDisponibleCentavos     int64        `json:"saldoDisponibleCentavos"`
 	SaldoMinimoCentavos         int64        `json:"saldoMinimoCentavos"`
 	ComisionTransaccionCentavos int64        `json:"comisionTransaccionCentavos"`
-	Moneda             string       `json:"moneda"`
-	Estado             EstadoCuenta `json:"estado"`
-	UltimaActividad    *time.Time   `json:"ultimaActividad,omitempty"`
-	FechaCreacion      time.Time    `json:"fechaCreacion"`
-	FechaActualizacion time.Time    `json:"fechaActualizacion"`
-	Version            int64        `json:"version"`
+	Moneda                      string       `json:"moneda"`
+	Estado                      EstadoCuenta `json:"estado"`
+	UltimaActividad             *time.Time   `json:"ultimaActividad,omitempty"`
+	FechaCreacion               time.Time    `json:"fechaCreacion"`
+	FechaActualizacion          time.Time    `json:"fechaActualizacion"`
+	Version                     int64        `json:"version"`
 }

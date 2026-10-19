@@ -39,6 +39,16 @@ func main() {
 	controladorAuditoria := controllers.NuevoControladorAuditoria(solicitante)
 
 	routes.Registrar(app, gateway, controladorClientes, controladorAuditoria, cfg.SecretoJWT, publicador.Listo)
+	bankCode := os.Getenv("INTERBANK_BANK_CODE")
+	if bankCode == "" {
+		bankCode = "BANK03"
+	}
+	partnerCode := os.Getenv("INTERBANK_PARTNER_BANK_CODE")
+	if partnerCode == "" {
+		partnerCode = "BANK14"
+	}
+	controllers.InterbankGateway{Enabled: os.Getenv("INTERBANK_ENABLED") == "true", Bank: bankCode, Partner: partnerCode,
+		InboundKey: os.Getenv("INTERBANK_API_KEY"), Rabbit: cfg.URLRabbitMQ, JWT: cfg.SecretoJWT, Ready: publicador.Listo}.Register(app)
 	go func() {
 		if err := app.Listen(":" + cfg.PuertoHTTP); err != nil {
 			log.Printf("servidor detenido: %v", err)

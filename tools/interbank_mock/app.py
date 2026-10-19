@@ -57,6 +57,9 @@ class State:
         CREATE TABLE IF NOT EXISTS credits(id TEXT PRIMARY KEY, account TEXT, amount TEXT);
         CREATE TABLE IF NOT EXISTS reversals(id TEXT PRIMARY KEY, body TEXT, status TEXT);
         CREATE TABLE IF NOT EXISTS outgoing(id TEXT PRIMARY KEY, body TEXT, result TEXT);
+        CREATE TABLE IF NOT EXISTS refund_jobs(reversal_id TEXT PRIMARY KEY, original TEXT UNIQUE,
+          transfer_id TEXT UNIQUE, due REAL, attempts INTEGER DEFAULT 0, trace TEXT);
+        CREATE TABLE IF NOT EXISTS refund_debits(original TEXT PRIMARY KEY, amount TEXT);
         ''')
 
     def row(self, identifier):
@@ -127,6 +130,7 @@ class State:
                 # Retain the first result; never apply a second fictional movement.
                 if previous is None:
                     self.db.execute('UPDATE outgoing SET result=? WHERE id=?', (json.dumps(body), identifier))
+                    self._finish_refund(identifier, body['status'])
                 return 200, {'interbankTransferId': identifier, 'received': True}
             if operation == 'cancel' and method == 'POST':
                 check('CancelRequest', body)
@@ -158,15 +162,33 @@ class State:
             previous = self.db.execute('SELECT * FROM reversals WHERE id=?', (body['reversalId'],)).fetchone()
             if previous and previous['body'] != canonical:
                 raise ValueError('Reversal id reused with different content')
+            duplicate = self.db.execute('SELECT reversal_id FROM refund_jobs WHERE original=?', (body['originalTransferId'],)).fetchone()
+            if duplicate and duplicate['reversal_id'] != body['reversalId']:
+                raise ValueError('Only one refund per original transfer')
             self.db.execute('INSERT OR IGNORE INTO reversals VALUES(?,?,\'PROCESSING\')', (body['reversalId'], canonical))
-            return 202, {'reversalId': body['reversalId'], 'status': 'PROCESSING'}
+            refund_id = str(uuid.uuid5(uuid.NAMESPACE_OID, 'mock-refund:'+body['reversalId']))
+            data = json.loads(original['body'])
+            refund_created = self.clock()
+            refund = dict(interbankTransferId=refund_id, originBankCode=self.bank, destinationBankCode=self.partner,
+                          originAccount=data['destinationAccount'], destinationAccount=data['originAccount'],
+                          amount=body['amount'], currency='GTQ', description='Reversal '+body['reversalId'],
+                          createdAt=utc(refund_created), expiresAt=utc(refund_created+180))
+            self.db.execute('INSERT OR IGNORE INTO outgoing VALUES(?,?,NULL)', (refund_id, json.dumps(refund)))
+            self.db.execute('INSERT OR IGNORE INTO refund_jobs(reversal_id,original,transfer_id,due,trace) VALUES(?,?,?,?,?)',
+                            (body['reversalId'], body['originalTransferId'], refund_id, self.clock(), headers['traceparent']))
+            saved = self.db.execute('SELECT status FROM reversals WHERE id=?', (body['reversalId'],)).fetchone()
+            return 202, {'reversalId': body['reversalId'], 'status': saved['status'], 'refundTransferId': refund_id}
         match = re.fullmatch(r'/reversals/([^/]+)', path)
         if match and method == 'GET':
             identifier = str(uuid.UUID(match[1]))
             row = self.db.execute('SELECT * FROM reversals WHERE id=?', (identifier,)).fetchone()
             if not row:
                 raise Fault(404, 'NOT_FOUND', 'Unknown reversal')
-            return 200, {'reversalId': identifier, 'status': row['status']}
+            job = self.db.execute('SELECT transfer_id FROM refund_jobs WHERE reversal_id=?', (identifier,)).fetchone()
+            value = {'reversalId': identifier, 'status': row['status']}
+            if job:
+                value['refundTransferId'] = job['transfer_id']
+            return 200, value
         if path == '/reconciliation' and method == 'GET':
             from datetime import date
             day = date.fromisoformat(query['date'][0]).isoformat()
@@ -202,6 +224,7 @@ class State:
                 self.db.execute('UPDATE transfers SET status=?,reason=?,updated=?,callback_due=? WHERE id=?',
                                 (status, reason, utc(self.clock()), self.clock(), row['id']))
             callbacks = self.db.execute('SELECT * FROM transfers WHERE body IS NOT NULL AND callback_due<=?', (self.clock(),)).fetchall()
+        self._send_refunds()
         if not self.callback_url or self.scenario == 'no_callback':
             return
         for row in callbacks:
@@ -233,6 +256,48 @@ class State:
             with self.lock, self.db:
                 next_at = None if delivered else self.clock()+min(300, 2**min(row['attempts']+1, 9))
                 self.db.execute('UPDATE transfers SET callback_due=?,attempts=attempts+1 WHERE id=?', (next_at, row['id']))
+
+    def _finish_refund(self, transfer_id, status):
+        job = self.db.execute('SELECT * FROM refund_jobs WHERE transfer_id=?', (transfer_id,)).fetchone()
+        if not job:
+            return
+        if status == 'ACCEPTED':
+            original = json.loads(self.row(job['original'])['body'])
+            self.db.execute('INSERT OR IGNORE INTO refund_debits VALUES(?,?)', (job['original'], original['amount']))
+            state = 'COMPLETED'
+        else:
+            state = 'FAILED'
+        self.db.execute('UPDATE reversals SET status=? WHERE id=?', (state, job['reversal_id']))
+
+    def _send_refunds(self):
+        if not self.callback_url:
+            return
+        with self.lock:
+            jobs = self.db.execute('''SELECT j.*,o.body FROM refund_jobs j JOIN reversals r ON r.id=j.reversal_id
+              JOIN outgoing o ON o.id=j.transfer_id WHERE r.status='PROCESSING' AND j.due<=?''', (self.clock(),)).fetchall()
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, *args, **kwargs):
+                return None
+        for job in jobs:
+            trace = job['trace'].split('-')
+            headers = {'Content-Type': 'application/json', 'X-Api-Key': self.callback_key,
+                       'Idempotency-Key': job['transfer_id'],
+                       'traceparent': '-'.join([trace[0], trace[1], secrets.token_hex(8), trace[3]])}
+            request = urllib.request.Request(self.callback_url+'/transfers', headers=headers, data=job['body'].encode())
+            try:
+                with urllib.request.build_opener(NoRedirect).open(request, timeout=2) as response:
+                    value = json.loads(response.read(65536))
+                    validate(response_schema('/transfers', 'POST', response.status), value)
+                    if value['interbankTransferId'] != job['transfer_id']:
+                        raise ValueError('Refund acknowledgement id mismatch')
+                    if response.status == 200 and value['status'] in ('ACCEPTED', 'REJECTED', 'CANCELLED'):
+                        with self.lock, self.db:
+                            self._finish_refund(job['transfer_id'], value['status'])
+            except Exception:
+                pass  # No credentials, response bodies or connection details in logs.
+            with self.lock, self.db:
+                self.db.execute('UPDATE refund_jobs SET due=?,attempts=attempts+1 WHERE reversal_id=?',
+                                (self.clock()+min(300, 2**min(job['attempts']+1, 9)), job['reversal_id']))
 
 
 class Server(ThreadingHTTPServer):

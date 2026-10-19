@@ -28,6 +28,7 @@ spec:
             - { name: http, containerPort: 8083 }
           envFrom:
             - configMapRef: { name: bank-usac-config }
+            - secretRef: { name: bank-usac-interbank, optional: true }
           env:
             - { name: PUERTO_HTTP, value: "8083" }
             - name: URL_BASE_DATOS

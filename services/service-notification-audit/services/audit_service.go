@@ -585,6 +585,9 @@ func ClassifyEventWithPayload(eventType string, payload json.RawMessage) models.
 
 func classifyEvent(eventType string, fields map[string]any) models.EventSeverity {
 	tipo := strings.ToLower(strings.TrimSpace(eventType))
+	if tipo == "interbancaria.incidente" {
+		return models.EventError
+	}
 	if tipo == "sloalerttriggered" {
 		level, _ := fields["nivel"].(string)
 		if strings.EqualFold(strings.TrimSpace(level), "ERROR") {

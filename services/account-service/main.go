@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/Proyecto-SA-B-3/account-service/internal/bankrpc"
+	"github.com/Proyecto-SA-B-3/account-service/internal/interbank"
 	"github.com/Proyecto-SA-B-3/account-service/internal/recovery"
 	"github.com/Proyecto-SA-B-3/account-service/internal/telemetry"
 	"log/slog"
@@ -41,6 +43,9 @@ func main() {
 		os.Exit(1)
 	}
 	defer conexionBaseDatos.Close()
+	if os.Getenv("INTERBANK_ENABLED") == "true" {
+		go bankrpc.Run(ctx, configuracion.URLRabbitMQ, "cuentas.interbancarias", interbank.Ledger{DB: conexionBaseDatos}.Handle)
+	}
 
 	mensajeriaFin := make(chan struct{})
 	go func() {

@@ -2,7 +2,7 @@
 
 ## Estado y fuente de verdad
 
-Punto 6: preparación local. No implica que BANK03 tenga ya implementados los depósitos interbancarios, reservas, callbacks, reversos ni conciliación real. Esas funcionalidades corresponden a los puntos 7 y 8. No se ha desplegado el mock ni se ha probado una conexión con BANK14.
+Punto 6: preparación local. La implementación de depósitos, reservas, callbacks, recuperación, reversos y conciliación se describe en [depósitos interbancarios](depositos.md); está desactivada por defecto hasta validar la integración real. No se ha desplegado el mock ni se ha probado una conexión con BANK14.
 
 El [OpenAPI original](../../contracts/interbank/openapi.yaml), versión 1.0.0, es la fuente de verdad. La guía recibida de BANK14 es contexto de integración, no una modificación del contrato. Su archivo original contiene claves y no se incorpora al repositorio.
 
@@ -43,15 +43,16 @@ Son identificadores opacos publicados por el banco dueño de la cuenta, no UUID 
 6. Todas las operaciones declaradas con `traceparent` lo requieren; `/health` es público. Importes como texto con dos decimales, GTQ, fechas UTC y vencimiento creación + 180 s.
 7. TIMEOUT conserva la reserva; consulta/cancelación y margen adicional de 300 s siguen las reglas completas del OpenAPI. El mock de preparación no demuestra la seguridad financiera de nuestra futura implementación.
 
-## Configuración prevista para los puntos 7 y 8
+## Configuración preparada para los puntos 7 y 8
 
 Variables: `INTERBANK_BANK_CODE=BANK03`, `INTERBANK_PARTNER_BANK_CODE=BANK14`, `INTERBANK_PUBLIC_BASE_URL`, `INTERBANK_PARTNER_BASE_URL`, `INTERBANK_API_KEY` y `INTERBANK_PARTNER_API_KEY`.
 
-Las URLs base incluyen exactamente `/interbank/v1`. No agregarlo dos veces al construir los endpoints. `tools/interbank_mock/config.py` valida el acuerdo sin imprimir claves; todavía no está conectado al Gateway real. No modificar la URL del frontend ni mover su IP para preparar este punto. La URL HTTPS del frontend, por sí sola, no demuestra que exista una API interbancaria detrás.
+Las URLs base incluyen exactamente `/interbank/v1`. No agregarlo dos veces al construir los endpoints. `tools/interbank_mock/config.py` valida el acuerdo sin imprimir claves; el backend Go tiene su propia validación y queda desactivado mediante `INTERBANK_ENABLED=false`. No modificar la URL del frontend ni mover su IP para preparar este punto. La URL HTTPS del frontend, por sí sola, no demuestra que exista una API interbancaria detrás.
 
 ## Cierre pendiente con el equipo pareja
 
 - Intercambiar y verificar las dos URLs HTTPS y las cuentas de BANK03.
 - Configurar las claves en el entorno privado y verificar salud y autenticación.
 - Acordar horarios y responsables de los escenarios de prueba; no inventar estados o formatos fuera del contrato.
+- Confirmar que BANK14 publique `refundTransferId` desde PROCESSING, como BANK03, para identificar una devolución antes de su callback y evitar abonar de nuevo una reserva ya liberada.
 - Probar depósitos reales en ambos sentidos, duplicados, vencimiento, cancelación, callbacks tardíos, reversos y conciliación después de implementar los puntos 7 y 8.

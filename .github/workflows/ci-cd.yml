@@ -277,6 +277,10 @@ jobs:
       - name: Validacion estatica
         run: go vet ./...
 
+      - name: Verificar RPC interbancario con RabbitMQ aislado
+        if: env.OMITIR_PRUEBAS != 'true'
+        run: bash ../../infrastructure/scripts/test-interbank.sh api-gateway
+
   build-test-customer:
     name: Build y test - Clientes
     runs-on: ubuntu-latest
@@ -361,6 +365,10 @@ jobs:
       - name: Validacion estatica
         run: go vet ./...
 
+      - name: Verificar reservas interbancarias con PostgreSQL aislado
+        if: env.OMITIR_PRUEBAS != 'true'
+        run: bash ../../infrastructure/scripts/test-interbank.sh account-service
+
   build-test-transaction:
     name: Build y test - Transacciones
     runs-on: ubuntu-latest
@@ -420,6 +428,10 @@ jobs:
 
       - name: Validacion estatica
         run: go vet ./...
+
+      - name: Verificar depositos y callbacks contra mock del contrato
+        if: env.OMITIR_PRUEBAS != 'true'
+        run: bash ../../infrastructure/scripts/test-interbank.sh transaction-service
 
   build-test-payment:
     name: Build y test - Pagos

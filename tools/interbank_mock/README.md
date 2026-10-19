@@ -40,7 +40,7 @@ El contrato original se verifica por SHA-256; el validador implementa el subconj
 
 Hay estado persistente SQLite de prueba, idempotencia/conflictos, procesamiento diferido, cancelación con tombstone, resultados consultables, callbacks con espera creciente hasta 24 h y conciliación por fecha UTC con paginación. Reiniciar el proceso retoma depósitos pendientes y callbacks, pero no crea nuevas acreditaciones para IDs ya procesados.
 
-Los endpoints de reversos **solo aceptan y consultan una solicitud PROCESSING** en esta etapa. No ejecutan una devolución bancaria ni crean el depósito de retorno; completar esos escenarios corresponde al punto 8. No interpretar PROCESSING como dinero devuelto. El receptor de callbacks solo reconoce operaciones salientes previamente registradas como fixtures mediante `State.register_outbound()` en pruebas; no existe un endpoint administrativo oculto que cree movimientos arbitrarios.
+Los reversos publican un `refundTransferId` estable desde PROCESSING y, si se configuró una URL de pareja en loopback, envían un nuevo depósito de retorno por HTTP. COMPLETED requiere su aceptación y registra un débito ficticio único en `refund_debits`; un retorno rechazado queda FAILED. Sin URL permanece PROCESSING: no interpretar ese estado como dinero devuelto. El receptor de callbacks reconoce fixtures de `State.register_outbound()` y los retornos creados por reversos válidos, no solicitudes arbitrarias. El mock sigue sin manejar saldos reales y no sustituye las pruebas entre bancos.
 
 No se modelan reservas, saldos reales, débito del emisor, reconciliación de libros contables ni alertas de producción. Las pruebas verdes del mock no cierran los puntos 7, 8 u 11.
 

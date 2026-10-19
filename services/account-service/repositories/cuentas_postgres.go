@@ -216,7 +216,7 @@ func (r *RepositorioCuentasPostgres) DesactivarCuentasInactivas(ctx context.Cont
 
 const columnasCuenta = `id_cuenta, id_cliente, numero_cuenta, tipo_cuenta, saldo_centavos,
 	saldo_minimo_centavos, comision_transaccion_centavos, moneda, estado, ultima_actividad,
-	fecha_creacion, fecha_actualizacion, version`
+	fecha_creacion, fecha_actualizacion, version, saldo_reservado_centavos`
 
 type escaneador interface {
 	Scan(destinos ...any) error
@@ -238,11 +238,12 @@ func escanearCuenta(fila escaneador) (*models.Cuenta, error) {
 		&cuenta.IDCuenta, &cuenta.IDCliente, &cuenta.NumeroCuenta, &cuenta.TipoCuenta,
 		&cuenta.SaldoCentavos, &cuenta.SaldoMinimoCentavos, &cuenta.ComisionTransaccionCentavos,
 		&cuenta.Moneda, &cuenta.Estado, &cuenta.UltimaActividad, &cuenta.FechaCreacion,
-		&cuenta.FechaActualizacion, &cuenta.Version,
+		&cuenta.FechaActualizacion, &cuenta.Version, &cuenta.SaldoReservadoCentavos,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("leer cuenta: %w", err)
 	}
+	cuenta.SaldoDisponibleCentavos = cuenta.SaldoCentavos - cuenta.SaldoReservadoCentavos
 	return &cuenta, nil
 }
 
@@ -277,6 +278,7 @@ func calcularSaldoNuevo(ctx context.Context, tx pgx.Tx, cuenta models.Cuenta, so
 	defer finishDatabase()
 	switch solicitud.TipoMovimiento {
 	case models.TipoMovimientoDebito:
+		reservado := cuenta.SaldoReservadoCentavos
 		montoTotal := solicitud.MontoCentavos + cuenta.ComisionTransaccionCentavos
 		if montoTotal < solicitud.MontoCentavos {
 			return 0, ErrFondosInsuficientes
@@ -284,7 +286,7 @@ func calcularSaldoNuevo(ctx context.Context, tx pgx.Tx, cuenta models.Cuenta, so
 		if cuenta.SaldoCentavos < montoTotal {
 			return 0, ErrFondosInsuficientes
 		}
-		if cuenta.SaldoCentavos-montoTotal < cuenta.SaldoMinimoCentavos {
+		if cuenta.SaldoCentavos-montoTotal-reservado < cuenta.SaldoMinimoCentavos {
 			return 0, ErrSaldoMinimo
 		}
 		return cuenta.SaldoCentavos - montoTotal, nil
