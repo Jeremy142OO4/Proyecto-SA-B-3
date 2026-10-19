@@ -9,13 +9,22 @@ case "$component" in
   *) echo 'Unknown test component' >&2; exit 1 ;;
 esac
 name="bank-interbank-${component}-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-$$"
-cleanup() { docker rm -f "$name" >/dev/null 2>&1 || true; }
+cleanup() {
+  local test_status=$?
+  if [[ "$test_status" != 0 ]]; then docker logs "$name" || true; fi
+  docker rm -f -v "$name" >/dev/null 2>&1 || true
+  return "$test_status"
+}
 trap cleanup EXIT
 unset TEST_DATABASE_URL TEST_AMQP_URL INTERBANK_MOCK_PYTHON
 if [[ "$component" == api-gateway ]]; then
-  docker run -d --rm --name "$name" -e RABBITMQ_DEFAULT_USER=interbank_test -e RABBITMQ_DEFAULT_PASS=local-interbank-only -p 127.0.0.1::5672 "$image"
+  # Erlang otherwise sizes server AND diagnostic CLI schedulers from the host
+  # CPU count, which can exhaust runner threads before AMQP starts. Keep the
+  # container after a failed boot until cleanup has captured its logs.
+  docker run -d --name "$name" --cpus=1 -e ERL_FLAGS='+S 2:2 +A 4' -e RABBITMQ_DEFAULT_USER=interbank_test -e RABBITMQ_DEFAULT_PASS=local-interbank-only -p 127.0.0.1::5672 "$image"
   ready=false
   for attempt in {1..60}; do
+    if [[ "$(docker inspect --format '{{.State.Running}}' "$name")" != true ]]; then echo 'Test broker exited before readiness' >&2; exit 1; fi
     if docker exec "$name" rabbitmq-diagnostics -q check_port_connectivity >/dev/null 2>&1; then ready=true; break; fi
     sleep 1
   done
