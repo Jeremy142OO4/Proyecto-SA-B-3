@@ -49,6 +49,9 @@ El catálogo de CDU se mantiene dentro de `uml/casos-de-uso.md`. Cada caso conse
 
 ## SRE y operación
 
+- [Preparación interbancaria BANK03/BANK14](interbancaria/acuerdo-bank03-bank14.md): contrato original, datos acordados, configuración privada y pendientes del punto 6.
+- [Mock local del contrato](../tools/interbank_mock/README.md): ejecución, pruebas y límites; no sustituye al banco real.
+
 - [Contrato de telemetría de fase 3](observabilidad/contrato-telemetria.md): logs, trazas, propagación y criterios de aceptación.
 - [Catálogo de métricas de fase 3](observabilidad/catalogo-metricas.md): instrumentos, etiquetas y alertas previstas.
 - [Matriz de medición](observabilidad/matriz-medicion.md): fuentes por SLI, denominadores y alcance del punto 2.

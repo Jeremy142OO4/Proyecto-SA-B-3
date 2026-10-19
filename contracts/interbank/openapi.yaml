@@ -1,0 +1,693 @@
+openapi: 3.0.3
+info:
+  title: Contrato Interbancario Bank USAC
+  version: 1.0.0
+  description: |
+    Contrato base para los depósitos entre bancos del Proyecto 3 (Software Avanzado, 2S2026).
+    **Todos los bancos implementan este mismo contrato, sin modificarlo.** Cada banco actúa en dos roles:
+
+    - **Banco emisor:** envía el depósito, recibe el callback con el resultado y, si hace falta, consulta el estado o cancela.
+    - **Banco receptor:** recibe el depósito, acredita la cuenta y avisa el resultado por callback.
+
+    Como ambos bancos exponen la misma API, el callback siempre se envía a
+    `{URL base del banco emisor}/interbank/v1/transfers/{interbankTransferId}/result`.
+    Las URL base, las API keys y las cuentas de prueba se intercambian en el acuerdo de integración de cada pareja.
+
+    ## Flujo normal
+    1. El emisor reserva el monto y envía `POST /transfers`. El receptor responde `202 Accepted`.
+    2. El receptor valida y acredita (o rechaza) y llama al callback `POST /transfers/{id}/result` del emisor.
+    3. El emisor confirma el débito (ACCEPTED) o libera la reserva y pasa a REVERSED (REJECTED).
+
+    ## Reglas de tiempo (obligatorias)
+    - Todas las fechas van en UTC, formato ISO 8601. Los servidores deben sincronizar su reloj (NTP).
+    - `expiresAt` = `createdAt` + **180 segundos**.
+    - El receptor **no puede acreditar después de `expiresAt`**, aunque el mensaje le llegue tarde (reintento, DLQ).
+      En ese caso debe responder el callback con `REJECTED` y `reasonCode: EXPIRED`.
+      Si acredita después del vencimiento, la responsabilidad y la devolución son suyas.
+    - El receptor reintenta el callback con espera creciente (por ejemplo 2 s, 4 s, 8 s…) durante un máximo de 24 horas.
+
+    ## Protocolo de timeout (banco emisor)
+    1. Si no llega el callback antes de `expiresAt`, la transferencia pasa a TIMEOUT: el monto **sigue reservado**.
+    2. El emisor consulta `GET /transfers/{id}` con reintentos.
+       - `ACCEPTED` → confirma el débito.
+       - `REJECTED` o `CANCELLED` → libera la reserva (REVERSED).
+       - `404` o `PROCESSING` → envía `POST /transfers/{id}/cancel`.
+    3. Respuesta de la cancelación:
+       - `CANCELLED` → REVERSED. El receptor guarda el id y rechaza cualquier llegada posterior del mensaje original.
+       - `ALREADY_ACCEPTED` → confirma el débito.
+       - `ALREADY_REJECTED` → REVERSED.
+    4. Si el receptor no responde ni a la consulta ni a la cancelación, el emisor solo puede liberar la reserva
+       después de `expiresAt` + **300 segundos** de margen, y debe generar una alerta.
+    5. Si después llega un callback `ACCEPTED` para una transferencia ya REVERSED, el emisor lo registra como incidente
+       (nivel ERROR) y solicita la devolución con `POST /reversals`.
+
+    ## Idempotencia
+    - El header `Idempotency-Key` debe ser igual a `interbankTransferId`.
+    - Repetir una solicitud con el mismo id y el mismo contenido nunca acredita dos veces: se responde con el estado actual.
+    - Repetir el mismo id con contenido distinto se responde con `409`.
+    - El callback y la cancelación también son idempotentes.
+
+    ## Seguridad y trazabilidad
+    - Solo HTTPS. Cada banco entrega a su pareja una API key (header `X-Api-Key`), guardada en un Secret de Kubernetes.
+    - Un banco solo puede consultar, cancelar o recibir callbacks de transferencias en las que participa.
+    - Toda solicitud lleva el header `traceparent` (W3C Trace Context) para relacionar la operación en ambos bancos.
+    - No se envían datos personales del cliente, solo números de cuenta.
+
+    ## Límites comunes
+    - Moneda: GTQ.
+    - Monto mínimo: Q0.01. Monto máximo por operación: Q10,000.00 (si se supera, `REJECTED` con `AMOUNT_LIMIT_EXCEEDED`).
+servers:
+  - url: https://{bankHost}/interbank/v1
+    description: URL base de cada banco, definida en el acuerdo de integración.
+    variables:
+      bankHost:
+        default: banco.example.com
+security:
+  - ApiKeyAuth: []
+tags:
+  - name: Transferencias
+    description: Envío, consulta y cancelación de depósitos (las expone el banco receptor).
+  - name: Callback
+    description: Resultado de un depósito (lo expone el banco emisor).
+  - name: Reversos
+    description: Devolución de un depósito acreditado por un callback tardío (caso excepcional).
+  - name: Conciliación
+    description: Listado diario para la conciliación obligatoria.
+  - name: Salud
+    description: Disponibilidad del banco.
+paths:
+  /transfers:
+    post:
+      tags: [Transferencias]
+      operationId: receiveTransfer
+      summary: Recibir un depósito de otro banco
+      description: |
+        Lo expone el banco receptor. Valida el formato y responde `202` de inmediato; el resultado de negocio
+        (cuenta inexistente, monto excedido, etc.) se informa después por callback.
+        Si el mensaje ya venció (`expiresAt` en el pasado), responde `422` y no lo procesa.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferRequest'
+            examples:
+              deposito:
+                $ref: '#/components/examples/TransferRequestExample'
+      responses:
+        '202':
+          description: Recibido; el resultado llegará por callback.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferAck'
+        '200':
+          description: Solicitud repetida (mismo id y mismo contenido); se devuelve el estado actual sin procesarla de nuevo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferStatus'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/IdempotencyConflict'
+        '422':
+          $ref: '#/components/responses/Expired'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+
+  /transfers/{interbankTransferId}:
+    get:
+      tags: [Transferencias]
+      operationId: getTransferStatus
+      summary: Consultar el estado de un depósito
+      description: |
+        Lo expone el banco receptor. El emisor la usa cuando su transferencia está en TIMEOUT y para la conciliación.
+        `404` significa que el receptor no tiene registro de ese id (nunca lo recibió).
+      parameters:
+        - $ref: '#/components/parameters/InterbankTransferId'
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200':
+          description: Estado actual del depósito.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+
+  /transfers/{interbankTransferId}/cancel:
+    post:
+      tags: [Transferencias]
+      operationId: cancelTransfer
+      summary: Cancelar un depósito que quedó en duda
+      description: |
+        Lo expone el banco receptor. Si el depósito no se ha acreditado (o nunca llegó), el receptor lo marca como
+        CANCELLED y guarda el id, de modo que una llegada posterior del mensaje original se rechace con `reasonCode: CANCELLED`.
+        Si ya estaba acreditado, responde `ALREADY_ACCEPTED`. Es idempotente.
+      parameters:
+        - $ref: '#/components/parameters/InterbankTransferId'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelRequest'
+      responses:
+        '200':
+          description: Resultado de la cancelación.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+
+  /transfers/{interbankTransferId}/result:
+    post:
+      tags: [Callback]
+      operationId: receiveTransferResult
+      summary: Callback con el resultado de un depósito
+      description: |
+        Lo expone el banco emisor y lo llama el banco receptor. Es idempotente: el mismo resultado repetido
+        se responde con `200` sin efectos adicionales. Un `ACCEPTED` para una transferencia ya REVERSED también
+        se responde con `200` (para cortar los reintentos), pero el emisor debe registrarlo como incidente y solicitar un reverso.
+      parameters:
+        - $ref: '#/components/parameters/InterbankTransferId'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferResult'
+            examples:
+              aceptado:
+                $ref: '#/components/examples/ResultAcceptedExample'
+              rechazado:
+                $ref: '#/components/examples/ResultRejectedExample'
+      responses:
+        '200':
+          description: Resultado registrado (o ya registrado antes).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallbackAck'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+
+  /reversals:
+    post:
+      tags: [Reversos]
+      operationId: requestReversal
+      summary: Solicitar la devolución de un depósito acreditado
+      description: |
+        Caso excepcional: el emisor ya liberó la reserva (REVERSED) y después recibió un `ACCEPTED`.
+        El receptor debe debitar la cuenta acreditada y devolver el monto con un depósito nuevo hacia el emisor,
+        usando el flujo normal de `POST /transfers`. Es idempotente por `reversalId`.
+      parameters:
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReversalRequest'
+      responses:
+        '202':
+          description: Solicitud de reverso recibida.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReversalStatus'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /reversals/{reversalId}:
+    get:
+      tags: [Reversos]
+      operationId: getReversalStatus
+      summary: Consultar el estado de un reverso
+      parameters:
+        - name: reversalId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200':
+          description: Estado del reverso.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReversalStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /reconciliation:
+    get:
+      tags: [Conciliación]
+      operationId: getReconciliation
+      summary: Listar los depósitos de un día con el banco que consulta
+      description: |
+        Devuelve los depósitos que este banco recibió del banco que consulta (identificado por su API key)
+        en la fecha indicada (UTC). Se usa para la conciliación diaria obligatoria.
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: '2026-10-20'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200':
+          description: Depósitos del día.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReconciliationPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /health:
+    get:
+      tags: [Salud]
+      operationId: getHealth
+      summary: Verificar la disponibilidad del banco
+      security: []
+      responses:
+        '200':
+          description: El banco está disponible para operar.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, bankCode]
+                properties:
+                  status:
+                    type: string
+                    enum: [UP, DEGRADED]
+                  bankCode:
+                    $ref: '#/components/schemas/BankCode'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: Clave que cada banco entrega a su pareja. Identifica al banco que llama.
+
+  parameters:
+    Traceparent:
+      name: traceparent
+      in: header
+      required: true
+      description: Contexto de traza W3C Trace Context.
+      schema:
+        type: string
+        pattern: '^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$'
+      example: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Debe ser igual a `interbankTransferId`.
+      schema:
+        type: string
+        format: uuid
+    InterbankTransferId:
+      name: interbankTransferId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    BankCode:
+      type: string
+      description: Código asignado a cada banco por el curso.
+      pattern: '^BANK[0-9]{2}$'
+      example: BANK03
+    AccountNumber:
+      type: string
+      description: Número de cuenta en el formato del banco dueño de la cuenta (publicado en el acuerdo de integración).
+      pattern: '^[A-Za-z0-9-]{1,34}$'
+      example: '3001-000123'
+    Amount:
+      type: string
+      description: Monto con dos decimales, como texto para evitar errores de punto flotante. Entre 0.01 y 10000.00.
+      pattern: '^[0-9]{1,5}\.[0-9]{2}$'
+      example: '150.00'
+    Currency:
+      type: string
+      enum: [GTQ]
+    ReasonCode:
+      type: string
+      description: Motivo de un rechazo.
+      enum:
+        - ACCOUNT_NOT_FOUND
+        - ACCOUNT_INACTIVE
+        - AMOUNT_LIMIT_EXCEEDED
+        - CURRENCY_NOT_SUPPORTED
+        - EXPIRED
+        - CANCELLED
+        - PROCESSING_ERROR
+
+    TransferRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - interbankTransferId
+        - originBankCode
+        - destinationBankCode
+        - originAccount
+        - destinationAccount
+        - amount
+        - currency
+        - createdAt
+        - expiresAt
+      properties:
+        interbankTransferId:
+          type: string
+          format: uuid
+          description: Id único generado por el banco emisor.
+        originBankCode:
+          $ref: '#/components/schemas/BankCode'
+        destinationBankCode:
+          $ref: '#/components/schemas/BankCode'
+        originAccount:
+          $ref: '#/components/schemas/AccountNumber'
+        destinationAccount:
+          $ref: '#/components/schemas/AccountNumber'
+        amount:
+          $ref: '#/components/schemas/Amount'
+        currency:
+          $ref: '#/components/schemas/Currency'
+        description:
+          type: string
+          maxLength: 140
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          description: createdAt + 180 segundos.
+
+    TransferAck:
+      type: object
+      required: [interbankTransferId, status, receivedAt]
+      properties:
+        interbankTransferId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PROCESSING]
+        receivedAt:
+          type: string
+          format: date-time
+
+    TransferStatus:
+      type: object
+      required: [interbankTransferId, status, updatedAt]
+      properties:
+        interbankTransferId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          description: Estado en el banco receptor.
+          enum: [PROCESSING, ACCEPTED, REJECTED, CANCELLED]
+        reasonCode:
+          $ref: '#/components/schemas/ReasonCode'
+        updatedAt:
+          type: string
+          format: date-time
+
+    TransferResult:
+      type: object
+      additionalProperties: false
+      required: [interbankTransferId, destinationBankCode, status, processedAt]
+      properties:
+        interbankTransferId:
+          type: string
+          format: uuid
+        destinationBankCode:
+          $ref: '#/components/schemas/BankCode'
+        status:
+          type: string
+          enum: [ACCEPTED, REJECTED]
+        reasonCode:
+          $ref: '#/components/schemas/ReasonCode'
+        reasonMessage:
+          type: string
+          maxLength: 200
+        processedAt:
+          type: string
+          format: date-time
+
+    CallbackAck:
+      type: object
+      required: [interbankTransferId, received]
+      properties:
+        interbankTransferId:
+          type: string
+          format: uuid
+        received:
+          type: boolean
+
+    CancelRequest:
+      type: object
+      required: [originBankCode, reason]
+      properties:
+        originBankCode:
+          $ref: '#/components/schemas/BankCode'
+        reason:
+          type: string
+          enum: [TIMEOUT, CLIENT_REQUEST]
+
+    CancelResponse:
+      type: object
+      required: [interbankTransferId, result]
+      properties:
+        interbankTransferId:
+          type: string
+          format: uuid
+        result:
+          type: string
+          description: |
+            CANCELLED: no se acreditó y ya no se acreditará. ALREADY_ACCEPTED: ya se acreditó, el emisor confirma el débito.
+            ALREADY_REJECTED: ya se había rechazado, el emisor libera la reserva.
+          enum: [CANCELLED, ALREADY_ACCEPTED, ALREADY_REJECTED]
+
+    ReversalRequest:
+      type: object
+      required: [reversalId, originalTransferId, originBankCode, amount, currency]
+      properties:
+        reversalId:
+          type: string
+          format: uuid
+        originalTransferId:
+          type: string
+          format: uuid
+          description: interbankTransferId del depósito que se debe devolver.
+        originBankCode:
+          $ref: '#/components/schemas/BankCode'
+        amount:
+          $ref: '#/components/schemas/Amount'
+        currency:
+          $ref: '#/components/schemas/Currency'
+
+    ReversalStatus:
+      type: object
+      required: [reversalId, status]
+      properties:
+        reversalId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          description: COMPLETED incluye el id del depósito de devolución enviado al emisor.
+          enum: [PROCESSING, COMPLETED, FAILED]
+        refundTransferId:
+          type: string
+          format: uuid
+        reasonMessage:
+          type: string
+
+    ReconciliationPage:
+      type: object
+      required: [date, items, page, pageSize, totalItems]
+      properties:
+        date:
+          type: string
+          format: date
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalItems:
+          type: integer
+        items:
+          type: array
+          items:
+            type: object
+            required: [interbankTransferId, amount, currency, status, updatedAt]
+            properties:
+              interbankTransferId:
+                type: string
+                format: uuid
+              amount:
+                $ref: '#/components/schemas/Amount'
+              currency:
+                $ref: '#/components/schemas/Currency'
+              status:
+                type: string
+                enum: [PROCESSING, ACCEPTED, REJECTED, CANCELLED]
+              updatedAt:
+                type: string
+                format: date-time
+
+    Error:
+      type: object
+      required: [code, message, timestamp]
+      properties:
+        code:
+          type: string
+          enum:
+            - VALIDATION_ERROR
+            - UNAUTHORIZED
+            - NOT_FOUND
+            - IDEMPOTENCY_CONFLICT
+            - EXPIRED
+            - SERVICE_UNAVAILABLE
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+  responses:
+    BadRequest:
+      description: Formato inválido (campos faltantes, patrón incorrecto o Idempotency-Key distinto del id).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: API key ausente o inválida, o el banco que llama no participa en esta transferencia.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: No existe registro de ese id en este banco.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    IdempotencyConflict:
+      description: Ya existe una solicitud con ese id pero con contenido distinto.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Expired:
+      description: El mensaje llegó después de expiresAt; no se procesa.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unavailable:
+      description: El banco no puede atender en este momento; el que llama debe reintentar con espera creciente.
+      headers:
+        Retry-After:
+          description: Segundos sugeridos antes de reintentar.
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  examples:
+    TransferRequestExample:
+      summary: Depósito de Q150.00 del BANK03 al BANK07
+      value:
+        interbankTransferId: 8f14e45f-ceea-467a-9b36-4b1c2d6a7e01
+        originBankCode: BANK03
+        destinationBankCode: BANK07
+        originAccount: '3001-000123'
+        destinationAccount: '7002-004567'
+        amount: '150.00'
+        currency: GTQ
+        description: Pago de alquiler
+        createdAt: '2026-10-20T15:00:00Z'
+        expiresAt: '2026-10-20T15:03:00Z'
+    ResultAcceptedExample:
+      summary: Depósito acreditado
+      value:
+        interbankTransferId: 8f14e45f-ceea-467a-9b36-4b1c2d6a7e01
+        destinationBankCode: BANK07
+        status: ACCEPTED
+        processedAt: '2026-10-20T15:00:04Z'
+    ResultRejectedExample:
+      summary: Depósito rechazado por cuenta inexistente
+      value:
+        interbankTransferId: 8f14e45f-ceea-467a-9b36-4b1c2d6a7e01
+        destinationBankCode: BANK07
+        status: REJECTED
+        reasonCode: ACCOUNT_NOT_FOUND
+        reasonMessage: La cuenta destino no existe
+        processedAt: '2026-10-20T15:00:02Z'
