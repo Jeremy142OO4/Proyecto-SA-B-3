@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"encoding/json"
 	"github.com/Proyecto-SA-B-3/api-gateway/events"
 	"github.com/Proyecto-SA-B-3/api-gateway/messaging"
 	"github.com/Proyecto-SA-B-3/api-gateway/middleware"
@@ -15,16 +16,16 @@ func NuevoControladorAuditoria(solicitante SolicitanteRPC) *ControladorAuditoria
 }
 
 func (ca *ControladorAuditoria) Registros(c *fiber.Ctx) error {
-	limite := c.QueryInt("limite", 50)
-	if limite < 1 || limite > 100 {
-		limite = 50
+	filters, err := filtrosAuditoria(c)
+	if err != nil {
+		return err
 	}
-	return ca.enviar(c, events.ComandoAuditoriaRegistros, map[string]int{"limite": limite})
+	return ca.enviar(c, events.ComandoAuditoriaRegistros, filters)
 }
 
 func (ca *ControladorAuditoria) Traza(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("idCorrelacion"))
-	if err != nil {
+	if err != nil || id == uuid.Nil {
 		return fiber.NewError(fiber.StatusBadRequest, "idCorrelacion invalido")
 	}
 	return ca.enviar(c, events.ComandoAuditoriaTraza, map[string]any{"idCorrelacion": id})
@@ -59,7 +60,7 @@ func (ca *ControladorAuditoria) enviar(c *fiber.Ctx, tipo string, contenido any)
 	if err != nil {
 		return fiber.NewError(fiber.StatusServiceUnavailable, "notification-audit-service no disponible")
 	}
-	if respuesta.Estado == 0 {
+	if respuesta.Estado < 200 || respuesta.Estado > 599 || !json.Valid(respuesta.Cuerpo) {
 		respuesta = messaging.RespuestaRPC{Estado: fiber.StatusBadGateway, Cuerpo: []byte(`{"error":"respuesta invalida"}`)}
 	}
 	c.Type("json")

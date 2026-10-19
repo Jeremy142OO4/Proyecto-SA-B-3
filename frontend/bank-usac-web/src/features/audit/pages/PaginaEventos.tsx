@@ -240,6 +240,7 @@ export function PaginaEventos() {
           <div className="evento-contenido">
             <div className="evento-cabecera"><strong>{formatearNombreEvento(registro.eventType)}</strong><span className={`severidad severidad-${registro.severity.toLowerCase()}`}><span className="icono-severidad" aria-hidden="true"><Icono fontSize="small" /></span>{registro.severity}</span></div>
             <small>{registro.producer} · {new Date(registro.occurredAt).toLocaleString('es-GT')}</small>
+            {registro.eventType.startsWith('transferencia.') && textoCampo(esObjeto(registro.payload) ? registro.payload : {}, 'idTransferencia') && <span className="evento-correlacion">id_transaccion: {textoCampo(esObjeto(registro.payload) ? registro.payload : {}, 'idTransferencia')}</span>}
             <span className="evento-correlacion">CorrelationId: {registro.correlationId}</span>
           </div>
         </article>;

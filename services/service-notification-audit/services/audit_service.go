@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"bank-usac/service-notification-audit/events"
+	"bank-usac/service-notification-audit/internal/telemetry"
 	"bank-usac/service-notification-audit/models"
 	"bank-usac/service-notification-audit/repositories"
 
@@ -18,6 +19,8 @@ import (
 )
 
 type AuditService interface {
+	QueryAudits(context.Context, models.AuditFilter) ([]*models.AuditLog, error)
+	ReceiveSLOAlert(context.Context, models.SLOAlert) error
 	ProcessEvent(ctx context.Context, envelope *events.EventEnvelope) error
 	SetRecipientResolver(resolver RecipientResolver)
 	GetAuditByCorrelation(ctx context.Context, correlationID uuid.UUID) ([]*models.AuditLog, error)
@@ -33,6 +36,7 @@ type RecipientResolver interface {
 }
 
 type auditService struct {
+	sloRecipient      string
 	auditRepo         repositories.AuditRepository
 	notificationRepo  repositories.NotificationRepository
 	idempotencyRepo   repositories.IdempotencyRepository
@@ -52,8 +56,14 @@ func NewAuditService(
 	notificationRepo repositories.NotificationRepository,
 	idempotencyRepo repositories.IdempotencyRepository,
 	emailSender EmailSender,
+	sloRecipient ...string,
 ) AuditService {
+	recipient := ""
+	if len(sloRecipient) > 0 {
+		recipient = sloRecipient[0]
+	}
 	return &auditService{
+		sloRecipient:     recipient,
 		auditRepo:        auditRepo,
 		notificationRepo: notificationRepo,
 		idempotencyRepo:  idempotencyRepo,
@@ -66,6 +76,18 @@ func (s *auditService) ProcessEvent(ctx context.Context, envelope *events.EventE
 		return fmt.Errorf("sobre de evento inválido: messageId, correlationId y tipo son obligatorios")
 	}
 
+	if envelope.Type == "SLOAlertTriggered" {
+		var alert models.SLOAlert
+		if err := json.Unmarshal(envelope.Payload, &alert); err != nil {
+			return err
+		}
+		normalized, err := sloEnvelope(alert)
+		if err != nil {
+			return err
+		}
+		normalized.CausationID = envelope.CausationID
+		envelope = normalized
+	}
 	processed, err := s.idempotencyRepo.IsMessageProcessed(ctx, envelope.MessageID)
 	if err != nil {
 		return fmt.Errorf("error verificando idempotencia: %w", err)
@@ -81,6 +103,7 @@ func (s *auditService) ProcessEvent(ctx context.Context, envelope *events.EventE
 	}
 
 	auditLog := &models.AuditLog{
+		TraceID:       telemetry.SourceTraceID(ctx),
 		ID:            idempotentID("audit", envelope.MessageID),
 		EventID:       envelope.MessageID,
 		CorrelationID: envelope.CorrelationID,
@@ -94,6 +117,13 @@ func (s *auditService) ProcessEvent(ctx context.Context, envelope *events.EventE
 		RecordedAt:    time.Now().UTC(),
 	}
 
+	if envelope.Type == "SLOAlertTriggered" {
+		var alert models.SLOAlert
+		_ = json.Unmarshal(envelope.Payload, &alert)
+		if alert.TraceID != "" {
+			auditLog.TraceID = alert.TraceID
+		}
+	}
 	if err := s.auditRepo.SaveAuditLog(ctx, auditLog); err != nil {
 		return fmt.Errorf("error guardando audit log: %w", err)
 	}
@@ -119,6 +149,8 @@ func (s *auditService) handleNotificationDispatch(
 	envelope *events.EventEnvelope,
 ) error {
 	switch envelope.Type {
+	case "SLOAlertTriggered":
+		return s.notifySLO(ctx, envelope)
 	case "notificacion.correo-activacion.solicitado":
 		return s.sendActivationEmail(ctx, envelope)
 	default:
@@ -160,6 +192,7 @@ type notificationRule struct {
 
 func notificationRuleFor(eventType string) (notificationRule, bool) {
 	rules := map[string]notificationRule{
+		"pago.compensacion.fallida":          {"PAYMENT_COMPENSATION_FAILED", "Error al compensar pago", "No se pudo confirmar la devolucion de fondos del pago. Requiere revision administrativa.", "account-owner"},
 		"AccountAnomalyDetected":             {"ACCOUNT_ANOMALY_DETECTED", "Alerta de actividad inusual - Bank USAC", "Detectamos una frecuencia de operaciones superior al límite configurado. La alerta no bloquea automáticamente la cuenta.", "account-owner"},
 		"cuenta.bloqueada":                   {"ACCOUNT_BLOCKED", "Cuenta bloqueada - Bank USAC", "La administración bloqueó la cuenta. Puede consultar su historial, pero no realizar nuevas transacciones. Consulte el motivo del bloqueo en este comprobante.", "account-owner"},
 		"cliente.creado":                     {"CLIENT_CREATED", "Registro de cliente recibido", "El cliente fue registrado correctamente.", "customer"},
@@ -333,6 +366,7 @@ func construirCorreoOperacion(envelope *events.EventEnvelope, rule notificationR
 		agregarFilaHTML(&cuerpo, "Límite configurado", valorCorreo(campos, "maxOperaciones"))
 		agregarFilaHTML(&cuerpo, "Ventana (minutos)", valorCorreo(campos, "ventanaMinutos"))
 	case strings.HasPrefix(envelope.Type, "transferencia."):
+		agregarFilaHTML(&cuerpo, "id_transaccion", valorCorreo(campos, "idTransferencia", "idOperacion"))
 		agregarFilaHTML(&cuerpo, "Cuenta origen", valorCorreo(campos, "idCuentaOrigen"))
 		agregarFilaHTML(&cuerpo, "Cuenta destino", valorCorreo(campos, "idCuentaDestino"))
 		agregarMontoHTML(&cuerpo, "Monto enviado", campos, "montoCentavos", "montoTotalCentavos")
@@ -496,6 +530,14 @@ func (s *auditService) saveGeneratedNotification(
 			details = envelope.Payload
 		}
 	}
+	if strings.HasPrefix(envelope.Type, "transferencia.") {
+		var payload map[string]json.RawMessage
+		if json.Unmarshal(envelope.Payload, &payload) == nil {
+			if id, ok := payload["idTransferencia"]; ok {
+				details, _ = json.Marshal(map[string]json.RawMessage{"id_transaccion": id})
+			}
+		}
+	}
 	return s.notificationRepo.SaveNotificationLog(ctx, &models.NotificationLog{
 		AccountID: accountID, Details: details,
 		ID:               idempotentID("notification", envelope.MessageID),
@@ -543,6 +585,18 @@ func ClassifyEventWithPayload(eventType string, payload json.RawMessage) models.
 
 func classifyEvent(eventType string, fields map[string]any) models.EventSeverity {
 	tipo := strings.ToLower(strings.TrimSpace(eventType))
+	if tipo == "sloalerttriggered" {
+		level, _ := fields["nivel"].(string)
+		if strings.EqualFold(strings.TrimSpace(level), "ERROR") {
+			return models.EventError
+		}
+		return models.EventWarning
+	}
+	// These technical outcomes must not be downgraded by a recoverable
+	// account rejection code carried in their payload.
+	if tipo == "pago.compensacion.fallida" || tipo == "pago.proveedor.fallido" || tipo == "pago.timeout" {
+		return models.EventError
+	}
 	if tipo == "accountanomalydetected" || tipo == "cuenta.bloqueada" {
 		return models.EventWarning
 	}
@@ -764,4 +818,13 @@ func (s *auditService) GetNotifications(
 	filter models.NotificationFilter,
 ) ([]*models.NotificationLog, error) {
 	return s.notificationRepo.GetNotificationLogs(ctx, filter)
+}
+
+func (s *auditService) QueryAudits(ctx context.Context, filter models.AuditFilter) ([]*models.AuditLog, error) {
+	if err := filter.Normalize(); err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return s.auditRepo.QueryAuditLogs(ctx, filter)
 }

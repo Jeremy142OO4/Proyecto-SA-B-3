@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -71,6 +72,7 @@ func NewRabbitMQConsumer(url string, auditSvc services.AuditService) (*RabbitMQC
 	// 3. Bindings para capturar todos los eventos del sistema
 	routingKeys := []string{
 		"AccountAnomalyDetected",
+		"SLOAlertTriggered",
 		"cliente.#",
 		"cuenta.#",
 		"transferencia.#",
@@ -88,7 +90,7 @@ func NewRabbitMQConsumer(url string, auditSvc services.AuditService) (*RabbitMQC
 	if _, err := ch.QueueDeclare("notification-audit.commands.q", true, false, false, false, args); err != nil {
 		return nil, err
 	}
-	for _, rk := range []string{events.ComandoRegistros, events.ComandoTraza, events.ComandoNotificaciones} {
+	for _, rk := range []string{events.ComandoRegistros, events.ComandoTraza, events.ComandoNotificaciones, events.ComandoSLO} {
 		if err := ch.QueueBind("notification-audit.commands.q", rk, "banco.comandos", false, nil); err != nil {
 			return nil, err
 		}
@@ -199,16 +201,33 @@ func (r *RabbitMQConsumer) handleCommand(ctx context.Context, d amqp.Delivery) {
 
 func (r *RabbitMQConsumer) executeCommand(ctx context.Context, sobre events.EventEnvelope) (int, json.RawMessage) {
 	responder := func(estado int, valor any) (int, json.RawMessage) { b, _ := json.Marshal(valor); return estado, b }
-	fallar := func(err error) (int, json.RawMessage) { return responder(500, map[string]string{"error": err.Error()}) }
+	fallar := func(err error) (int, json.RawMessage) {
+		slog.ErrorContext(ctx, "audit command failed", "errorCode", "AUDIT_COMMAND_FAILED")
+		return responder(500, map[string]string{"error": "No fue posible completar la consulta de auditoria"})
+	}
 	switch sobre.Type {
+	case events.ComandoSLO:
+		var alert models.SLOAlert
+		if err := json.Unmarshal(sobre.Payload, &alert); err != nil {
+			return responder(400, map[string]string{"error": "Alerta SLO invalida"})
+		}
+		if err := alert.Normalize(); err != nil {
+			return responder(400, map[string]string{"error": err.Error()})
+		}
+		if err := r.auditSvc.ReceiveSLOAlert(ctx, alert); err != nil {
+			return fallar(err)
+		}
+		return responder(202, map[string]any{"idAlerta": alert.AlertID, "eventId": alert.EventID(), "estado": "REGISTRADA"})
+
 	case events.ComandoRegistros:
-		var req struct {
-			Limite int `json:"limite"`
-		}
+		var req models.AuditFilter
 		if err := json.Unmarshal(sobre.Payload, &req); err != nil {
-			return responder(400, map[string]string{"error": "payload de auditoria invalido"})
+			return responder(400, map[string]string{"error": "filtros de auditoria invalidos"})
 		}
-		registros, err := r.auditSvc.GetRecentAudits(ctx, req.Limite)
+		if err := req.Normalize(); err != nil {
+			return responder(400, map[string]string{"error": err.Error()})
+		}
+		registros, err := r.auditSvc.QueryAudits(ctx, req)
 		if err != nil {
 			return fallar(err)
 		}

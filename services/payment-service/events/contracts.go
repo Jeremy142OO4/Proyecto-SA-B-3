@@ -11,6 +11,7 @@ const (
 	EventoCuentaDebitada         = "cuenta.debitada"
 	EventoDebitoRechazado        = "cuenta.debito.rechazado"
 	EventoCuentaCompensada       = "cuenta.compensada"
+	EventoCompensacionRechazada  = "cuenta.compensacion.rechazada"
 	EventoPagoCompletado         = "pago.completado"
 	EventoPagoRechazado          = "pago.rechazado"
 	EventoPagoConsultado         = "pago.consultado"

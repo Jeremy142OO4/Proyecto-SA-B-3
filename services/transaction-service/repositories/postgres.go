@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/trace"
 	"strings"
 	"time"
 )
@@ -22,6 +23,8 @@ type Postgres struct{ db *pgxpool.Pool }
 func NuevoPostgres(db *pgxpool.Pool) *Postgres { return &Postgres{db} }
 
 func (r *Postgres) Iniciar(ctx context.Context, m events.SobreMensaje, t models.Transferencia) (bool, error) {
+	ctx, endTrace := telemetry.StartTransfer(ctx, t.IDTransferencia.String(), m.IDCorrelacion.String())
+	defer endTrace()
 	ctx, finishDatabase := telemetry.Database(ctx, "Iniciar")
 	defer finishDatabase()
 	tx, e := r.db.Begin(ctx)
@@ -36,7 +39,7 @@ func (r *Postgres) Iniciar(ctx context.Context, m events.SobreMensaje, t models.
 	if !nuevo {
 		return false, tx.Commit(ctx)
 	}
-	_, e = tx.Exec(ctx, `INSERT INTO transferencias(id_transferencia,id_cliente,id_cuenta_origen,id_cuenta_destino,id_correlacion,monto_centavos,moneda,descripcion,estado,resultado_externo_simulado,fecha_creacion,fecha_actualizacion) VALUES($1,$2,$3,$4,$5,$6,'GTQ',$7,$8,$9,$10,$10)`, t.IDTransferencia, t.IDCliente, t.IDCuentaOrigen, t.IDCuentaDestino, t.IDCorrelacion, t.MontoCentavos, t.Descripcion, t.Estado, t.ResultadoExternoSimulado, t.FechaCreacion)
+	_, e = tx.Exec(ctx, `INSERT INTO transferencias(id_transferencia,id_cliente,id_cuenta_origen,id_cuenta_destino,id_correlacion,monto_centavos,moneda,descripcion,estado,resultado_externo_simulado,fecha_creacion,fecha_actualizacion,trace_id,trace_context) VALUES($1,$2,$3,$4,$5,$6,'GTQ',$7,$8,$9,$10,$10,$11,$12)`, t.IDTransferencia, t.IDCliente, t.IDCuentaOrigen, t.IDCuentaDestino, t.IDCorrelacion, t.MontoCentavos, t.Descripcion, t.Estado, t.ResultadoExternoSimulado, t.FechaCreacion, trace.SpanContextFromContext(ctx).TraceID().String(), telemetry.Serialize(ctx))
 	if e != nil {
 		return false, e
 	}
@@ -44,7 +47,7 @@ func (r *Postgres) Iniciar(ctx context.Context, m events.SobreMensaje, t models.
 	if e = insertarSalida(ctx, tx, events.ComandoValidarKYC, m.IDCorrelacion, p, true); e != nil {
 		return false, e
 	}
-	return true, tx.Commit(ctx)
+	return commitEstado(ctx, tx, t.IDTransferencia)
 }
 
 func (r *Postgres) ProcesarResultadoKYC(ctx context.Context, m events.SobreMensaje, res events.ResultadoValidacionKYC) (bool, error) {
@@ -70,6 +73,10 @@ func (r *Postgres) ProcesarResultadoKYC(ctx context.Context, m events.SobreMensa
 	if e != nil {
 		return false, e
 	}
+	ctx, e = resumeTransfer(ctx, tx, transferencia.IDTransferencia)
+	if e != nil {
+		return false, e
+	}
 	if transferencia.Estado != models.ValidandoKYC {
 		return false, tx.Commit(ctx)
 	}
@@ -81,7 +88,7 @@ func (r *Postgres) ProcesarResultadoKYC(ctx context.Context, m events.SobreMensa
 		if e = insertarSalida(ctx, tx, events.EventoRechazada, m.IDCorrelacion, datosTransferencia(transferencia, models.Rechazada, codigo, res.Motivo), false); e != nil {
 			return false, e
 		}
-		return true, tx.Commit(ctx)
+		return commitEstado(ctx, tx, transferencia.IDTransferencia)
 	}
 	if _, e = tx.Exec(ctx, `UPDATE transferencias SET estado='VALIDANDO_CUENTAS',fecha_actualizacion=NOW() WHERE id_transferencia=$1`, transferencia.IDTransferencia); e != nil {
 		return false, e
@@ -90,7 +97,7 @@ func (r *Postgres) ProcesarResultadoKYC(ctx context.Context, m events.SobreMensa
 	if e = insertarSalida(ctx, tx, events.ComandoValidarCuentas, m.IDCorrelacion, solicitud, true); e != nil {
 		return false, e
 	}
-	return true, tx.Commit(ctx)
+	return commitEstado(ctx, tx, transferencia.IDTransferencia)
 }
 
 func (r *Postgres) ProcesarResultadoCuentas(ctx context.Context, m events.SobreMensaje, res events.ResultadoValidacionCuentas) (bool, error) {
@@ -116,6 +123,10 @@ func (r *Postgres) ProcesarResultadoCuentas(ctx context.Context, m events.SobreM
 	if e != nil {
 		return false, e
 	}
+	ctx, e = resumeTransfer(ctx, tx, transferencia.IDTransferencia)
+	if e != nil {
+		return false, e
+	}
 	if transferencia.Estado != models.ValidandoCuentas {
 		return false, tx.Commit(ctx)
 	}
@@ -130,7 +141,7 @@ func (r *Postgres) ProcesarResultadoCuentas(ctx context.Context, m events.SobreM
 		if e = insertarSalida(ctx, tx, events.EventoRechazada, m.IDCorrelacion, datosTransferencia(transferencia, models.Rechazada, codigo, res.Motivo), false); e != nil {
 			return false, e
 		}
-		return true, tx.Commit(ctx)
+		return commitEstado(ctx, tx, transferencia.IDTransferencia)
 	}
 	if _, e = tx.Exec(ctx, `UPDATE transferencias SET estado='PENDIENTE',fecha_actualizacion=NOW() WHERE id_transferencia=$1`, transferencia.IDTransferencia); e != nil {
 		return false, e
@@ -139,7 +150,7 @@ func (r *Postgres) ProcesarResultadoCuentas(ctx context.Context, m events.SobreM
 	if e = insertarSalida(ctx, tx, events.ComandoDebito, m.IDCorrelacion, solicitud, true); e != nil {
 		return false, e
 	}
-	return true, tx.Commit(ctx)
+	return commitEstado(ctx, tx, transferencia.IDTransferencia)
 }
 
 func (r *Postgres) ProcesarResultado(ctx context.Context, m events.SobreMensaje, res events.ResultadoMovimiento) (bool, error) {
@@ -158,10 +169,14 @@ func (r *Postgres) ProcesarResultado(ctx context.Context, m events.SobreMensaje,
 		return false, tx.Commit(ctx)
 	}
 	var t models.Transferencia
-	e = tx.QueryRow(ctx, `SELECT id_transferencia,id_cliente,id_cuenta_origen,id_cuenta_destino,id_correlacion,monto_centavos,moneda,descripcion,estado,codigo_error,resultado_externo_simulado,fecha_creacion,fecha_actualizacion FROM transferencias WHERE id_transferencia=$1 FOR UPDATE`, res.IDOperacion).Scan(&t.IDTransferencia, &t.IDCliente, &t.IDCuentaOrigen, &t.IDCuentaDestino, &t.IDCorrelacion, &t.MontoCentavos, &t.Moneda, &t.Descripcion, &t.Estado, &t.CodigoError, &t.ResultadoExternoSimulado, &t.FechaCreacion, &t.FechaActualizacion)
+	e = tx.QueryRow(ctx, `SELECT id_transferencia,id_cliente,id_cuenta_origen,id_cuenta_destino,id_correlacion,monto_centavos,moneda,descripcion,estado,codigo_error,resultado_externo_simulado,fecha_creacion,fecha_actualizacion,trace_id FROM transferencias WHERE id_transferencia=$1 FOR UPDATE`, res.IDOperacion).Scan(&t.IDTransferencia, &t.IDCliente, &t.IDCuentaOrigen, &t.IDCuentaDestino, &t.IDCorrelacion, &t.MontoCentavos, &t.Moneda, &t.Descripcion, &t.Estado, &t.CodigoError, &t.ResultadoExternoSimulado, &t.FechaCreacion, &t.FechaActualizacion, &t.TraceID)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return false, ErrNoEncontrada
 	}
+	if e != nil {
+		return false, e
+	}
+	ctx, e = resumeTransfer(ctx, tx, t.IDTransferencia)
 	if e != nil {
 		return false, e
 	}
@@ -250,7 +265,7 @@ func (r *Postgres) ProcesarResultado(ctx context.Context, m events.SobreMensaje,
 			return false, e
 		}
 	}
-	return true, tx.Commit(ctx)
+	return commitEstado(ctx, tx, t.IDTransferencia)
 }
 
 func datosTransferencia(t models.Transferencia, estado models.Estado, codigo, motivo string) map[string]any {
@@ -277,7 +292,7 @@ func (r *Postgres) Consultar(ctx context.Context, id uuid.UUID) (models.Transfer
 	ctx, finishDatabase := telemetry.Database(ctx, "Consultar")
 	defer finishDatabase()
 	var t models.Transferencia
-	e := r.db.QueryRow(ctx, `SELECT id_transferencia,id_cliente,id_cuenta_origen,id_cuenta_destino,id_correlacion,monto_centavos,moneda,descripcion,estado,codigo_error,resultado_externo_simulado,fecha_creacion,fecha_actualizacion FROM transferencias WHERE id_transferencia=$1`, id).Scan(&t.IDTransferencia, &t.IDCliente, &t.IDCuentaOrigen, &t.IDCuentaDestino, &t.IDCorrelacion, &t.MontoCentavos, &t.Moneda, &t.Descripcion, &t.Estado, &t.CodigoError, &t.ResultadoExternoSimulado, &t.FechaCreacion, &t.FechaActualizacion)
+	e := r.db.QueryRow(ctx, `SELECT id_transferencia,id_cliente,id_cuenta_origen,id_cuenta_destino,id_correlacion,monto_centavos,moneda,descripcion,estado,codigo_error,resultado_externo_simulado,fecha_creacion,fecha_actualizacion,trace_id FROM transferencias WHERE id_transferencia=$1`, id).Scan(&t.IDTransferencia, &t.IDCliente, &t.IDCuentaOrigen, &t.IDCuentaDestino, &t.IDCorrelacion, &t.MontoCentavos, &t.Moneda, &t.Descripcion, &t.Estado, &t.CodigoError, &t.ResultadoExternoSimulado, &t.FechaCreacion, &t.FechaActualizacion, &t.TraceID)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return t, ErrNoEncontrada
 	}
@@ -293,7 +308,7 @@ func (r *Postgres) Historial(ctx context.Context, p events.SolicitudHistorial) (
 	if off < 0 {
 		off = 0
 	}
-	consulta := `SELECT id_transferencia,id_cliente,id_cuenta_origen,id_cuenta_destino,id_correlacion,monto_centavos,moneda,descripcion,estado,codigo_error,resultado_externo_simulado,fecha_creacion,fecha_actualizacion FROM transferencias WHERE id_cliente=$1`
+	consulta := `SELECT id_transferencia,id_cliente,id_cuenta_origen,id_cuenta_destino,id_correlacion,monto_centavos,moneda,descripcion,estado,codigo_error,resultado_externo_simulado,fecha_creacion,fecha_actualizacion,trace_id FROM transferencias WHERE id_cliente=$1`
 	argumentos := []any{p.IDCliente}
 	posicion := 2
 	if p.IDCuenta != nil {
@@ -338,7 +353,7 @@ func (r *Postgres) Historial(ctx context.Context, p events.SolicitudHistorial) (
 	lista := []models.Transferencia{}
 	for rows.Next() {
 		var t models.Transferencia
-		if e = rows.Scan(&t.IDTransferencia, &t.IDCliente, &t.IDCuentaOrigen, &t.IDCuentaDestino, &t.IDCorrelacion, &t.MontoCentavos, &t.Moneda, &t.Descripcion, &t.Estado, &t.CodigoError, &t.ResultadoExternoSimulado, &t.FechaCreacion, &t.FechaActualizacion); e != nil {
+		if e = rows.Scan(&t.IDTransferencia, &t.IDCliente, &t.IDCuentaOrigen, &t.IDCuentaDestino, &t.IDCorrelacion, &t.MontoCentavos, &t.Moneda, &t.Descripcion, &t.Estado, &t.CodigoError, &t.ResultadoExternoSimulado, &t.FechaCreacion, &t.FechaActualizacion, &t.TraceID); e != nil {
 			return nil, e
 		}
 		lista = append(lista, t)

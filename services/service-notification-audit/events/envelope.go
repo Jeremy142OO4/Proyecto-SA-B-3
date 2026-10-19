@@ -27,6 +27,7 @@ type ActivationEmailPayload struct {
 }
 
 const (
+	ComandoSLO            = "auditoria.slo.solicitada"
 	ComandoRegistros      = "auditoria.registros.solicitados"
 	ComandoTraza          = "auditoria.traza.solicitada"
 	ComandoNotificaciones = "auditoria.notificaciones.solicitadas"

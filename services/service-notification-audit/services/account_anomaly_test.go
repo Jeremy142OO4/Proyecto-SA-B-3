@@ -57,3 +57,34 @@ func TestBlockedAccountEmailIncludesReasonAndHistoryAccess(t *testing.T) {
 		t.Fatal("blocked-account receipt must explain reason and read-only access")
 	}
 }
+
+func TestTransferNotificationHasTransactionID(t *testing.T) {
+	notifications := &fakeNotificationRepository{}
+	email := &anomalyEmail{}
+	svc := NewAuditService(&fakeAuditRepository{}, notifications, &fakeIdempotencyRepository{processed: map[uuid.UUID]bool{}}, email)
+	id := uuid.New()
+	envelope := newTestEnvelope("transferencia.completada", map[string]any{"idTransferencia": id, "idCliente": uuid.New(), "correo": "test@example.test", "idCuentaOrigen": uuid.New(), "idCuentaDestino": uuid.New()})
+	if e := svc.ProcessEvent(context.Background(), envelope); e != nil {
+		t.Fatal(e)
+	}
+	if email.sent != 1 || !strings.Contains(email.body, "id_transaccion") || !strings.Contains(email.body, id.String()) {
+		t.Fatal("transaction ID missing from notification receipt")
+	}
+	if len(notifications.logs) != 1 || !strings.Contains(string(notifications.logs[0].Details), id.String()) {
+		t.Fatal("transaction ID missing from notification details")
+	}
+}
+
+func TestPaymentCompensationFailureIsRecordedAndNotified(t *testing.T) {
+	audit := &fakeAuditRepository{}
+	notifications := &fakeNotificationRepository{}
+	email := &anomalyEmail{}
+	svc := NewAuditService(audit, notifications, &fakeIdempotencyRepository{processed: map[uuid.UUID]bool{}}, email)
+	envelope := newTestEnvelope("pago.compensacion.fallida", map[string]any{"idPago": uuid.New(), "idCliente": uuid.New(), "correo": "test@example.test", "estado": "COMPENSACION_FALLIDA", "codigo": "COMPENSACION_RECHAZADA"})
+	if err := svc.ProcessEvent(context.Background(), envelope); err != nil {
+		t.Fatal(err)
+	}
+	if len(audit.logs) != 1 || audit.logs[0].Severity != models.EventError || len(notifications.logs) != 1 || notifications.logs[0].NotificationType != "PAYMENT_COMPENSATION_FAILED" || email.sent != 1 {
+		t.Fatal("compensation failure must be audited and notified as error")
+	}
+}

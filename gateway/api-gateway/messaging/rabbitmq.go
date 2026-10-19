@@ -97,11 +97,11 @@ func estadoOperacion(t string) string {
 		return "RECHAZADO"
 	case "pago.procesando", "transferencia.procesando":
 		return "PROCESANDO"
-	case "transferencia.compensando":
+	case "pago.compensando", "transferencia.compensando":
 		return "COMPENSANDO"
 	case "transferencia.compensada":
 		return "COMPENSADA"
-	case "transferencia.compensacion.fallida":
+	case "pago.compensacion.fallida", "transferencia.compensacion.fallida":
 		return "COMPENSACION_FALLIDA"
 	}
 	return ""

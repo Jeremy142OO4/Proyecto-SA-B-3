@@ -376,6 +376,24 @@ jobs:
         if: true && env.OMITIR_PRUEBAS != 'true'
         run: go test -v -count=1 ./test/e2e
 
+      - name: Verificar Saga y telemetria con PostgreSQL aislado
+        if: env.OMITIR_PRUEBAS != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="transaction-observability-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+          docker run -d --rm --name "$name" -e POSTGRES_HOST_AUTH_METHOD=trust -p 127.0.0.1::5432 postgres:17-alpine
+          ready=false
+          for attempt in {1..60}; do
+            if docker exec "$name" pg_isready -h 127.0.0.1 -U postgres; then ready=true; break; fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then docker logs "$name"; exit 1; fi
+          port="$(docker port "$name" 5432/tcp | cut -d: -f2)"
+          TEST_DATABASE_URL="postgres://postgres@127.0.0.1:${port}/postgres?sslmode=disable" \
+            go test -race -count=1 -run '^TestTransferFlowObservabilityDatabase$' ./repositories
+
       - name: Validacion estatica
         run: go vet ./...
 
@@ -418,6 +436,24 @@ jobs:
         if: true && env.OMITIR_PRUEBAS != 'true'
         run: go test -v -count=1 ./test/e2e
 
+      - name: Verificar simulacion y compensaciones con PostgreSQL aislado
+        if: env.OMITIR_PRUEBAS != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="payment-simulation-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+          docker run -d --rm --name "$name" -e POSTGRES_HOST_AUTH_METHOD=trust -p 127.0.0.1::5432 postgres:17-alpine
+          ready=false
+          for attempt in {1..60}; do
+            if docker exec "$name" pg_isready -h 127.0.0.1 -U postgres; then ready=true; break; fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then docker logs "$name"; exit 1; fi
+          port="$(docker port "$name" 5432/tcp | cut -d: -f2)"
+          TEST_DATABASE_URL="postgres://postgres@127.0.0.1:${port}/postgres?sslmode=disable" \
+            go test -race -count=1 -run '^TestAdvancedPaymentSimulationDatabase$' ./repositories
+
       - name: Validacion estatica
         run: go vet ./...
 
@@ -459,6 +495,27 @@ jobs:
       - name: Pruebas E2E por categoria
         if: true && env.OMITIR_PRUEBAS != 'true'
         run: go test -v -count=1 ./test/e2e
+
+      - name: Verificar auditoria historica y notificaciones con PostgreSQL aislado
+        if: env.OMITIR_PRUEBAS != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="audit-history-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+          docker run -d --rm --name "$name" -e POSTGRES_HOST_AUTH_METHOD=trust -p 127.0.0.1::5432 postgres:17-alpine
+          ready=false
+          for attempt in {1..60}; do
+            if docker exec "$name" pg_isready -h 127.0.0.1 -U postgres; then ready=true; break; fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then docker logs "$name"; exit 1; fi
+          port="$(docker port "$name" 5432/tcp | cut -d: -f2)"
+          # Both test packages create isolated schemas concurrently. Keep the
+          # UUID extension in public so neither schema owns/removes it.
+          docker exec "$name" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public'
+          TEST_AUDIT_DATABASE_URL="postgres://postgres@127.0.0.1:${port}/postgres?sslmode=disable" \
+            go test -race -count=1 ./repositories ./services
 
       - name: Validacion estatica
         run: go vet ./...

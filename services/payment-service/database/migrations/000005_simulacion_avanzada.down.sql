@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS simulaciones_pago;
+DROP TABLE IF EXISTS configuracion_simulacion_pagos;
+ALTER TABLE pagos DROP COLUMN IF EXISTS trace_context;
+-- Refuse the rollback if unresolved compensation failures still exist.
+ALTER TABLE pagos DROP CONSTRAINT IF EXISTS ck_pagos_estado;
+ALTER TABLE pagos ADD CONSTRAINT ck_pagos_estado CHECK(estado IN ('PENDIENTE','VALIDANDO_KYC','VALIDANDO_CUENTA','PROCESANDO','COMPENSANDO','COMPLETADO','RECHAZADO'));

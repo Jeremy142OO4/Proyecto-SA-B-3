@@ -6,6 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
 	"io"
 	"log"
 	"log/slog"
@@ -32,6 +35,12 @@ import (
 )
 
 var BuildVersion = "unknown"
+var prometheusRegistry = prometheus.NewRegistry()
+
+func MetricsHandler() http.Handler {
+	return promhttp.HandlerFor(prometheusRegistry, promhttp.HandlerOpts{})
+}
+
 var metricIdentity []attribute.KeyValue
 var knownEvents = map[string]bool{"auditoria.error.http": true, "auditoria.notificaciones.solicitadas": true, "auditoria.registros.solicitados": true, "auditoria.traza.solicitada": true, "cliente.activacion.solicitada": true, "cliente.activado": true, "cliente.actualizacion.solicitada": true, "cliente.actualizado": true, "cliente.creado": true, "cliente.dpi.consulta.solicitada": true, "cliente.estado.actualizado": true, "cliente.estado.solicitado": true, "cliente.kyc.estado.actualizado": true, "cliente.kyc.estado.solicitado": true, "cliente.kyc.rechazado": true, "cliente.kyc.validacion.solicitada": true, "cliente.kyc.verificado": true, "cliente.listado.solicitado": true, "cliente.login.solicitado": true, "cliente.perfil.respondido": true, "cliente.perfil.solicitado": true, "cliente.rechazado": true, "cliente.registro.solicitado": true, "cliente.validacion.fallida": true, "cliente.validacion.solicitada": true, "cliente.validado": true, "cuenta.acreditada": true, "cuenta.comando.fallido": true, "cuenta.compensacion.rechazada": true, "cuenta.compensacion.solicitada": true, "cuenta.compensada": true, "cuenta.consulta.solicitada": true, "cuenta.consultada": true, "cuenta.creacion.rechazada": true, "cuenta.creacion.solicitada": true, "cuenta.creada": true, "cuenta.credito.rechazado": true, "cuenta.credito.solicitado": true, "cuenta.debitada": true, "cuenta.debito.rechazado": true, "cuenta.debito.solicitado": true, "cuenta.desactivada": true, "cuenta.historial.consultado": true, "cuenta.historial.solicitado": true, "cuenta.movimientos.consultados": true, "cuenta.movimientos.solicitados": true, "cuenta.transferencia.rechazada": true, "cuenta.transferencia.validacion.solicitada": true, "cuenta.transferencia.validada": true, "notificacion.correo-activacion.solicitado": true, "pago.completado": true, "pago.consulta.solicitada": true, "pago.consultado": true, "pago.historial.consultado": true, "pago.historial.solicitado": true, "pago.mensaje.fallido": true, "pago.procesamiento.solicitado": true, "pago.procesando": true, "pago.rechazado": true, "pago.timeout": true, "transferencia.compensacion.fallida": true, "transferencia.compensada": true, "transferencia.compensando": true, "transferencia.completada": true, "transferencia.consulta.solicitada": true, "transferencia.consultada": true, "transferencia.historial.consultado": true, "transferencia.historial.solicitado": true, "transferencia.procesando": true, "transferencia.rechazada": true, "transferencia.solicitada": true}
 
@@ -83,6 +92,13 @@ func Setup(service string) func() {
 	}
 	opts := []sdktrace.TracerProviderOption{sdktrace.WithResource(res), sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.TraceIDRatioBased(ratio)))}
 	metricOpts := []sdkmetric.Option{sdkmetric.WithResource(res)}
+	prometheusRegistry = prometheus.NewRegistry()
+	promExporter, promErr := otelprom.New(otelprom.WithRegisterer(prometheusRegistry))
+	if promErr == nil {
+		metricOpts = append(metricOpts, sdkmetric.WithReader(promExporter))
+	} else {
+		slog.Error("prometheus exporter configuration invalid", "errorCode", "OTEL_CONFIG")
+	}
 	if os.Getenv("OTEL_SDK_DISABLED") != "true" {
 		if firstEnv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT") != "" {
 			exporter, err := otlptracehttp.New(context.Background(), otlptracehttp.WithTimeout(2*time.Second))

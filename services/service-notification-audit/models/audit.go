@@ -8,6 +8,7 @@ import (
 )
 
 type AuditLog struct {
+	TraceID       string          `db:"trace_id" json:"traceId,omitempty"`
 	ID            uuid.UUID       `db:"id" json:"id"`
 	EventID       uuid.UUID       `db:"event_id" json:"eventId"`
 	CorrelationID uuid.UUID       `db:"correlation_id" json:"correlationId"`

@@ -8,6 +8,7 @@ import (
 	"github.com/Proyecto-SA-B-3/payment-service/events"
 	"github.com/Proyecto-SA-B-3/payment-service/internal/telemetry"
 	"github.com/Proyecto-SA-B-3/payment-service/messaging"
+	"github.com/Proyecto-SA-B-3/payment-service/repositories"
 	"github.com/Proyecto-SA-B-3/payment-service/services"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"log/slog"
@@ -19,15 +20,24 @@ type ConsumidorPagos struct {
 	servicio         services.ServicioPagos
 	publicador       *messaging.Publicador
 	maximoReintentos int
+	administrador    interface {
+		AdministrarSimulacion(context.Context, events.SobreMensaje) error
+	}
 }
 
-func NuevoConsumidorPagos(c *amqp.Connection, s services.ServicioPagos, publicador *messaging.Publicador, maximo int) (*ConsumidorPagos, error) {
+func NuevoConsumidorPagos(c *amqp.Connection, s services.ServicioPagos, publicador *messaging.Publicador, maximo int, admin ...interface {
+	AdministrarSimulacion(context.Context, events.SobreMensaje) error
+}) (*ConsumidorPagos, error) {
 	ch, e := c.Channel()
 	if e != nil {
 		return nil, e
 	}
 	_ = ch.Qos(10, 0, false)
-	return &ConsumidorPagos{canal: ch, servicio: s, publicador: publicador, maximoReintentos: maximo}, nil
+	consumer := &ConsumidorPagos{canal: ch, servicio: s, publicador: publicador, maximoReintentos: maximo}
+	if len(admin) > 0 {
+		consumer.administrador = admin[0]
+	}
+	return consumer, nil
 }
 func (c *ConsumidorPagos) Cerrar() error { return c.canal.Close() }
 func (c *ConsumidorPagos) Ejecutar(ctx context.Context, cola, nombre string) error {
@@ -84,6 +94,12 @@ func (c *ConsumidorPagos) procesar(ctx context.Context, d amqp.Delivery) (result
 	if m.Tipo == "" {
 		m.Tipo = d.RoutingKey
 	}
+	if d.RoutingKey == repositories.ConsultarSimulacion || d.RoutingKey == repositories.ActualizarSimulacion {
+		if c.administrador == nil {
+			return fmt.Errorf("administracion no disponible")
+		}
+		return c.administrador.AdministrarSimulacion(ctx, m)
+	}
 	if d.RoutingKey == events.ComandoProcesarPago {
 		var s events.SolicitudPago
 		if e := json.Unmarshal(m.Contenido, &s); e != nil {
@@ -127,7 +143,7 @@ func (c *ConsumidorPagos) procesar(ctx context.Context, d amqp.Delivery) (result
 		}
 		return c.servicio.ProcesarResultadoValidacionCuenta(ctx, m, r)
 	}
-	for _, tipo := range []string{events.EventoCuentaDebitada, events.EventoDebitoRechazado, events.EventoCuentaCompensada} {
+	for _, tipo := range []string{events.EventoCuentaDebitada, events.EventoDebitoRechazado, events.EventoCuentaCompensada, events.EventoCompensacionRechazada} {
 		if d.RoutingKey == tipo {
 			var r events.ResultadoMovimiento
 			if e := json.Unmarshal(m.Contenido, &r); e != nil {

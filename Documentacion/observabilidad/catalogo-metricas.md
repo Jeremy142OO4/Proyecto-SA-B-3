@@ -70,3 +70,13 @@ Las alertas de burn rate necesitan muestras suficientes y señal separada para b
 ## Particularidades interbancarias
 
 Separar operaciones internas de interbancarias. El plazo contractual de 180 s y la reserva hasta resolución o expiración más 300 s no son automáticamente un SLO de latencia. TIMEOUT no significa fracaso definitivo ni autoriza liberar fondos anticipadamente. Medir resolución, reservas pendientes y callbacks tardíos sin alterar esas reglas. El SLO interbancario debe acordarse y documentarse antes de anunciar cumplimiento.
+
+
+## Transaction Service: métricas implementadas
+
+`bank_transfer_flow_duration_seconds_bucket` (con `_sum` y `_count`) es el histograma del flujo completo hasta un resultado terminal. `bank_transfer_results_total` cuenta resultados terminales con `outcome=success|failure`. Ambas usan etiquetas de servicio y entorno; los identificadores solo aparecen en trazas y logs. La referencia de consultas p50/p95/p99, tasa de error, endpoints y limitaciones de reinicios/ventana posterior al commit está en [Transaction Service](transaction-service.md).
+
+
+## Payment Service: métricas implementadas
+
+`bank_payment_external_results_total{outcome="success|failure|timeout"}` cuenta resultados lógicos de la simulación confirmados en base. `bank_payment_external_duration_seconds_bucket` (con `_sum` y `_count`) permite calcular p95 sobre la latencia del proveedor simulado. Solo incluyen pagos externos; se registran después del commit. Consultas, configuración en ejecución, endpoints, criterios de compensación y límites de medición están en [Payment Service](payment-service.md).

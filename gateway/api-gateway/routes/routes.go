@@ -42,9 +42,13 @@ func Registrar(app *fiber.App, g *controllers.Gateway, clientes *controllers.Con
 	autenticadas.Post("/transferencias", middleware.AutorizarRoles("CLIENTE"), g.Transferir)
 	autenticadas.Get("/transferencias/:idTransferencia", middleware.AutorizarRoles("CLIENTE"), g.ConsultarTransferencia)
 
+	autenticadas.Post("/administracion/alertas/slo", middleware.AutorizarRoles("ADMIN"), auditoria.RegistrarAlertaSLO)
+	autenticadas.Get("/auditoria/trazas/:traceId", middleware.AutorizarRoles("ADMIN"), auditoria.Registros)
 	autenticadas.Get("/auditoria/registros", middleware.AutorizarRoles("ADMIN"), auditoria.Registros)
 	autenticadas.Get("/auditoria/traza/:idCorrelacion", middleware.AutorizarRoles("ADMIN"), auditoria.Traza)
 	autenticadas.Get("/auditoria/notificaciones", middleware.AutorizarRoles("ADMIN"), auditoria.Notificaciones)
+	autenticadas.Get("/administracion/pagos/simulacion", middleware.AutorizarRoles("ADMIN"), g.ConsultarSimulacionPagos)
+	autenticadas.Put("/administracion/pagos/simulacion", middleware.AutorizarRoles("ADMIN"), g.ConfigurarSimulacionPagos)
 	autenticadas.Get("/administracion/cuentas", middleware.AutorizarRoles("ADMIN"), g.AdministrarCuentas)
 	autenticadas.Get("/administracion/cuentas/monitoreo", middleware.AutorizarRoles("ADMIN"), g.ConsultarMonitoreoCuentas)
 	autenticadas.Put("/administracion/cuentas/monitoreo", middleware.AutorizarRoles("ADMIN"), g.ConfigurarMonitoreoCuentas)

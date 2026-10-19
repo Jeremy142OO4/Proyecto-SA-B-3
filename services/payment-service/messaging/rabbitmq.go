@@ -45,12 +45,12 @@ func DeclararTopologia(ch *amqp.Channel) error {
 	if e := ch.QueueBind(ColaComandos, events.ComandoProcesarPago, IntercambioComandos, false, nil); e != nil {
 		return e
 	}
-	for _, clave := range []string{events.ComandoConsultarPago, events.ComandoListarPagos} {
+	for _, clave := range []string{events.ComandoConsultarPago, events.ComandoListarPagos, "pago.simulacion.consulta.solicitada", "pago.simulacion.actualizacion.solicitada"} {
 		if e := ch.QueueBind(ColaComandos, clave, IntercambioComandos, false, nil); e != nil {
 			return e
 		}
 	}
-	for _, k := range []string{events.EventoCuentaDebitada, events.EventoDebitoRechazado, events.EventoCuentaCompensada, events.EventoKYCVerificado, events.EventoKYCRechazado, events.EventoCuentaValidada, events.EventoCuentaRechazada} {
+	for _, k := range []string{events.EventoCuentaDebitada, events.EventoDebitoRechazado, events.EventoCuentaCompensada, events.EventoCompensacionRechazada, events.EventoKYCVerificado, events.EventoKYCRechazado, events.EventoCuentaValidada, events.EventoCuentaRechazada} {
 		if e := ch.QueueBind(ColaEventosCuenta, k, IntercambioEventos, false, nil); e != nil {
 			return e
 		}

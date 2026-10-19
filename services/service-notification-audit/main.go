@@ -47,7 +47,7 @@ func main() {
 		cfg.SMTPFrom,
 	)
 
-	auditSvc := services.NewAuditService(auditRepo, notifRepo, idempotencyRepo, emailSender)
+	auditSvc := services.NewAuditService(auditRepo, notifRepo, idempotencyRepo, emailSender, cfg.SLORecipient)
 	controller := controllers.NewAuditController(auditSvc)
 
 	// 3. Conexión y Consumidor de RabbitMQ

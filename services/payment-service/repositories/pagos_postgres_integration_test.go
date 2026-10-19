@@ -47,6 +47,13 @@ func TestIntegracionEscenariosSimulados(t *testing.T) {
 			if err != nil || !creado {
 				t.Fatalf("iniciar pago: creado=%v error=%v", creado, err)
 			}
+
+			if err = repositorio.ProcesarResultadoKYC(ctx, events.SobreMensaje{IDMensaje: uuid.New(), IDCorrelacion: correlacion, Tipo: events.EventoKYCVerificado}, events.ResultadoValidacionKYC{IDOperacion: idPago, IDCliente: idCliente, Valido: true}); err != nil {
+				t.Fatal(err)
+			}
+			if err = repositorio.ProcesarResultadoValidacionCuenta(ctx, events.SobreMensaje{IDMensaje: uuid.New(), IDCorrelacion: correlacion, Tipo: events.EventoCuentaValidada}, events.ResultadoValidacionCuenta{IDOperacion: idPago, IDCliente: idCliente, Valida: true}); err != nil {
+				t.Fatal(err)
+			}
 			_, err = repositorio.ProcesarResultadoCuenta(ctx, events.SobreMensaje{IDMensaje: uuid.New(), IDCorrelacion: correlacion, Tipo: events.EventoCuentaDebitada}, events.ResultadoMovimiento{IDOperacion: idPago})
 			if err != nil {
 				t.Fatalf("procesar débito: %v", err)

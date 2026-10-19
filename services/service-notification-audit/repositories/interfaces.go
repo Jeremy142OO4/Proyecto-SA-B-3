@@ -9,6 +9,7 @@ import (
 )
 
 type AuditRepository interface {
+	QueryAuditLogs(context.Context, models.AuditFilter) ([]*models.AuditLog, error)
 	SaveAuditLog(ctx context.Context, log *models.AuditLog) error
 	GetAuditLogsByCorrelationID(ctx context.Context, correlationID uuid.UUID) ([]*models.AuditLog, error)
 	GetRecentAuditLogs(ctx context.Context, limit int) ([]*models.AuditLog, error)

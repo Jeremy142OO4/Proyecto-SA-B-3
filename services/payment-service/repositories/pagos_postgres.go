@@ -11,6 +11,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"time"
 )
 
@@ -23,6 +26,9 @@ func NuevoRepositorioPagosPostgres(c *pgxpool.Pool) *RepositorioPagosPostgres {
 }
 
 func (r *RepositorioPagosPostgres) Iniciar(ctx context.Context, m events.SobreMensaje, s events.SolicitudPago) (*models.Pago, bool, error) {
+	ctx, span := otel.Tracer("bank-usac").Start(ctx, "pago.inicio", trace.WithAttributes(attribute.String("payment.id", s.IDPago.String())))
+	defer span.End()
+	ctx = telemetry.WithCorrelation(ctx, m.IDCorrelacion.String())
 	ctx, finishDatabase := telemetry.Database(ctx, "Iniciar")
 	defer finishDatabase()
 	tx, err := r.conexion.Begin(ctx)
@@ -43,7 +49,7 @@ func (r *RepositorioPagosPostgres) Iniciar(ctx context.Context, m events.SobreMe
 	}
 	ahora := time.Now().UTC()
 	p := &models.Pago{IDPago: s.IDPago, IDCliente: s.IDCliente, IDCuentaOrigen: s.IDCuentaOrigen, Beneficiario: s.Beneficiario, Concepto: s.Concepto, MontoCentavos: s.MontoCentavos, Moneda: "GTQ", TipoPago: models.TipoPago(s.TipoPago), ResultadoSimulado: models.ResultadoSimulado(s.ResultadoSimulado), Estado: models.EstadoPagoValidandoKYC, IDCorrelacion: m.IDCorrelacion, FechaCreacion: ahora, FechaActualizacion: ahora}
-	_, err = tx.Exec(ctx, `INSERT INTO pagos(id_pago,id_cliente,id_cuenta_origen,beneficiario,concepto,monto_centavos,moneda,tipo_pago,resultado_simulado,estado,id_correlacion,fecha_creacion,fecha_actualizacion)VALUES($1,$2,$3,$4,$5,$6,'GTQ',$7,$8,'VALIDANDO_KYC',$9,$10,$10)`, p.IDPago, p.IDCliente, p.IDCuentaOrigen, p.Beneficiario, p.Concepto, p.MontoCentavos, p.TipoPago, p.ResultadoSimulado, p.IDCorrelacion, ahora)
+	_, err = tx.Exec(ctx, `INSERT INTO pagos(id_pago,id_cliente,id_cuenta_origen,beneficiario,concepto,monto_centavos,moneda,tipo_pago,resultado_simulado,estado,id_correlacion,fecha_creacion,fecha_actualizacion,trace_context)VALUES($1,$2,$3,$4,$5,$6,'GTQ',$7,$8,'VALIDANDO_KYC',$9,$10,$10,$11)`, p.IDPago, p.IDCliente, p.IDCuentaOrigen, p.Beneficiario, p.Concepto, p.MontoCentavos, p.TipoPago, p.ResultadoSimulado, p.IDCorrelacion, ahora, telemetry.Serialize(ctx))
 	if err != nil {
 		return nil, false, fmt.Errorf("guardar pago: %w", err)
 	}
@@ -80,6 +86,13 @@ func (r *RepositorioPagosPostgres) ProcesarResultadoKYC(ctx context.Context, m e
 	if errors.Is(err, ErrPagoNoEncontrado) {
 		return ErrPagoNoEncontrado
 	}
+	if err != nil {
+		return err
+	}
+	if pago.Estado != models.EstadoPagoValidandoKYC {
+		return tx.Commit(ctx)
+	}
+	ctx, err = r.contextoPago(ctx, tx, pago)
 	if err != nil {
 		return err
 	}
@@ -132,6 +145,13 @@ func (r *RepositorioPagosPostgres) ProcesarResultadoValidacionCuenta(ctx context
 	if err != nil {
 		return err
 	}
+	if pago.Estado != models.EstadoPagoValidandoCuenta {
+		return tx.Commit(ctx)
+	}
+	ctx, err = r.contextoPago(ctx, tx, pago)
+	if err != nil {
+		return err
+	}
 	if m.Tipo == events.EventoCuentaRechazada || !resultado.Valida {
 		motivo := resultado.Motivo
 		if motivo == "" {
@@ -167,6 +187,17 @@ func (r *RepositorioPagosPostgres) ProcesarResultadoValidacionCuenta(ctx context
 }
 
 func (r *RepositorioPagosPostgres) ProcesarResultadoCuenta(ctx context.Context, m events.SobreMensaje, respuesta events.ResultadoMovimiento) (bool, error) {
+	ctx = telemetry.WithCorrelation(ctx, m.IDCorrelacion.String())
+	var plan *planProveedor
+	if m.Tipo == events.EventoCuentaDebitada {
+		var finish func()
+		var err error
+		ctx, plan, finish, err = r.esperarProveedor(ctx, respuesta.IDOperacion)
+		if err != nil {
+			return false, err
+		}
+		defer finish()
+	}
 	ctx, finishDatabase := telemetry.Database(ctx, "ProcesarResultadoCuenta")
 	defer finishDatabase()
 	tx, err := r.conexion.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
@@ -185,8 +216,16 @@ func (r *RepositorioPagosPostgres) ProcesarResultadoCuenta(ctx context.Context, 
 	if err != nil {
 		return false, err
 	}
+	ctx, err = r.contextoPago(ctx, tx, pago)
+	if err != nil {
+		return false, err
+	}
+	var externalDuration float64
 	switch m.Tipo {
 	case events.EventoDebitoRechazado:
+		if pago.Estado != models.EstadoPagoProcesando {
+			return false, tx.Commit(ctx)
+		}
 		pago.Estado = models.EstadoPagoRechazado
 		pago.MotivoRechazo = respuesta.Mensaje
 		if pago.MotivoRechazo == "" {
@@ -201,6 +240,15 @@ func (r *RepositorioPagosPostgres) ProcesarResultadoCuenta(ctx context.Context, 
 		contenido, _ := json.Marshal(pago)
 		err = insertarSalida(ctx, tx, events.EventoPagoRechazado, contenido, pago.IDCorrelacion)
 	case events.EventoCuentaDebitada:
+		if pago.Estado != models.EstadoPagoProcesando {
+			return false, tx.Commit(ctx)
+		}
+		if pago.TipoPago == models.TipoPagoExterno && plan == nil {
+			return false, fmt.Errorf("external simulation plan unavailable; retry event")
+		}
+		if plan != nil {
+			pago.ResultadoSimulado = plan.Resultado
+		}
 		if pago.TipoPago == models.TipoPagoExterno && pago.ResultadoSimulado != models.ResultadoExito {
 			pago.Estado = models.EstadoPagoCompensando
 			codigo := "PROVEEDOR_EXTERNO"
@@ -232,20 +280,62 @@ func (r *RepositorioPagosPostgres) ProcesarResultadoCuenta(ctx context.Context, 
 			err = insertarSalida(ctx, tx, events.EventoPagoCompletado, contenido, pago.IDCorrelacion)
 		}
 	case events.EventoCuentaCompensada:
+		if pago.Estado != models.EstadoPagoCompensando {
+			return false, tx.Commit(ctx)
+		}
 		pago.Estado = models.EstadoPagoRechazado
 		if err = actualizarPago(ctx, tx, pago); err != nil {
 			return false, err
 		}
 		contenido, _ := json.Marshal(pago)
 		err = insertarSalida(ctx, tx, events.EventoPagoRechazado, contenido, pago.IDCorrelacion)
+	case events.EventoCompensacionRechazada:
+		if pago.Estado != models.EstadoPagoCompensando {
+			return false, tx.Commit(ctx)
+		}
+		pago.Estado = models.EstadoPagoCompensacionFallida
+		if err = actualizarPago(ctx, tx, pago); err != nil {
+			return false, err
+		}
+		codigo := respuesta.Codigo
+		if codigo == "" {
+			codigo = "COMPENSACION_RECHAZADA"
+		}
+		contenido, _ := json.Marshal(map[string]any{"idPago": pago.IDPago, "idCliente": pago.IDCliente, "idCuentaOrigen": pago.IDCuentaOrigen, "estado": pago.Estado, "codigo": codigo, "motivo": respuesta.Mensaje})
+		err = insertarSalida(ctx, tx, "pago.compensacion.fallida", contenido, pago.IDCorrelacion)
 	default:
 		return false, fmt.Errorf("evento de cuenta no soportado: %s", m.Tipo)
 	}
 	if err != nil {
 		return false, err
 	}
+	if plan != nil {
+		if err = tx.QueryRow(ctx, `UPDATE simulaciones_pago SET finalizada_en=clock_timestamp(),duracion_segundos=EXTRACT(EPOCH FROM(clock_timestamp()-inicio)) WHERE id_pago=$1 AND finalizada_en IS NULL RETURNING duracion_segundos`, pago.IDPago).Scan(&externalDuration); err != nil {
+			return false, err
+		}
+		if plan.Resultado != models.ResultadoExito {
+			kind := "pago.proveedor.fallido"
+			if plan.Resultado == models.ResultadoTimeout {
+				kind = "pago.timeout"
+			}
+			b, _ := json.Marshal(map[string]any{"idPago": pago.IDPago, "idCliente": pago.IDCliente, "idCuentaOrigen": pago.IDCuentaOrigen, "codigo": "SIMULATED_EXTERNAL_" + string(plan.Resultado), "versionConfiguracion": plan.Version, "simulado": true})
+			if err = insertarSalida(ctx, tx, kind, b, pago.IDCorrelacion); err != nil {
+				return false, err
+			}
+			if err = insertarSalida(ctx, tx, "pago.compensando", b, pago.IDCorrelacion); err != nil {
+				return false, err
+			}
+		}
+	}
 	if err = tx.Commit(ctx); err != nil {
 		return false, err
+	}
+	if plan != nil {
+		telemetry.ProveedorConfirmado(ctx, string(plan.Resultado), externalDuration)
+	}
+	telemetry.PagoEstado(ctx, pago.IDPago.String(), string(pago.Estado))
+	if m.Tipo == events.EventoCuentaCompensada {
+		telemetry.PagoEstado(ctx, pago.IDPago.String(), "COMPENSATED")
 	}
 	return true, nil
 }
@@ -316,7 +406,7 @@ func (r *RepositorioPagosPostgres) ListarPorCliente(ctx context.Context, id uuid
 func actualizarPago(ctx context.Context, tx pgx.Tx, p *models.Pago) error {
 	ctx, finishDatabase := telemetry.Database(ctx, "actualizarPago")
 	defer finishDatabase()
-	_, err := tx.Exec(ctx, `UPDATE pagos SET estado=$1,referencia_externa=NULLIF($2,''),motivo_rechazo=NULLIF($3,''),fecha_actualizacion=NOW() WHERE id_pago=$4`, p.Estado, p.ReferenciaExterna, p.MotivoRechazo, p.IDPago)
+	_, err := tx.Exec(ctx, `UPDATE pagos SET estado=$1,referencia_externa=NULLIF($2,''),motivo_rechazo=NULLIF($3,''),resultado_simulado=$5,fecha_actualizacion=NOW() WHERE id_pago=$4`, p.Estado, p.ReferenciaExterna, p.MotivoRechazo, p.IDPago, p.ResultadoSimulado)
 	return err
 }
 func insertarSalida(ctx context.Context, tx pgx.Tx, tipo string, contenido []byte, correlacion uuid.UUID) error {

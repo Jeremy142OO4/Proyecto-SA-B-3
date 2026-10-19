@@ -69,12 +69,12 @@ func main() {
 			defer pubReintentos.Cerrar()
 
 			outbox := publishers.NuevoPublicadorOutbox(repo, pub, cfg.IntervaloOutbox)
-			consComandos, e := consumers.NuevoConsumidorPagos(rabbit, servicio, pubReintentos, cfg.MaximoReintentos)
+			consComandos, e := consumers.NuevoConsumidorPagos(rabbit, servicio, pubReintentos, cfg.MaximoReintentos, repo)
 			if e != nil {
 				return e
 			}
 			defer consComandos.Cerrar()
-			consEventos, e := consumers.NuevoConsumidorPagos(rabbit, servicio, pubReintentos, cfg.MaximoReintentos)
+			consEventos, e := consumers.NuevoConsumidorPagos(rabbit, servicio, pubReintentos, cfg.MaximoReintentos, repo)
 			if e != nil {
 				return e
 			}

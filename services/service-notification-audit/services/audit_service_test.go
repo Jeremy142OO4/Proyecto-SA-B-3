@@ -17,6 +17,10 @@ type fakeAuditRepository struct {
 	logs []*models.AuditLog
 }
 
+func (f *fakeAuditRepository) QueryAuditLogs(_ context.Context, _ models.AuditFilter) ([]*models.AuditLog, error) {
+	return f.logs, nil
+}
+
 func (f *fakeAuditRepository) SaveAuditLog(_ context.Context, log *models.AuditLog) error {
 	f.logs = append(f.logs, log)
 	return nil

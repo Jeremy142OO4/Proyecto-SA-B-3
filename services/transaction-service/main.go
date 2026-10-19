@@ -84,7 +84,7 @@ func main() {
 
 	app := fiber.New(fiber.Config{AppName: "transaction-service", DisableStartupMessage: true})
 
-	routes.Registrar(app)
+	routes.Registrar(app, repositories.NuevoPostgres(db))
 	errores := make(chan error, 1)
 	go func() {
 		slog.Info("transaction-service iniciado", "puerto", cfg.PuertoHTTP)

@@ -38,4 +38,5 @@ with tempfile.TemporaryDirectory(prefix='bank-observability-validation-') as tem
         command=['docker','run','--rm','-v',f'{path}:/etc/bank.yaml:ro']
         if entrypoint:command+=['--entrypoint',entrypoint]
         subprocess.run(command+[image]+args,check=True)
+    subprocess.run([sys.executable,str(directory/'test_agent_ingestion.py'),'--config',str(Path(temp)/'otel-logs-config.yaml'),'--image','otel/opentelemetry-collector-contrib:0.163.1'],check=True)
 print('Private services, external Secret, persistence, dashboard and component configurations validated')

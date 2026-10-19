@@ -3,6 +3,7 @@ package repositories
 import (
 	"bank-usac/service-notification-audit/internal/telemetry"
 	"context"
+	"fmt"
 
 	"bank-usac/service-notification-audit/models"
 
@@ -22,8 +23,8 @@ func (r *auditRepo) SaveAuditLog(ctx context.Context, log *models.AuditLog) erro
 	ctx, finishDatabase := telemetry.Database(ctx, "SaveAuditLog")
 	defer finishDatabase()
 	query := `
-		INSERT INTO audit_logs (id, event_id, correlation_id, causation_id, event_type, severity, producer, version, payload, occurred_at, recorded_at)
-		VALUES (:id, :event_id, :correlation_id, :causation_id, :event_type, :severity, :producer, :version, :payload, :occurred_at, :recorded_at)
+		INSERT INTO audit_logs (trace_id,id, event_id, correlation_id, causation_id, event_type, severity, producer, version, payload, occurred_at, recorded_at)
+		VALUES (:trace_id,:id, :event_id, :correlation_id, :causation_id, :event_type, :severity, :producer, :version, :payload, :occurred_at, :recorded_at)
 		ON CONFLICT (id) DO NOTHING
 	`
 	_, err := r.db.NamedExecContext(ctx, query, log)
@@ -45,5 +46,45 @@ func (r *auditRepo) GetRecentAuditLogs(ctx context.Context, limit int) ([]*model
 	logs := make([]*models.AuditLog, 0)
 	query := `SELECT * FROM audit_logs ORDER BY occurred_at DESC LIMIT $1`
 	err := r.db.SelectContext(ctx, &logs, query, limit)
+	return logs, err
+}
+
+func (r *auditRepo) QueryAuditLogs(ctx context.Context, f models.AuditFilter) ([]*models.AuditLog, error) {
+	if err := f.Normalize(); err != nil {
+		return nil, err
+	}
+	ctx, finish := telemetry.Database(ctx, "QueryAuditLogs")
+	defer finish()
+	query := `SELECT id,event_id,correlation_id,causation_id,event_type,severity,producer,version,payload,occurred_at,recorded_at,trace_id FROM audit_logs WHERE TRUE`
+	args := []any{}
+	add := func(condition string, value any) {
+		args = append(args, value)
+		query += fmt.Sprintf(condition, len(args))
+	}
+	if f.CorrelationID != nil {
+		add(" AND correlation_id=$%d", *f.CorrelationID)
+	}
+	if f.TraceID != "" {
+		add(" AND trace_id=$%d", f.TraceID)
+	}
+	if f.Service != "" {
+		args = append(args, f.Service)
+		position := len(args)
+		query += fmt.Sprintf(" AND (producer=$%d OR (event_type='SLOAlertTriggered' AND payload->>'servicio'=$%d))", position, position)
+	}
+	if f.Severity != "" {
+		add(" AND severity=$%d", f.Severity)
+	}
+	if f.Since != nil {
+		add(" AND occurred_at >= $%d", *f.Since)
+	}
+	if f.Until != nil {
+		add(" AND occurred_at < $%d", *f.Until)
+	}
+	query += " ORDER BY occurred_at DESC,id DESC"
+	add(" LIMIT $%d", f.Limit)
+	add(" OFFSET $%d", f.Offset)
+	logs := make([]*models.AuditLog, 0)
+	err := r.db.SelectContext(ctx, &logs, query, args...)
 	return logs, err
 }

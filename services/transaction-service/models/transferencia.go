@@ -20,6 +20,7 @@ const (
 )
 
 type Transferencia struct {
+	TraceID                  string    `json:"traceId,omitempty"`
 	IDTransferencia          uuid.UUID `json:"idTransferencia"`
 	IDCliente                uuid.UUID `json:"idCliente"`
 	IDCuentaOrigen           uuid.UUID `json:"idCuentaOrigen"`

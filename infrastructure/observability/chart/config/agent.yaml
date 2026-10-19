@@ -46,6 +46,14 @@ processors:
           - set(attributes["traceId"], attributes["application"]["traceId"]) where attributes["application"]["traceId"] != nil
           - set(attributes["spanId"], attributes["application"]["spanId"]) where attributes["application"]["spanId"] != nil
           - set(severity_text, attributes["application"]["level"])
+          - set(severity_text, "WARNING") where severity_text == "WARN"
+          - set(severity_text, "ERROR") where severity_text == "FATAL"
+          - set(severity_text, "INFO") where severity_text != "WARNING" and severity_text != "ERROR"
+          - set(severity_number, SEVERITY_NUMBER_INFO) where severity_text == "INFO"
+          - set(severity_number, SEVERITY_NUMBER_WARN) where severity_text == "WARNING"
+          - set(severity_number, SEVERITY_NUMBER_ERROR) where severity_text == "ERROR"
+          - set(trace_id.string, attributes["traceId"]) where IsString(attributes["traceId"]) and IsMatch(attributes["traceId"], "^[0-9a-f]{32}$")
+          - set(span_id.string, attributes["spanId"]) where IsString(attributes["spanId"]) and IsMatch(attributes["spanId"], "^[0-9a-f]{16}$")
           - delete_key(attributes, "application")
   batch:
     timeout: 2s
