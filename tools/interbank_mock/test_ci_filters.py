@@ -50,6 +50,29 @@ class FilterTests(unittest.TestCase):
         self.assertIn("needs.validar-interbancaria.result == 'success'", gate['if'])
         self.assertIn("needs.validar-interbancaria.result == 'skipped'", gate['if'])
 
+    def test_broker_probe_uses_service_user_before_rpc_tests(self):
+        # Execute the actual helper with harmless command doubles. A root
+        # diagnostic probe must fail this regression test, not create a cookie.
+        script = r'''
+docker(){
+ case "$1" in
+ run) printf 'fake-container\n' ;;
+ inspect) printf 'true\n' ;;
+ exec) [[ "$2" == --user && "$3" == rabbitmq ]] ;;
+ port) printf '127.0.0.1:12345\n' ;;
+ logs|rm) return 0 ;;
+ *) return 90 ;;
+ esac
+}
+go(){ [[ "$TEST_AMQP_URL" == amqp://interbank_test:local-interbank-only@127.0.0.1:12345/ ]] && printf 'mock-go-ran\n'; }
+sleep(){ return 0; }
+export -f docker go sleep
+source "$1" api-gateway
+'''
+        result = subprocess.run([self.bash, '-c', script, 'test', str(ROOT/'infrastructure/scripts/test-interbank.sh')],
+                                text=True, capture_output=True, check=True, timeout=10)
+        self.assertIn('mock-go-ran', result.stdout)
+
 
 if __name__ == '__main__':
     unittest.main()

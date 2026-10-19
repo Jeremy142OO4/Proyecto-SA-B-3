@@ -25,7 +25,9 @@ if [[ "$component" == api-gateway ]]; then
   ready=false
   for attempt in {1..60}; do
     if [[ "$(docker inspect --format '{{.State.Running}}' "$name")" != true ]]; then echo 'Test broker exited before readiness' >&2; exit 1; fi
-    if docker exec "$name" rabbitmq-diagnostics -q check_port_connectivity >/dev/null 2>&1; then ready=true; break; fi
+    # A root CLI started before the server can create a root-owned cookie and
+    # make the service fail with .erlang.cookie: eacces. Use its actual user.
+    if docker exec --user rabbitmq "$name" rabbitmq-diagnostics -q check_port_connectivity >/dev/null 2>&1; then ready=true; break; fi
     sleep 1
   done
   if [[ "$ready" != true ]]; then docker logs "$name"; exit 1; fi
