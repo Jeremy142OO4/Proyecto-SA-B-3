@@ -12,6 +12,6 @@ export function TarjetaCuenta({ cuenta }: { cuenta: Cuenta }) {
     <small>Número de cuenta: {cuenta.numeroCuenta}</small>
     <small>ID de cuenta: {cuenta.idCuenta}</small>
     <strong className="saldo">{dinero(cuenta.saldoCentavos)}</strong>
-    <span>Saldo disponible</span>
+    <span>{cuenta.estado === 'BLOQUEADA' ? 'Cuenta bloqueada · Consultar historial' : 'Saldo disponible'}</span>
   </Link>;
 }

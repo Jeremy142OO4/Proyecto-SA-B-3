@@ -2,12 +2,14 @@ package config
 
 import (
 	"fmt"
+	"github.com/Proyecto-SA-B-3/account-service/models"
 	"os"
 	"strconv"
 	"time"
 )
 
 type Configuracion struct {
+	Monitoreo            models.ConfiguracionMonitoreo
 	Entorno              string
 	PuertoHTTP           string
 	URLBaseDatos         string
@@ -36,7 +38,17 @@ func CargarConfiguracion() (Configuracion, error) {
 		return Configuracion{}, fmt.Errorf("INTERVALO_INACTIVIDAD_SEGUNDOS debe ser un entero positivo")
 	}
 
+	maxOperaciones, err := strconv.Atoi(obtenerVariable("ACCOUNT_ANOMALY_MAX_OPERATIONS", "10"))
+	if err != nil {
+		return Configuracion{}, fmt.Errorf("ACCOUNT_ANOMALY_MAX_OPERATIONS invalido")
+	}
+	ventanaMinutos, err := strconv.Atoi(obtenerVariable("ACCOUNT_ANOMALY_WINDOW_MINUTES", "5"))
+	monitoreo := models.ConfiguracionMonitoreo{MaxOperaciones: maxOperaciones, VentanaMinutos: ventanaMinutos}
+	if err != nil || !monitoreo.Valida() {
+		return Configuracion{}, fmt.Errorf("monitoreo requiere 1..10000 operaciones y 1..1440 minutos")
+	}
 	configuracion := Configuracion{
+		Monitoreo:            monitoreo,
 		Entorno:              obtenerVariable("ENTORNO", "desarrollo"),
 		PuertoHTTP:           obtenerVariable("PUERTO_HTTP", "8082"),
 		URLBaseDatos:         os.Getenv("URL_BASE_DATOS"),

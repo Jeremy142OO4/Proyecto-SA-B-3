@@ -17,7 +17,12 @@ import (
 
 const nombreConsumidor = "account-service.comandos"
 
+type AdministracionCuentas interface {
+	EjecutarAdministracion(context.Context, events.SobreMensaje) error
+}
+
 type ConsumidorCuentas struct {
+	administracion    AdministracionCuentas
 	canal             *amqp.Channel
 	servicio          services.ServicioCuentas
 	servicioCreacion  services.ServicioCreacionCuentas
@@ -33,6 +38,7 @@ func NuevoConsumidorCuentas(
 	repositorioSalida repositories.RepositorioSalida,
 	publicador *messaging.Publicador,
 	maximoReintentos int,
+	administracion ...AdministracionCuentas,
 ) (*ConsumidorCuentas, error) {
 	canal, err := conexion.Channel()
 	if err != nil {
@@ -42,8 +48,13 @@ func NuevoConsumidorCuentas(
 		_ = canal.Close()
 		return nil, fmt.Errorf("configurar limite del consumidor: %w", err)
 	}
+	var admin AdministracionCuentas
+	if len(administracion) > 0 {
+		admin = administracion[0]
+	}
 	return &ConsumidorCuentas{
-		canal: canal, servicio: servicio, servicioCreacion: servicioCreacion, repositorioSalida: repositorioSalida,
+		administracion: admin,
+		canal:          canal, servicio: servicio, servicioCreacion: servicioCreacion, repositorioSalida: repositorioSalida,
 		publicador: publicador, maximoReintentos: maximoReintentos,
 	}, nil
 }
@@ -76,6 +87,12 @@ func (c *ConsumidorCuentas) procesar(ctx context.Context, entrega amqp.Delivery)
 
 	var err error
 	switch entrega.RoutingKey {
+	case "cuenta.administracion.listado.solicitado", "cuenta.monitoreo.consulta.solicitada", "cuenta.monitoreo.actualizacion.solicitada", "cuenta.bloqueo.solicitado":
+		if c.administracion == nil {
+			err = errors.New("administracion no configurada")
+		} else {
+			err = c.administracion.EjecutarAdministracion(ctx, mensaje)
+		}
 	case events.ComandoValidarTransferencia:
 		var solicitud events.SolicitudValidacionTransferencia
 		if errorJSON := json.Unmarshal(mensaje.Contenido, &solicitud); errorJSON != nil {

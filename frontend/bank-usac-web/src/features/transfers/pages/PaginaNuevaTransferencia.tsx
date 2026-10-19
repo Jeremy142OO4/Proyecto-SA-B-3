@@ -34,7 +34,7 @@ export function PaginaNuevaTransferencia() {
     const origen = String(formulario.get('origen'));
     const destino = String(formulario.get('destino')).trim();
     const tipoCuentaDestino = String(formulario.get('tipoCuentaDestino'));
-    if (!cuentas.datos?.some(cuenta => cuenta.idCuenta === origen) || !tipoCuentaDestino) {
+    if (!cuentas.datos?.some(cuenta => cuenta.idCuenta === origen && cuenta.estado === 'ACTIVA') || !tipoCuentaDestino) {
       setError('Selecciona la cuenta de origen y el tipo de cuenta destino.');
       return;
     }
@@ -45,6 +45,7 @@ export function PaginaNuevaTransferencia() {
     setEnviando(true);
     setError('');
     try {
+      if ((await servicioCuentas.buscar(origen)).estado !== 'ACTIVA') throw new Error('La cuenta está bloqueada o inactiva. Solo puedes consultar su historial.');
       const respuesta = await servicioTransferencias.crear({
         idCuentaOrigen: origen,
         idCuentaDestino: destino,
@@ -70,12 +71,12 @@ export function PaginaNuevaTransferencia() {
     {cuentas.error && <EstadoError mensaje={cuentas.error} />}{error && <div className="alerta error">{error}</div>}
 
     <form onSubmit={enviar}>
-      <label>Cuenta de origen<select name="origen" required>{cuentas.datos?.map(cuenta => <option key={cuenta.idCuenta} value={cuenta.idCuenta}>{etiqueta(cuenta.numeroCuenta, cuenta.saldoCentavos)}</option>)}</select></label>
+      <label>Cuenta de origen<select name="origen" required>{cuentas.datos?.filter(cuenta => cuenta.estado === 'ACTIVA').map(cuenta => <option key={cuenta.idCuenta} value={cuenta.idCuenta}>{etiqueta(cuenta.numeroCuenta, cuenta.saldoCentavos)}</option>)}</select></label>
       <label>UUID de la cuenta destino<input name="destino" required maxLength={36} placeholder="UUID de la cuenta destino" /></label>
       <label>Tipo de cuenta destino<select name="tipoCuentaDestino" required defaultValue=""><option value="" disabled>Selecciona el tipo de cuenta destino</option><option value="MONETARIA">Monetaria</option><option value="AHORRO">Ahorro</option><option value="CORRIENTE">Corriente</option></select></label>
       <label>Monto en quetzales<input name="monto" required type="number" min="0.01" step="0.01" /></label>
       <label>Descripción<input name="descripcion" maxLength={255} placeholder="Ej. Pago de alquiler" /></label>
-      <button disabled={enviando || !cuentas.datos?.length}>{enviando ? 'Enviando…' : 'Confirmar transferencia'}</button>
+      <button disabled={enviando || !cuentas.datos?.some(cuenta => cuenta.estado === 'ACTIVA')}>{enviando ? 'Enviando…' : 'Confirmar transferencia'}</button>
       </form>
       <Dialog
         open={advertencia !== ''}

@@ -70,6 +70,7 @@ func NewRabbitMQConsumer(url string, auditSvc services.AuditService) (*RabbitMQC
 
 	// 3. Bindings para capturar todos los eventos del sistema
 	routingKeys := []string{
+		"AccountAnomalyDetected",
 		"cliente.#",
 		"cuenta.#",
 		"transferencia.#",
@@ -226,6 +227,8 @@ func (r *RabbitMQConsumer) executeCommand(ctx context.Context, sobre events.Even
 		return responder(200, registros)
 	case events.ComandoNotificaciones:
 		var req struct {
+			Tipo          string    `json:"tipo"`
+			Nivel         string    `json:"nivel"`
 			Limite        int       `json:"limite"`
 			Destinatario  string    `json:"destinatario"`
 			Estado        string    `json:"estado"`
@@ -234,7 +237,7 @@ func (r *RabbitMQConsumer) executeCommand(ctx context.Context, sobre events.Even
 		if err := json.Unmarshal(sobre.Payload, &req); err != nil {
 			return responder(400, map[string]string{"error": "payload de notificaciones invalido"})
 		}
-		filter := models.NotificationFilter{Limit: req.Limite, Recipient: req.Destinatario, Status: models.NotificationStatus(req.Estado)}
+		filter := models.NotificationFilter{Type: req.Tipo, Severity: models.EventSeverity(req.Nivel), Limit: req.Limite, Recipient: req.Destinatario, Status: models.NotificationStatus(req.Estado)}
 		if req.IDCorrelacion != uuid.Nil {
 			filter.CorrelationID = &req.IDCorrelacion
 		}

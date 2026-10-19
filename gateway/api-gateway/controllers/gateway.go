@@ -186,7 +186,7 @@ func (g *Gateway) CrearPago(c *fiber.Ctx) error {
 	if tipo == "INTERNO" {
 		resultado = "EXITO"
 	}
-	if err := g.validarPropiedadCuenta(c, e.IDCuentaOrigen); err != nil {
+	if err := g.validarPropiedadCuenta(c, e.IDCuentaOrigen, true); err != nil {
 		return err
 	}
 	id := uuid.New()
@@ -198,7 +198,7 @@ func (g *Gateway) Depositar(c *fiber.Ctx) error {
 	if err != nil || idCuenta == uuid.Nil {
 		return fiber.NewError(422, "idCuenta inválido")
 	}
-	if err := g.validarPropiedadCuenta(c, idCuenta); err != nil {
+	if err := g.validarPropiedadCuenta(c, idCuenta, true); err != nil {
 		return err
 	}
 	var entrada struct {
@@ -242,7 +242,7 @@ func (g *Gateway) Transferir(c *fiber.Ctx) error {
 	if resultadoExterno != "EXITO" && resultadoExterno != "FALLO" && resultadoExterno != "TIMEOUT" {
 		return fiber.NewError(422, "resultadoExternoSimulado debe ser EXITO, FALLO o TIMEOUT")
 	}
-	if err := g.validarPropiedadCuenta(c, e.IDCuentaOrigen); err != nil {
+	if err := g.validarPropiedadCuenta(c, e.IDCuentaOrigen, true); err != nil {
 		return err
 	}
 	tipoCuentaReal, err := g.consultarTipoCuenta(c, e.IDCuentaDestino)
@@ -401,16 +401,20 @@ func propietario(c *fiber.Ctx) func(json.RawMessage) (any, error) {
 		return v, json.Unmarshal(b, &v)
 	}
 }
-func (g *Gateway) validarPropiedadCuenta(c *fiber.Ctx, id uuid.UUID) error {
+func (g *Gateway) validarPropiedadCuenta(c *fiber.Ctx, id uuid.UUID, operativa ...bool) error {
 	_, e := g.solicitar(c, events.ComandoConsultarCuenta, events.EventoCuentaConsultada, events.SolicitudConsultarCuenta{IDCuenta: id}, func(b json.RawMessage) (any, error) {
 		var x struct {
 			IDCliente uuid.UUID `json:"idCliente"`
+			Estado    string    `json:"estado"`
 		}
 		if e := json.Unmarshal(b, &x); e != nil {
 			return nil, e
 		}
 		if x.IDCliente != idCliente(c) {
 			return nil, fiber.ErrForbidden
+		}
+		if len(operativa) > 0 && operativa[0] && x.Estado != "ACTIVA" {
+			return nil, fiber.NewError(409, "La cuenta está bloqueada o inactiva. Puede consultar su historial, pero no realizar transacciones.")
 		}
 		return x, nil
 	})

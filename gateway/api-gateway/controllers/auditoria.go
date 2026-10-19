@@ -39,7 +39,8 @@ func (ca *ControladorAuditoria) Notificaciones(c *fiber.Ctx) error {
 	consulta := map[string]any{
 		"limite":       limite,
 		"destinatario": c.Query("destinatario"),
-		"estado":       c.Query("estado"),
+		"tipo":         c.Query("tipo"), "nivel": c.Query("nivel"),
+		"estado": c.Query("estado"),
 	}
 	if valor := c.Query("idCorrelacion"); valor != "" {
 		idCorrelacion, err := uuid.Parse(valor)

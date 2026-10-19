@@ -41,6 +41,9 @@ const (
 )
 
 type NotificationLog struct {
+	AccountID        *uuid.UUID         `db:"account_id" json:"accountId,omitempty"`
+	Details          json.RawMessage    `db:"details" json:"details"`
+	Severity         EventSeverity      `db:"severity" json:"severity"`
 	ID               uuid.UUID          `db:"id" json:"id"`
 	CorrelationID    uuid.UUID          `db:"correlation_id" json:"correlationId"`
 	Recipient        string             `db:"recipient" json:"recipient"`
@@ -53,8 +56,10 @@ type NotificationLog struct {
 }
 
 type NotificationFilter struct {
-	Limit          int
-	Recipient      string
-	Status         NotificationStatus
-	CorrelationID  *uuid.UUID
+	Type          string
+	Severity      EventSeverity
+	Limit         int
+	Recipient     string
+	Status        NotificationStatus
+	CorrelationID *uuid.UUID
 }

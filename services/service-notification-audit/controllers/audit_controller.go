@@ -44,6 +44,7 @@ func (ac *AuditController) GetByCorrelation(c *fiber.Ctx) error {
 func (ac *AuditController) GetNotifications(c *fiber.Ctx) error {
 	limit, _ := strconv.Atoi(c.Query("limit", "50"))
 	filter := models.NotificationFilter{
+		Type: c.Query("type"), Severity: models.EventSeverity(c.Query("severity")),
 		Limit:     limit,
 		Recipient: c.Query("recipient"),
 		Status:    models.NotificationStatus(c.Query("status")),

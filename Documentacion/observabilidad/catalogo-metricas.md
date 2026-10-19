@@ -2,6 +2,8 @@
 
 Estado: especificación de nombres exportados previstos, no métricas existentes. Referencias: [contrato](contrato-telemetria.md), [SLI](../sre/sli.md), [objetivos vigentes](../sre/slo.md).
 
+Customer Service implementa las [métricas KYC](customer-service.md) y Account Service implementa el [monitoreo de movimientos y anomalías](account-service.md). El resto de esta tabla conserva su condición de diseño previsto.
+
 ## Reglas comunes
 
 Duraciones en segundos; contadores acumulativos y histogramas. Etiquetas base: `service`, `environment`; versión en un indicador informativo, no en cada serie. Etiquetas adicionales solo de listas acotadas del código. Prohibidos IDs de usuario, cuenta, mensaje, correlación, traza, URLs completas, error libre y fecha como etiquetas. Rutas HTTP siempre plantilla; routing keys y colas solo del catálogo configurado, agrupando colas dinámicas por rol.
@@ -23,10 +25,11 @@ Duraciones en segundos; contadores acumulativos y histogramas. Etiquetas base: `
 | bank_outbox_pending | Gauge | — | Registros todavía no publicados |
 | bank_outbox_oldest_pending_seconds | Gauge | — | Edad del Outbox pendiente más antiguo |
 | bank_amqp_ready | Gauge | — | Conexión, canales y consumidor disponibles: 1/0 |
-| bank_kyc_decisions_total | Counter | outcome | verified o rejected |
-| bank_kyc_duration_seconds | Histogram | outcome | Creación a decisión KYC; separado de latencia de validación automática |
-| bank_account_movements_total | Counter | account_type, direction | Movimientos confirmados; direction=debit o credit |
-| bank_account_anomalies_total | Counter | account_type | Anomalías detectadas; umbral configurable N en M minutos |
+| bank_kyc_customers | Gauge | status | Implementado: clientes actuales con rol CLIENTE por PENDING, VERIFIED o REJECTED |
+| bank_kyc_decisions_total | Counter | outcome | Implementado: cambios KYC confirmados, verified o rejected; excluye repeticiones idénticas |
+| bank_kyc_duration_seconds | Histogram | outcome | Implementado: creación a primera verificación observada, outcome=verified; excluye clientes anteriores sin historial confiable |
+| bank_account_movements_total | Counter | account_type, direction | Implementado: movimientos confirmados; direction=DEBITO o CREDITO |
+| bank_account_anomalies_total | Counter | account_type | Implementado: anomalías confirmadas; umbral configurable N en M minutos |
 | bank_compensations_total | Counter | outcome | started, completed o failed |
 | bank_notifications_total | Counter | outcome | generated, sent o failed |
 | bank_invariant_violations_total | Counter | invariant | Doble efecto, saldo inválido o reversión inconsistente |

@@ -6,7 +6,7 @@ import { servicioCuentas } from '../services/servicioCuentas';
 
 export function PaginaCuentas() {
   const consulta = useCallback(() => servicioCuentas.listar(), []);
-  const { datos, cargando, error } = usarConsulta(consulta);
+  const { datos, cargando, error } = usarConsulta(consulta, 15_000);
   return <>
     <div className="titulo-seccion"><div><p>Productos activos</p><h2>Mis cuentas bancarias</h2></div></div>
     {cargando ? <EstadoCarga /> : error ? <EstadoError mensaje={error} /> : !datos?.length ?

@@ -531,6 +531,11 @@ jobs:
           grep -q 'kind: HorizontalPodAutoscaler' /tmp/manifiestos-dev.yaml
           ! grep -R 'image:.*:latest' infrastructure/kubernetes
 
+      - name: Probar migraciones y reejecucion segura
+        run: |
+          bash -n infrastructure/scripts/prepare-telemetry-schema.sh
+          python3 infrastructure/scripts/test-feature-schema.py
+
       - name: Validar configuracion de Compose
         run: docker compose config --quiet
 
@@ -943,31 +948,6 @@ jobs:
             fi
           done
 
-      - name: Desplegar frontend dev en Cloud Run
-        id: frontend-cloud-run
-        if: contains(fromJSON(needs.detectar-cambios.outputs.componentes), 'frontend')
-        env:
-          PUBLIC_HOST: ${{ secrets.PUBLIC_HOST }}
-        shell: bash
-        run: |
-          BACKEND_HOST="${PUBLIC_HOST#http://}"
-          BACKEND_HOST="${BACKEND_HOST#https://}"
-          BACKEND_HOST="${BACKEND_HOST%%/*}"
-          gcloud run deploy bank-usac-frontend-dev \
-            --image "${REGISTRY}/${IMAGE_NAMESPACE}/bank-usac-frontend:${IMAGE_TAG}" \
-            --region us-central1 \
-            --platform managed \
-            --allow-unauthenticated \
-            --port 8080 \
-            --set-env-vars "BACKEND_URL=http://${BACKEND_HOST}" \
-            --quiet
-          # Restablecer el trafico tras un rollback que lo haya fijado a una revision.
-          gcloud run services update-traffic bank-usac-frontend-dev \
-            --region us-central1 --to-latest --quiet
-          FRONTEND_URL="$(gcloud run services describe bank-usac-frontend-dev \
-            --region us-central1 --format='value(status.url)')"
-          echo "url=$FRONTEND_URL" >> "$GITHUB_OUTPUT"
-
       - name: Crear secretos del entorno dev
         env:
           URL_BASE_DATOS_CUENTAS: ${{ secrets.URL_BASE_DATOS_CUENTAS }}
@@ -1018,8 +998,33 @@ jobs:
             --replicas=0 --timeout=60s || true
           kubectl -n bank-usac delete service frontend --ignore-not-found
 
-      - name: Preparar esquema de telemetria
+      - name: Preparar esquemas de telemetria y funcionalidades
         run: bash infrastructure/scripts/prepare-telemetry-schema.sh
+
+      - name: Desplegar frontend dev en Cloud Run
+        id: frontend-cloud-run
+        if: contains(fromJSON(needs.detectar-cambios.outputs.componentes), 'frontend')
+        env:
+          PUBLIC_HOST: ${{ secrets.PUBLIC_HOST }}
+        shell: bash
+        run: |
+          BACKEND_HOST="${PUBLIC_HOST#http://}"
+          BACKEND_HOST="${BACKEND_HOST#https://}"
+          BACKEND_HOST="${BACKEND_HOST%%/*}"
+          gcloud run deploy bank-usac-frontend-dev \
+            --image "${REGISTRY}/${IMAGE_NAMESPACE}/bank-usac-frontend:${IMAGE_TAG}" \
+            --region us-central1 \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080 \
+            --set-env-vars "BACKEND_URL=http://${BACKEND_HOST}" \
+            --quiet
+          # Restablecer el trafico tras un rollback que lo haya fijado a una revision.
+          gcloud run services update-traffic bank-usac-frontend-dev \
+            --region us-central1 --to-latest --quiet
+          FRONTEND_URL="$(gcloud run services describe bank-usac-frontend-dev \
+            --region us-central1 --format='value(status.url)')"
+          echo "url=$FRONTEND_URL" >> "$GITHUB_OUTPUT"
 
       - name: Aplicar manifiestos dev con rolling update
         env:
@@ -1162,31 +1167,6 @@ jobs:
             fi
           done
 
-      - name: Desplegar frontend prod en Cloud Run
-        id: frontend-cloud-run
-        env:
-          PUBLIC_HOST: ${{ secrets.PUBLIC_HOST }}
-          IMAGE_TAG: ${{ steps.version.outputs.tag }}
-        shell: bash
-        run: |
-          BACKEND_HOST="${PUBLIC_HOST#http://}"
-          BACKEND_HOST="${BACKEND_HOST#https://}"
-          BACKEND_HOST="${BACKEND_HOST%%/*}"
-          gcloud run deploy bank-usac-frontend-prod \
-            --image "${REGISTRY}/${IMAGE_NAMESPACE}/bank-usac-frontend:${IMAGE_TAG}" \
-            --region us-central1 \
-            --platform managed \
-            --allow-unauthenticated \
-            --port 8080 \
-            --set-env-vars "BACKEND_URL=http://${BACKEND_HOST}" \
-            --quiet
-          # Restablecer el trafico tras un rollback que lo haya fijado a una revision.
-          gcloud run services update-traffic bank-usac-frontend-prod \
-            --region us-central1 --to-latest --quiet
-          FRONTEND_URL="$(gcloud run services describe bank-usac-frontend-prod \
-            --region us-central1 --format='value(status.url)')"
-          echo "url=$FRONTEND_URL" >> "$GITHUB_OUTPUT"
-
       - name: Crear o actualizar secretos de produccion
         env:
           URL_BASE_DATOS_CUENTAS: ${{ secrets.URL_BASE_DATOS_CUENTAS }}
@@ -1244,8 +1224,33 @@ jobs:
             --region us-central1 \
             --quiet || true
 
-      - name: Preparar esquema de telemetria
+      - name: Preparar esquemas de telemetria y funcionalidades
         run: bash infrastructure/scripts/prepare-telemetry-schema.sh
+
+      - name: Desplegar frontend prod en Cloud Run
+        id: frontend-cloud-run
+        env:
+          PUBLIC_HOST: ${{ secrets.PUBLIC_HOST }}
+          IMAGE_TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          BACKEND_HOST="${PUBLIC_HOST#http://}"
+          BACKEND_HOST="${BACKEND_HOST#https://}"
+          BACKEND_HOST="${BACKEND_HOST%%/*}"
+          gcloud run deploy bank-usac-frontend-prod \
+            --image "${REGISTRY}/${IMAGE_NAMESPACE}/bank-usac-frontend:${IMAGE_TAG}" \
+            --region us-central1 \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080 \
+            --set-env-vars "BACKEND_URL=http://${BACKEND_HOST}" \
+            --quiet
+          # Restablecer el trafico tras un rollback que lo haya fijado a una revision.
+          gcloud run services update-traffic bank-usac-frontend-prod \
+            --region us-central1 --to-latest --quiet
+          FRONTEND_URL="$(gcloud run services describe bank-usac-frontend-prod \
+            --region us-central1 --format='value(status.url)')"
+          echo "url=$FRONTEND_URL" >> "$GITHUB_OUTPUT"
 
       - name: Aplicar imagen publicada y rolling update
         env:

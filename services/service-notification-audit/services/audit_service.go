@@ -160,6 +160,8 @@ type notificationRule struct {
 
 func notificationRuleFor(eventType string) (notificationRule, bool) {
 	rules := map[string]notificationRule{
+		"AccountAnomalyDetected":             {"ACCOUNT_ANOMALY_DETECTED", "Alerta de actividad inusual - Bank USAC", "Detectamos una frecuencia de operaciones superior al límite configurado. La alerta no bloquea automáticamente la cuenta.", "account-owner"},
+		"cuenta.bloqueada":                   {"ACCOUNT_BLOCKED", "Cuenta bloqueada - Bank USAC", "La administración bloqueó la cuenta. Puede consultar su historial, pero no realizar nuevas transacciones. Consulte el motivo del bloqueo en este comprobante.", "account-owner"},
 		"cliente.creado":                     {"CLIENT_CREATED", "Registro de cliente recibido", "El cliente fue registrado correctamente.", "customer"},
 		"cliente.activado":                   {"CLIENT_ACTIVATED", "Cliente activado", "El cliente fue activado correctamente.", "customer"},
 		"cliente.actualizado":                {"CLIENT_UPDATED", "Perfil actualizado", "El perfil del cliente fue actualizado.", "customer"},
@@ -324,6 +326,12 @@ func construirCorreoOperacion(envelope *events.EventEnvelope, rule notificationR
 	agregarFilaHTML(&cuerpo, "Realizado por", nombreCorreo(fullName))
 
 	switch {
+	case envelope.Type == "AccountAnomalyDetected":
+		agregarFilaHTML(&cuerpo, "Cuenta", valorCorreo(campos, "idCuenta"))
+		agregarFilaHTML(&cuerpo, "Tipo de cuenta", valorCorreo(campos, "tipoCuenta"))
+		agregarFilaHTML(&cuerpo, "Operaciones detectadas", valorCorreo(campos, "operaciones"))
+		agregarFilaHTML(&cuerpo, "Límite configurado", valorCorreo(campos, "maxOperaciones"))
+		agregarFilaHTML(&cuerpo, "Ventana (minutos)", valorCorreo(campos, "ventanaMinutos"))
 	case strings.HasPrefix(envelope.Type, "transferencia."):
 		agregarFilaHTML(&cuerpo, "Cuenta origen", valorCorreo(campos, "idCuentaOrigen"))
 		agregarFilaHTML(&cuerpo, "Cuenta destino", valorCorreo(campos, "idCuentaDestino"))
@@ -425,6 +433,10 @@ func tipoOperacionCorreo(eventType string) string {
 
 func asuntoCorreo(eventType, fallback string) string {
 	switch {
+	case eventType == "AccountAnomalyDetected":
+		return "Alerta de actividad inusual - Bank USAC"
+	case eventType == "cuenta.bloqueada":
+		return "Cuenta bloqueada - Bank USAC"
 	case strings.HasPrefix(eventType, "transferencia."):
 		if strings.Contains(eventType, "rechaz") || strings.Contains(eventType, "fallida") {
 			return "Transferencia rechazada - Bank USAC"
@@ -447,6 +459,12 @@ func asuntoCorreo(eventType, fallback string) string {
 }
 
 func estadoCorreo(eventType string, severity models.EventSeverity) string {
+	if eventType == "AccountAnomalyDetected" {
+		return "ALERTA DE ALTA FRECUENCIA"
+	}
+	if eventType == "cuenta.bloqueada" {
+		return "BLOQUEADA"
+	}
 	if severity == models.EventError {
 		return "ERROR"
 	}
@@ -467,11 +485,24 @@ func (s *auditService) saveGeneratedNotification(
 	status models.NotificationStatus,
 	errorDetail string,
 ) error {
+	var accountID *uuid.UUID
+	var details json.RawMessage
+	if envelope.Type == "AccountAnomalyDetected" {
+		var p struct {
+			IDCuenta uuid.UUID `json:"idCuenta"`
+		}
+		if json.Unmarshal(envelope.Payload, &p) == nil && p.IDCuenta != uuid.Nil {
+			accountID = &p.IDCuenta
+			details = envelope.Payload
+		}
+	}
 	return s.notificationRepo.SaveNotificationLog(ctx, &models.NotificationLog{
+		AccountID: accountID, Details: details,
 		ID:               idempotentID("notification", envelope.MessageID),
 		CorrelationID:    envelope.CorrelationID,
 		Recipient:        recipient,
 		NotificationType: rule.notificationType,
+		Severity:         ClassifyEventWithPayload(envelope.Type, envelope.Payload),
 		Subject:          rule.subject,
 		BodySummary:      rule.bodySummary,
 		Status:           status,
@@ -512,6 +543,9 @@ func ClassifyEventWithPayload(eventType string, payload json.RawMessage) models.
 
 func classifyEvent(eventType string, fields map[string]any) models.EventSeverity {
 	tipo := strings.ToLower(strings.TrimSpace(eventType))
+	if tipo == "accountanomalydetected" || tipo == "cuenta.bloqueada" {
+		return models.EventWarning
+	}
 	if status, ok := numericField(fields, "statusCode", "httpStatus", "codigoHttp", "status"); ok {
 		if status >= 500 {
 			return models.EventError

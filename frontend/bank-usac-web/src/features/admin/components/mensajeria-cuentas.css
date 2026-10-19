@@ -1,0 +1,14 @@
+.acciones-cabecera { display: flex; align-items: center; gap: .75rem; }
+.acciones-cabecera .entorno { display: inline-flex; }
+.mensajeria-cuentas { width: min(440px, calc(100vw - 32px)); padding: 1.2rem; color: #173f61; }
+.mensajeria-cuentas header { display: flex; justify-content: space-between; align-items: start; gap: 1rem; }
+.mensajeria-cuentas header small { display: block; margin-top: .4rem; color: #6d8190; font-size: .72rem; }
+.mensajeria-acciones { display: flex; gap: .5rem; margin: 1rem 0; flex-wrap: wrap; }
+.mensajeria-cuentas button { font-size: .75rem; padding: .5rem .7rem; }
+.mensajeria-cuentas ul { list-style: none; padding: 0; max-height: 420px; overflow-y: auto; margin: 0; }
+.mensajeria-cuentas li { padding: 1rem; margin-bottom: .7rem; background: #f6f8fa; border-left: 3px solid #c4cfd8; border-radius: 8px; overflow-wrap: anywhere; }
+.mensajeria-cuentas li.alerta-no-leida { background: #fff7e5; border-left-color: #b27612; }
+.mensajeria-cuentas li p { font-size: .8rem; line-height: 1.5; }
+.mensajeria-cuentas time, .mensajeria-cuentas li small { display: block; font-size: .7rem; margin: .5rem 0; color: #526c80; }
+.mensajeria-cuentas a { display: inline-block; margin-top: .5rem; font-size: .8rem; color: #173f61; font-weight: 700; }
+.mensajeria-cuentas footer { border-top: 1px solid #dbe5ec; margin-top: 1rem; padding-top: .8rem; font-size: .72rem; line-height: 1.5; color: #526c80; }

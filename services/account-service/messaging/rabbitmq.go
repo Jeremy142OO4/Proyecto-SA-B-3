@@ -51,6 +51,7 @@ func DeclararTopologia(canal *amqp.Channel) error {
 	}
 
 	comandos := []string{
+		"cuenta.administracion.listado.solicitado", "cuenta.monitoreo.consulta.solicitada", "cuenta.monitoreo.actualizacion.solicitada", "cuenta.bloqueo.solicitado",
 		events.ComandoCrearCuenta,
 		events.ComandoSolicitarDebito,
 		events.ComandoSolicitarCredito,

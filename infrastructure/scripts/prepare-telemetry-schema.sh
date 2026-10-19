@@ -1,20 +1,30 @@
 #!/usr/bin/env bash
-# Existing schemas were initialized manually: apply only additive telemetry DDL.
+# Existing schemas may be initialized manually: apply additive, repeatable DDL.
+# Keep this gate before publishing the new frontend or rolling backend pods.
 set -euo pipefail
 : "${KUBE_NAMESPACE:?KUBE_NAMESPACE is required}"
 suffix="${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-1}"
 case "$suffix" in (*[!0-9a-z-]*) echo "Invalid run suffix" >&2; exit 1;; esac
 resources=()
+sql_dir=$(mktemp -d)
 cleanup() {
+  rm -rf "$sql_dir"
   for resource in "${resources[@]}"; do
     kubectl -n "$KUBE_NAMESPACE" delete "$resource" --ignore-not-found --wait=false >/dev/null || true
   done
 }
 trap cleanup EXIT
-while read -r service key version; do
-  name="${service}-trace-${suffix}"
-  migration="services/$service/database/migrations/${version}_persistir_contexto_traza.up.sql"
-  test -f "$migration"
+while read -r service key migrations; do
+  name="${service}-schema-${suffix}"
+  migration="$sql_dir/$service.sql"
+  # Serialize deployments sharing the same database, including dev/prod.
+  printf "SELECT pg_advisory_xact_lock(hashtext('bank-usac-schema'));\n" > "$migration"
+  for filename in $migrations; do
+    source="services/$service/database/migrations/$filename.up.sql"
+    test -f "$source"
+    cat "$source" >> "$migration"
+    printf '\n' >> "$migration"
+  done
   kubectl -n "$KUBE_NAMESPACE" create configmap "$name" --from-file="migration.sql=$migration" --dry-run=client -o yaml | kubectl apply -f -
   resources+=("configmap/$name")
   kubectl -n "$KUBE_NAMESPACE" apply -f - <<EOF
@@ -59,10 +69,11 @@ spec:
 EOF
   resources+=("job/$name")
 done <<'SERVICES'
-service-customer URL_BASE_DATOS_CLIENTES 000006
-account-service URL_BASE_DATOS_CUENTAS 000005
-transaction-service URL_BASE_DATOS_TRANSACCIONES 000004
-payment-service URL_BASE_DATOS_PAGOS 000004
+service-customer URL_BASE_DATOS_CLIENTES 000006_persistir_contexto_traza 000007_customer_lifecycle
+account-service URL_BASE_DATOS_CUENTAS 000005_persistir_contexto_traza 000006_monitoreo_cuentas
+transaction-service URL_BASE_DATOS_TRANSACCIONES 000004_persistir_contexto_traza
+payment-service URL_BASE_DATOS_PAGOS 000004_persistir_contexto_traza
+service-notification-audit URL_BASE_DATOS_AUDITORIA 000002_add_event_severity 000003_nivel_notificaciones
 SERVICES
 for resource in "${resources[@]}"; do
   if [[ "$resource" == job/* ]]; then

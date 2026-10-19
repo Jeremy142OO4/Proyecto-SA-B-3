@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /* Evita que StrictMode o una navegación rápida disparen consultas duplicadas. */
-export function usarConsulta<T>(consulta: () => Promise<T>) {
+export function usarConsulta<T>(consulta: () => Promise<T>, intervaloMs?: number) {
   const [datos, setDatos] = useState<T>();
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
@@ -29,6 +29,14 @@ export function usarConsulta<T>(consulta: () => Promise<T>) {
   useEffect(() => {
     void ejecutar();
   }, [ejecutar]);
+
+  useEffect(() => {
+    if (!intervaloMs) return;
+    const actualizar = () => { void ejecutar(); };
+    const timer = window.setInterval(actualizar, intervaloMs);
+    window.addEventListener('focus', actualizar);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', actualizar); };
+  }, [ejecutar, intervaloMs]);
 
   return { datos, cargando, error, recargar: ejecutar };
 }

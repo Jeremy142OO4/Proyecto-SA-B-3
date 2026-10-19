@@ -45,6 +45,10 @@ func Registrar(app *fiber.App, g *controllers.Gateway, clientes *controllers.Con
 	autenticadas.Get("/auditoria/registros", middleware.AutorizarRoles("ADMIN"), auditoria.Registros)
 	autenticadas.Get("/auditoria/traza/:idCorrelacion", middleware.AutorizarRoles("ADMIN"), auditoria.Traza)
 	autenticadas.Get("/auditoria/notificaciones", middleware.AutorizarRoles("ADMIN"), auditoria.Notificaciones)
+	autenticadas.Get("/administracion/cuentas", middleware.AutorizarRoles("ADMIN"), g.AdministrarCuentas)
+	autenticadas.Get("/administracion/cuentas/monitoreo", middleware.AutorizarRoles("ADMIN"), g.ConsultarMonitoreoCuentas)
+	autenticadas.Put("/administracion/cuentas/monitoreo", middleware.AutorizarRoles("ADMIN"), g.ConfigurarMonitoreoCuentas)
+	autenticadas.Patch("/administracion/cuentas/:idCuenta/bloqueo", middleware.AutorizarRoles("ADMIN"), g.BloquearCuenta)
 	autenticadas.Get("/administracion/clientes", middleware.AutorizarRoles("ADMIN"), clientes.Listar)
 	autenticadas.Patch("/administracion/clientes/:idCliente/estado", middleware.AutorizarRoles("ADMIN"), clientes.CambiarEstado)
 }
