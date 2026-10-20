@@ -2,6 +2,15 @@ extensions:
   health_check:
     endpoint: 0.0.0.0:13133
 receivers:
+  k8s_cluster:
+    auth_type: serviceAccount
+    namespaces: [{{ .Values.applicationNamespace }}]
+    collection_interval: 30s
+  rabbitmq:
+    endpoint: http://rabbitmq.{{ .Values.applicationNamespace }}.svc.cluster.local:15672
+    username: ${env:RABBITMQ_USER}
+    password: ${env:RABBITMQ_PASSWORD}
+    collection_interval: 30s
   otlp:
     protocols:
       grpc:
@@ -18,6 +27,11 @@ processors:
     send_batch_size: 256
     send_batch_max_size: 512
 exporters:
+  prometheus/infra:
+    endpoint: 0.0.0.0:9465
+    metric_expiration: 2m
+    resource_to_telemetry_conversion:
+      enabled: true
   otlp/tempo:
     endpoint: tempo:4317
     tls:
@@ -41,6 +55,10 @@ exporters:
 service:
   extensions: [health_check]
   pipelines:
+    metrics/infra:
+      receivers: [k8s_cluster, rabbitmq]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus/infra]
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]

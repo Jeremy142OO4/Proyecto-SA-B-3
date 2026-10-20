@@ -8,6 +8,10 @@ import sys
 import yaml
 
 directory=Path(__file__).resolve().parent
+subprocess.run([sys.executable,str(directory/'alerting.py'),'--check'],check=True)
+subprocess.run([sys.executable,str(directory/'test_alerting.py')],check=True)
+subprocess.run([sys.executable,str(directory/'test_promql.py')],check=True)
+subprocess.run([sys.executable,str(directory/'test_grafana.py')],check=True)
 subprocess.run([sys.executable,str(directory/'test_scripts.py')],check=True)
 subprocess.run(['helm','lint',str(directory/'chart')],check=True)
 rendered=subprocess.check_output(['helm','template','bank-observability',str(directory/'chart'),'--namespace','bank-usac-observability'],text=True)
@@ -18,7 +22,14 @@ for obj in objects:
     if obj['kind']=='Service':assert obj['spec']['type']=='ClusterIP','Public observability endpoint forbidden'
     if obj['kind'] in ['StatefulSet','Deployment']:
         assert obj['spec']['replicas']==1
-        assert not obj['spec']['template']['spec'].get('automountServiceAccountToken',True)
+        spec = obj['spec']['template']['spec']
+        assert spec.get('automountServiceAccountToken', True) == (obj['metadata']['name'] == 'otel-collector')
+        if obj['metadata']['name'] == 'otel-collector':
+            assert spec['serviceAccountName'] == 'bank-observability'
+    if obj['kind'] == 'Role':
+        assert obj['metadata']['namespace'] == 'bank-usac-dev'
+        assert all(set(rule['verbs']) <= {'get', 'list', 'watch'} and 'secrets' not in rule['resources'] for rule in obj['rules'])
+    assert obj['kind'] not in ['ClusterRole', 'ClusterRoleBinding'], 'Monitoring must stay namespace scoped'
 configmaps={o['metadata']['name']:o['data'] for o in objects if o['kind']=='ConfigMap'}
 json.loads(configmaps['grafana-dashboards']['overview.json'])
 datasources=yaml.safe_load(configmaps['grafana-config']['config.yaml'])['datasources']
@@ -35,7 +46,7 @@ configs=[
 with tempfile.TemporaryDirectory(prefix='bank-observability-validation-') as temp:
     for name,image,entrypoint,args in configs:
         path=Path(temp)/(name+'.yaml');path.write_text(configmaps[name]['config.yaml'],encoding='utf-8')
-        command=['docker','run','--rm','-v',f'{path}:/etc/bank.yaml:ro']
+        command=['docker','run','--rm','-e','RABBITMQ_USER=validation','-e','RABBITMQ_PASSWORD=validation','-v',f'{path}:/etc/bank.yaml:ro,Z']
         if entrypoint:command+=['--entrypoint',entrypoint]
         subprocess.run(command+[image]+args,check=True)
     subprocess.run([sys.executable,str(directory/'test_agent_ingestion.py'),'--config',str(Path(temp)/'otel-logs-config.yaml'),'--image','otel/opentelemetry-collector-contrib:0.163.1'],check=True)

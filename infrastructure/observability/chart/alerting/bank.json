@@ -1,0 +1,345 @@
+{
+  "apiVersion": 1,
+  "groups": [
+    {
+      "orgId": 1,
+      "name": "Bank USAC SLO",
+      "folder": "Bank USAC",
+      "interval": "1m",
+      "rules": [
+        {
+          "uid": "bank-burn-fast",
+          "title": "SLO 99.5%: consumo rápido del presupuesto",
+          "condition": "A",
+          "for": "2m",
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "annotations": {
+            "summary": "SLO 99.5%: consumo rápido del presupuesto",
+            "description": "Revisar el runbook versionado antes de intervenir. No reiniciar ni compensar transferencias automáticamente.",
+            "runbook_url": "https://github.com/Jeremy142OO4/Proyecto-SA-B-3/blob/develop/Documentacion/observabilidad/alertas.md#bank-burn-fast"
+          },
+          "labels": {
+            "severity": "critical",
+            "environment": "dev",
+            "team": "bank-usac"
+          },
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "prometheus",
+              "model": {
+                "refId": "A",
+                "expr": "(((sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\",status_class=\"5xx\"}[1h])) or vector(0)) / sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[1h])) / 0.005) > 14.4) and (((sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\",status_class=\"5xx\"}[5m])) or vector(0)) / sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[5m])) / 0.005) > 14.4) and (sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[5m])) >= 20)",
+                "instant": true,
+                "range": false,
+                "intervalMs": 15000,
+                "maxDataPoints": 43200
+              }
+            }
+          ]
+        },
+        {
+          "uid": "bank-burn-slow",
+          "title": "SLO 99.5%: consumo sostenido del presupuesto",
+          "condition": "A",
+          "for": "5m",
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "annotations": {
+            "summary": "SLO 99.5%: consumo sostenido del presupuesto",
+            "description": "Revisar el runbook versionado antes de intervenir. No reiniciar ni compensar transferencias automáticamente.",
+            "runbook_url": "https://github.com/Jeremy142OO4/Proyecto-SA-B-3/blob/develop/Documentacion/observabilidad/alertas.md#bank-burn-slow"
+          },
+          "labels": {
+            "severity": "warning",
+            "environment": "dev",
+            "team": "bank-usac"
+          },
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "prometheus",
+              "model": {
+                "refId": "A",
+                "expr": "(((sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\",status_class=\"5xx\"}[6h])) or vector(0)) / sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[6h])) / 0.005) > 6) and (((sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\",status_class=\"5xx\"}[30m])) or vector(0)) / sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30m])) / 0.005) > 6) and (sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30m])) >= 20)",
+                "instant": true,
+                "range": false,
+                "intervalMs": 15000,
+                "maxDataPoints": 43200
+              }
+            }
+          ]
+        },
+        {
+          "uid": "bank-http-latency",
+          "title": "Gateway: p95 HTTP superior a 500 ms",
+          "condition": "A",
+          "for": "5m",
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "annotations": {
+            "summary": "Gateway: p95 HTTP superior a 500 ms",
+            "description": "Revisar el runbook versionado antes de intervenir. No reiniciar ni compensar transferencias automáticamente.",
+            "runbook_url": "https://github.com/Jeremy142OO4/Proyecto-SA-B-3/blob/develop/Documentacion/observabilidad/alertas.md#bank-http-latency"
+          },
+          "labels": {
+            "severity": "warning",
+            "environment": "dev",
+            "team": "bank-usac"
+          },
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "prometheus",
+              "model": {
+                "refId": "A",
+                "expr": "(histogram_quantile(0.95, sum by (le) (rate(bank_http_duration_seconds_bucket{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[5m]))) > 0.5) and (sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[5m])) >= 20)",
+                "instant": true,
+                "range": false,
+                "intervalMs": 15000,
+                "maxDataPoints": 43200
+              }
+            }
+          ]
+        },
+        {
+          "uid": "bank-collector-down",
+          "title": "Collector: Prometheus no puede recolectar métricas",
+          "condition": "A",
+          "for": "2m",
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "annotations": {
+            "summary": "Collector: Prometheus no puede recolectar métricas",
+            "description": "Revisar el runbook versionado antes de intervenir. No reiniciar ni compensar transferencias automáticamente.",
+            "runbook_url": "https://github.com/Jeremy142OO4/Proyecto-SA-B-3/blob/develop/Documentacion/observabilidad/alertas.md#bank-collector-down"
+          },
+          "labels": {
+            "severity": "critical",
+            "environment": "dev",
+            "team": "bank-usac"
+          },
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "prometheus",
+              "model": {
+                "refId": "A",
+                "expr": "(up{job=\"bank-otel\"} == 0) or absent(up{job=\"bank-otel\"})",
+                "instant": true,
+                "range": false,
+                "intervalMs": 15000,
+                "maxDataPoints": 43200
+              }
+            }
+          ]
+        },
+        {
+          "uid": "bank-infra-telemetry",
+          "title": "Infraestructura: sin métricas de despliegues",
+          "condition": "A",
+          "for": "2m",
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "annotations": {
+            "summary": "Infraestructura: sin métricas de despliegues",
+            "description": "Revisar el runbook versionado antes de intervenir. No reiniciar ni compensar transferencias automáticamente.",
+            "runbook_url": "https://github.com/Jeremy142OO4/Proyecto-SA-B-3/blob/develop/Documentacion/observabilidad/alertas.md#bank-infra-telemetry"
+          },
+          "labels": {
+            "severity": "warning",
+            "environment": "dev",
+            "team": "bank-usac"
+          },
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "prometheus",
+              "model": {
+                "refId": "A",
+                "expr": "absent_over_time(k8s_deployment_desired{job=\"bank-infra\"}[5m])",
+                "instant": true,
+                "range": false,
+                "intervalMs": 15000,
+                "maxDataPoints": 43200
+              }
+            }
+          ]
+        },
+        {
+          "uid": "bank-deployment-unavailable",
+          "title": "Kubernetes: despliegue sin réplicas disponibles",
+          "condition": "A",
+          "for": "3m",
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "annotations": {
+            "summary": "Kubernetes: despliegue sin réplicas disponibles",
+            "description": "Revisar el runbook versionado antes de intervenir. No reiniciar ni compensar transferencias automáticamente.",
+            "runbook_url": "https://github.com/Jeremy142OO4/Proyecto-SA-B-3/blob/develop/Documentacion/observabilidad/alertas.md#bank-deployment-unavailable"
+          },
+          "labels": {
+            "severity": "critical",
+            "environment": "dev",
+            "team": "bank-usac"
+          },
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "prometheus",
+              "model": {
+                "refId": "A",
+                "expr": "(k8s_deployment_available{job=\"bank-infra\"} == 0) and on(k8s_namespace_name,k8s_deployment_name) (k8s_deployment_desired{job=\"bank-infra\"} > 0)",
+                "instant": true,
+                "range": false,
+                "intervalMs": 15000,
+                "maxDataPoints": 43200
+              }
+            }
+          ]
+        },
+        {
+          "uid": "bank-rabbitmq-backlog",
+          "title": "RabbitMQ: cola con mensajes pendientes sostenidos",
+          "condition": "A",
+          "for": "5m",
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "annotations": {
+            "summary": "RabbitMQ: cola con mensajes pendientes sostenidos",
+            "description": "Revisar el runbook versionado antes de intervenir. No reiniciar ni compensar transferencias automáticamente.",
+            "runbook_url": "https://github.com/Jeremy142OO4/Proyecto-SA-B-3/blob/develop/Documentacion/observabilidad/alertas.md#bank-rabbitmq-backlog"
+          },
+          "labels": {
+            "severity": "warning",
+            "environment": "dev",
+            "team": "bank-usac"
+          },
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "prometheus",
+              "model": {
+                "refId": "A",
+                "expr": "rabbitmq_message_current{job=\"bank-infra\",state=\"ready\"} > 100",
+                "instant": true,
+                "range": false,
+                "intervalMs": 15000,
+                "maxDataPoints": 43200
+              }
+            }
+          ]
+        },
+        {
+          "uid": "bank-rabbitmq-telemetry",
+          "title": "RabbitMQ: sin métricas de colas",
+          "condition": "A",
+          "for": "2m",
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "annotations": {
+            "summary": "RabbitMQ: sin métricas de colas",
+            "description": "Revisar el runbook versionado antes de intervenir. No reiniciar ni compensar transferencias automáticamente.",
+            "runbook_url": "https://github.com/Jeremy142OO4/Proyecto-SA-B-3/blob/develop/Documentacion/observabilidad/alertas.md#bank-rabbitmq-telemetry"
+          },
+          "labels": {
+            "severity": "warning",
+            "environment": "dev",
+            "team": "bank-usac"
+          },
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "prometheus",
+              "model": {
+                "refId": "A",
+                "expr": "absent_over_time(rabbitmq_message_current{job=\"bank-infra\"}[5m])",
+                "instant": true,
+                "range": false,
+                "intervalMs": 15000,
+                "maxDataPoints": 43200
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "contactPoints": [
+    {
+      "orgId": 1,
+      "name": "equipo-tecnico",
+      "receivers": [
+        {
+          "uid": "bank-email",
+          "type": "email",
+          "disableResolveMessage": false,
+          "settings": {
+            "addresses": "3141193530501@ingenieria.usac.edu.gt",
+            "singleEmail": true
+          }
+        }
+      ]
+    }
+  ],
+  "policies": [
+    {
+      "orgId": 1,
+      "receiver": "equipo-tecnico",
+      "group_by": [
+        "grafana_folder",
+        "alertname",
+        "environment"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "routes": [
+        {
+          "receiver": "equipo-tecnico",
+          "object_matchers": [
+            [
+              "severity",
+              "=",
+              "critical"
+            ]
+          ],
+          "repeat_interval": "1h"
+        }
+      ]
+    }
+  ]
+}

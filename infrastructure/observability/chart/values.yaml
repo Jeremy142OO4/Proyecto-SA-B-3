@@ -8,14 +8,14 @@ components:
     uid: 10001
     args: ["--config=/etc/bank/config.yaml"]
     config: collector.yaml
-    ports: [{name: http, port: 13133}, {name: otlp-grpc, port: 4317}, {name: otlp-http, port: 4318}, {name: metrics, port: 9464}]
+    ports: [{name: http, port: 13133}, {name: otlp-grpc, port: 4317}, {name: otlp-http, port: 4318}, {name: metrics, port: 9464}, {name: infra, port: 9465}]
     readyPath: /
     memoryRequest: 64Mi
     memoryLimit: 192Mi
   prometheus:
     image: prom/prometheus:v3.15.0
     uid: 65534
-    args: ["--config.file=/etc/bank/config.yaml", "--storage.tsdb.path=/prometheus", "--storage.tsdb.retention.time=48h", "--storage.tsdb.retention.size=2GB", "--web.enable-lifecycle"]
+    args: ["--config.file=/etc/bank/config.yaml", "--storage.tsdb.path=/prometheus", "--storage.tsdb.retention.time=30d", "--storage.tsdb.retention.size=2GB", "--web.enable-lifecycle"]
     config: prometheus.yaml
     ports: [{name: http, port: 9090}]
     readyPath: /-/ready
@@ -52,7 +52,7 @@ components:
     ports: [{name: http, port: 3000}]
     readyPath: /api/health
     memoryRequest: 96Mi
-    memoryLimit: 256Mi
+    memoryLimit: 384Mi
     storage: 1Gi
     dataPath: /var/lib/grafana
 agent:

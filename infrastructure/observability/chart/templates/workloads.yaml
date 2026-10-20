@@ -19,9 +19,18 @@ spec:
       labels: {app.kubernetes.io/name: {{ $name }}}
       annotations:
         checksum/config: {{ tpl ($.Files.Get (printf "config/%s" $component.config)) $ | sha256sum }}
+        {{- if eq $name "grafana" }}
         checksum/dashboards: {{ $.Files.Get "dashboards/overview.json" | sha256sum }}
+        checksum/slo: {{ $.Files.Get "dashboards/slo.json" | sha256sum }}
+        checksum/alerting: {{ $.Files.Get "alerting/bank.json" | sha256sum }}
+        {{- end }}
     spec:
+      {{- if eq $name "otel-collector" }}
+      serviceAccountName: bank-observability
+      automountServiceAccountToken: true
+      {{- else }}
       automountServiceAccountToken: false
+      {{- end }}
       securityContext:
         runAsNonRoot: true
         runAsUser: {{ $component.uid }}
@@ -58,6 +67,13 @@ spec:
             periodSeconds: 20
             timeoutSeconds: 3
             failureThreshold: 6
+          {{- if eq $name "otel-collector" }}
+          env:
+            - name: RABBITMQ_USER
+              valueFrom: {secretKeyRef: {name: observability-rabbitmq, key: username}}
+            - name: RABBITMQ_PASSWORD
+              valueFrom: {secretKeyRef: {name: observability-rabbitmq, key: password}}
+          {{- end }}
           {{- if eq $name "grafana" }}
           env:
             - {name: GF_SECURITY_ADMIN_USER, value: admin}
@@ -69,6 +85,14 @@ spec:
             - {name: GF_ANALYTICS_CHECK_FOR_UPDATES, value: "false"}
             - {name: GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES, value: "false"}
             - {name: GF_PLUGINS_PREINSTALL_DISABLED, value: "true"}
+            - {name: GF_SMTP_ENABLED, value: "true"}
+            - {name: GF_SMTP_SKIP_VERIFY, value: "false"}
+            - {name: GF_SMTP_STARTTLS_POLICY, value: MandatoryStartTLS}
+            - {name: GF_SMTP_FROM_NAME, value: Bank USAC - Equipo tecnico}
+            {{- range $key := list "HOST" "USER" "PASSWORD" "FROM_ADDRESS" }}
+            - name: GF_SMTP_{{ $key }}
+              valueFrom: {secretKeyRef: {name: observability-smtp, key: {{ $key }}}}
+            {{- end }}
           {{- end }}
           volumeMounts:
             - {name: config, mountPath: {{ if eq $name "grafana" }}/etc/grafana/provisioning/datasources/bank.yaml{{ else }}/etc/bank/config.yaml{{ end }}, subPath: config.yaml, readOnly: true}
@@ -79,6 +103,8 @@ spec:
             {{- if eq $name "grafana" }}
             - {name: dashboards, mountPath: /etc/grafana/provisioning/dashboards/bank.yaml, subPath: provider.yaml, readOnly: true}
             - {name: dashboards, mountPath: /etc/grafana/bank-dashboards/overview.json, subPath: overview.json, readOnly: true}
+            - {name: dashboards, mountPath: /etc/grafana/bank-dashboards/slo.json, subPath: slo.json, readOnly: true}
+            - {name: alerting, mountPath: /etc/grafana/provisioning/alerting/bank.json, subPath: bank.json, readOnly: true}
             {{- end }}
       volumes:
         - name: config
@@ -91,6 +117,8 @@ spec:
         {{- if eq $name "grafana" }}
         - name: dashboards
           configMap: {name: grafana-dashboards}
+        - name: alerting
+          configMap: {name: grafana-alerting}
         {{- end }}
 ---
 apiVersion: v1

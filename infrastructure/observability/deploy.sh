@@ -12,6 +12,7 @@ kubectl create namespace "$OBSERVABILITY_NAMESPACE" --dry-run=client -o yaml | k
 if ! kubectl -n "$OBSERVABILITY_NAMESPACE" get secret observability-grafana >/dev/null 2>&1; then
   kubectl -n "$OBSERVABILITY_NAMESPACE" create secret generic observability-grafana --from-literal="password=$(openssl rand -hex 24)"
 fi
+python3 "$directory/smtp_secret.py"
 helm upgrade --install bank-observability "$directory/chart" \
   --namespace "$OBSERVABILITY_NAMESPACE" \
   --set "applicationNamespace=$KUBE_NAMESPACE" \

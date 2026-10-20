@@ -33,8 +33,8 @@ def run(config_path, image):
                 "docker", "run", "-d", "--name", name, "--user", "0", "--read-only",
                 "--tmpfs", "/var/lib/otel-offsets:mode=700",
                 "-p", "127.0.0.1::13133",
-                "-v", str(config_file) + ":/etc/bank.yaml:ro",
-                "-v", str(root / "pods") + ":/var/log/pods:ro",
+                "-v", str(config_file) + ":/etc/bank.yaml:ro,Z",
+                "-v", str(root / "pods") + ":/var/log/pods:ro,Z",
                 image, "--config=/etc/bank.yaml",
             ], check=True, capture_output=True)
             binding = subprocess.check_output(["docker", "port", name, "13133/tcp"], text=True).strip()

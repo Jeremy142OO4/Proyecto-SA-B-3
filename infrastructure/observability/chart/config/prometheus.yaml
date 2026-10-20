@@ -4,6 +4,14 @@ global:
   external_labels:
     environment: {{ .Values.environment }}
 scrape_configs:
+  - job_name: bank-infra
+    static_configs:
+      - targets: [otel-collector:9465]
+    metric_relabel_configs:
+      # Exclude short-lived RPC reply queues from persisted metrics.
+      - source_labels: [rabbitmq_queue_name]
+        regex: 'amq[.]gen-.*'
+        action: drop
   - job_name: bank-otel
     static_configs:
       - targets: [otel-collector:9464]
