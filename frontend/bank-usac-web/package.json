@@ -8,7 +8,7 @@
   },
   "scripts": {
     "prebuild": "node scripts/prepare-swagger.mjs",
-    "postbuild": "node --test scripts/test-swagger.mjs",
+    "postbuild": "node --test scripts/test-swagger.mjs scripts/test-consulta.mjs",
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "lint": "eslint .",

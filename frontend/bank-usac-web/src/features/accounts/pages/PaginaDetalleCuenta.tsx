@@ -14,7 +14,9 @@ export function PaginaDetalleCuenta() {
   const [depositando, setDepositando] = useState(false);
   const consultarCuenta = useCallback(() => servicioCuentas.buscar(idCuenta), [idCuenta]);
   const consultarMovimientos = useCallback(() => servicioCuentas.movimientos(idCuenta), [idCuenta]);
-  const cuenta = usarConsulta(consultarCuenta, 15_000);
+  const cuenta = usarConsulta(consultarCuenta, 15_000, {
+    recargaSilenciosa: true, actualizarAlEnfocar: false, pausarOculta: true,
+  });
   const movimientos = usarConsulta(consultarMovimientos);
 
   async function depositar(evento: FormEvent<HTMLFormElement>) {
@@ -37,8 +39,9 @@ export function PaginaDetalleCuenta() {
   }
 
   if (cuenta.cargando) return <EstadoCarga />;
-  if (cuenta.error) return <EstadoError mensaje={cuenta.error} />;
+  if (cuenta.error && !cuenta.datos) return <EstadoError mensaje={cuenta.error} />;
   return <>
+    {cuenta.error && <div className="alerta error" role="status">No se pudo actualizar el saldo. Se muestran los últimos datos disponibles.</div>}
     <div className="hero-saldo">
       <span>{cuenta.datos?.tipoCuenta}</span>
       <h2>{dinero(cuenta.datos?.saldoCentavos ?? 0)}</h2>
