@@ -97,14 +97,60 @@ def dashboard():
         ('RabbitMQ: mensajes por cola y estado', 'rabbitmq_message_current{job="bank-infra"}', 'short'),
         ('RabbitMQ: consumidores', 'rabbitmq_consumer_count{job="bank-infra"}', 'short'),
     ]
+    panels.append({'id': 100, 'type': 'text', 'title': 'BANK03 / Centro de operaciones',
+                   'gridPos': {'x': 0, 'y': 0, 'w': 24, 'h': 3},
+                   'options': {'mode': 'markdown', 'content': '### Salud del banco · Desarrollo\nSLO **99.5%** · Métricas reales · Actualización cada **30 s**\n\nLa ventana SLO es de 30 días, pero la historia disponible puede ser menor. **Sin datos ≠ cero ni servicio saludable.**'}})
+    short_titles = ['Disponibilidad HTTP · 30 días', 'Presupuesto disponible', 'Solicitudes observadas',
+                    'Errores del servidor · 5xx', 'Consumo de presupuesto · 1 h', 'Historia disponible']
+    legends = {6: '{{service}}', 7: 'Gateway', 8: '{{service}}', 9: '{{status}}',
+               10: '{{outcome}}', 11: 'Verificación KYC', 12: '{{account_type}} · {{direction}}',
+               13: '{{outcome}}', 14: '{{outcome}}', 15: '{{outcome}}', 16: '{{direction}} · {{status}}',
+               17: '{{k8s_deployment_name}}', 18: '{{k8s_deployment_name}}',
+               19: '{{k8s_hpa_name}} · {{__name__}}', 20: '{{rabbitmq_queue_name}} · {{state}}',
+               21: '{{rabbitmq_queue_name}}'}
+    sections = {6: '01 / Rendimiento y experiencia', 9: '02 / Clientes y verificación KYC',
+                12: '03 / Operaciones, Saga e integración', 17: '04 / Kubernetes y escalado',
+                20: '05 / RabbitMQ y consumidores'}
+    y = 3
     for index, (title, expression, unit) in enumerate(specs):
-        panels.append({'id': index + 1, 'title': title, 'type': 'timeseries',
+        card = index < 6
+        if index in sections:
+            panels.append({'id': 100 + index, 'type': 'row', 'title': sections[index],
+                           'collapsed': False, 'panels': [], 'gridPos': {'x': 0, 'y': y, 'w': 24, 'h': 1}})
+            y += 1
+        position = index if card else index - max(start for start in sections if start <= index)
+        width, height, columns = (4, 5, 6) if card else (12, 8, 2)
+        defaults = {'unit': unit, 'noValue': 'Sin datos', 'color': {'mode': 'palette-classic'}}
+        options = {'legend': {'displayMode': 'table', 'placement': 'bottom', 'calcs': ['lastNotNull']},
+                   'tooltip': {'mode': 'multi', 'sort': 'desc'}}
+        if card:
+            defaults.update({'decimals': 3 if index == 0 else (2 if index == 4 else 0),
+                             'color': {'mode': 'thresholds'}, 'thresholds': {'mode': 'absolute', 'steps': [{'color': 'blue', 'value': None}]}})
+            thresholds = {0: [('red', None), ('green', 99.5)], 1: [('red', None), ('green', 0)],
+                          3: [('green', None), ('orange', 1)], 4: [('green', None), ('orange', 1), ('red', 14.4)]}
+            if index in thresholds:
+                defaults['thresholds']['steps'] = [{'color': color, 'value': value} for color, value in thresholds[index]]
+            options = {'reduceOptions': {'values': False, 'calcs': ['lastNotNull'], 'fields': ''},
+                       'orientation': 'horizontal', 'textMode': 'value', 'colorMode': 'value',
+                       'graphMode': 'area', 'justifyMode': 'center'}
+        else:
+            defaults['custom'] = {'drawStyle': 'line', 'lineInterpolation': 'smooth', 'lineWidth': 2,
+                                  'fillOpacity': 12, 'showPoints': 'never', 'spanNulls': False,
+                                  'axisBorderShow': False, 'axisCenteredZero': False}
+        panels.append({'id': index + 1, 'title': short_titles[index] if card else title,
+                       'description': title + '. Los valores se calculan sobre las muestras disponibles; no se rellenan ausencias con cero.',
+                       'type': 'stat' if card else 'timeseries',
                        'datasource': {'type': 'prometheus', 'uid': 'prometheus'},
-                       'gridPos': {'x': (index % 2) * 12, 'y': (index // 2) * 8, 'w': 12, 'h': 8},
-                       'targets': [{'refId': 'A', 'expr': expression}],
-                       'fieldConfig': {'defaults': {'unit': unit}, 'overrides': []}})
+                       'gridPos': {'x': (position % columns) * width, 'y': y, 'w': width, 'h': height},
+                       'targets': [{'refId': 'A', 'expr': expression, 'legendFormat': legends.get(index, 'Observado')}],
+                       'fieldConfig': {'defaults': defaults, 'overrides': []}, 'options': options})
+        if position % columns == columns - 1 or index == len(specs) - 1 or index + 1 in sections:
+            y += height
     return {'uid': 'bank-slo', 'title': 'Bank USAC — SLO 99.5% y servicios', 'schemaVersion': 39,
-            'version': 1, 'refresh': '30s', 'timezone': 'browser', 'time': {'from': 'now-6h', 'to': 'now'},
+            'version': 2, 'refresh': '30s', 'timezone': 'browser', 'time': {'from': 'now-6h', 'to': 'now'},
+            'tags': ['BANK03', 'SLO', 'operaciones', 'dev'],
+            'links': [{'title': 'Consultar métricas, logs y trazas', 'url': '/explore', 'type': 'link'},
+                      {'title': 'Reglas de alerta', 'url': '/alerting/list', 'type': 'link'}],
             'description': 'Datos parciales no certifican 30 días. Sin tráfico: sin datos, nunca 100%. Retención limitada también por 2 GB. Alertas de ausencia no prueban una caída del servicio.',
             'panels': panels}
 
