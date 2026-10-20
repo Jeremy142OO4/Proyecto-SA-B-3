@@ -132,7 +132,7 @@ def dashboard():
                 defaults['thresholds']['steps'] = [{'color': color, 'value': value} for color, value in thresholds[index]]
             options = {'reduceOptions': {'values': False, 'calcs': ['lastNotNull'], 'fields': ''},
                        'orientation': 'horizontal', 'textMode': 'value', 'colorMode': 'value',
-                       'graphMode': 'area', 'justifyMode': 'center'}
+                       'graphMode': 'none', 'justifyMode': 'center'}
         else:
             defaults['custom'] = {'drawStyle': 'line', 'lineInterpolation': 'smooth', 'lineWidth': 2,
                                   'fillOpacity': 12, 'showPoints': 'never', 'spanNulls': False,
@@ -142,7 +142,9 @@ def dashboard():
                        'type': 'stat' if card else 'timeseries',
                        'datasource': {'type': 'prometheus', 'uid': 'prometheus'},
                        'gridPos': {'x': (position % columns) * width, 'y': y, 'w': width, 'h': height},
-                       'targets': [{'refId': 'A', 'expr': expression, 'legendFormat': legends.get(index, 'Observado')}],
+                       'maxDataPoints': 240, 'interval': '1m',
+                       'targets': [{'refId': 'A', 'expr': expression, 'legendFormat': legends.get(index, 'Observado'),
+                                    'instant': card, 'range': not card}],
                        'fieldConfig': {'defaults': defaults, 'overrides': []}, 'options': options})
         if position % columns == columns - 1 or index == len(specs) - 1 or index + 1 in sections:
             y += height

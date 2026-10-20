@@ -50,8 +50,8 @@ spec:
             - {name: {{ .name }}, containerPort: {{ .port }}}
             {{- end }}
           resources:
-            requests: {cpu: 10m, memory: {{ $component.memoryRequest }}}
-            limits: {cpu: 200m, memory: {{ $component.memoryLimit }}}
+            requests: {cpu: {{ $component.cpuRequest | default "10m" }}, memory: {{ $component.memoryRequest }}}
+            limits: {cpu: {{ $component.cpuLimit | default "200m" }}, memory: {{ $component.memoryLimit }}}
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -78,6 +78,7 @@ spec:
           {{- if eq $name "grafana" }}
           env:
             - {name: GF_SECURITY_ADMIN_USER, value: admin}
+            - {name: GOMEMLIMIT, value: 700MiB}
             - name: GF_SECURITY_ADMIN_PASSWORD
               valueFrom: {secretKeyRef: {name: {{ $.Values.grafanaSecret }}, key: password}}
             - {name: GF_AUTH_ANONYMOUS_ENABLED, value: "false"}

@@ -59,11 +59,15 @@
         "w": 4,
         "h": 5
       },
+      "maxDataPoints": 240,
+      "interval": "1m",
       "targets": [
         {
           "refId": "A",
           "expr": "100 * (1 - (sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\",status_class=\"5xx\"}[30d])) or vector(0)) / sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30d])))",
-          "legendFormat": "Observado"
+          "legendFormat": "Observado",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -101,7 +105,7 @@
         "orientation": "horizontal",
         "textMode": "value",
         "colorMode": "value",
-        "graphMode": "area",
+        "graphMode": "none",
         "justifyMode": "center"
       }
     },
@@ -120,11 +124,15 @@
         "w": 4,
         "h": 5
       },
+      "maxDataPoints": 240,
+      "interval": "1m",
       "targets": [
         {
           "refId": "A",
           "expr": "0.005 * sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30d])) - (sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\",status_class=\"5xx\"}[30d])) or vector(0))",
-          "legendFormat": "Observado"
+          "legendFormat": "Observado",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -162,7 +170,7 @@
         "orientation": "horizontal",
         "textMode": "value",
         "colorMode": "value",
-        "graphMode": "area",
+        "graphMode": "none",
         "justifyMode": "center"
       }
     },
@@ -181,11 +189,15 @@
         "w": 4,
         "h": 5
       },
+      "maxDataPoints": 240,
+      "interval": "1m",
       "targets": [
         {
           "refId": "A",
           "expr": "sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30d]))",
-          "legendFormat": "Observado"
+          "legendFormat": "Observado",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -219,7 +231,7 @@
         "orientation": "horizontal",
         "textMode": "value",
         "colorMode": "value",
-        "graphMode": "area",
+        "graphMode": "none",
         "justifyMode": "center"
       }
     },
@@ -238,11 +250,15 @@
         "w": 4,
         "h": 5
       },
+      "maxDataPoints": 240,
+      "interval": "1m",
       "targets": [
         {
           "refId": "A",
           "expr": "(sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\",status_class=\"5xx\"}[30d])) or vector(0)) and (sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30d])) > 0)",
-          "legendFormat": "Observado"
+          "legendFormat": "Observado",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -280,7 +296,7 @@
         "orientation": "horizontal",
         "textMode": "value",
         "colorMode": "value",
-        "graphMode": "area",
+        "graphMode": "none",
         "justifyMode": "center"
       }
     },
@@ -299,11 +315,15 @@
         "w": 4,
         "h": 5
       },
+      "maxDataPoints": 240,
+      "interval": "1m",
       "targets": [
         {
           "refId": "A",
           "expr": "((sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\",status_class=\"5xx\"}[1h])) or vector(0)) / sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[1h])) / 0.005)",
-          "legendFormat": "Observado"
+          "legendFormat": "Observado",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -345,7 +365,7 @@
         "orientation": "horizontal",
         "textMode": "value",
         "colorMode": "value",
-        "graphMode": "area",
+        "graphMode": "none",
         "justifyMode": "center"
       }
     },
@@ -364,11 +384,15 @@
         "w": 4,
         "h": 5
       },
+      "maxDataPoints": 240,
+      "interval": "1m",
       "targets": [
         {
           "refId": "A",
           "expr": "time() - prometheus_tsdb_lowest_timestamp_seconds",
-          "legendFormat": "Observado"
+          "legendFormat": "Observado",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -402,7 +426,7 @@
         "orientation": "horizontal",
         "textMode": "value",
         "colorMode": "value",
-        "graphMode": "area",
+        "graphMode": "none",
         "justifyMode": "center"
       }
     },
@@ -434,11 +458,15 @@
         "w": 12,
         "h": 8
       },
+      "maxDataPoints": 240,
+      "interval": "1m",
       "targets": [
         {
           "refId": "A",
           "expr": "histogram_quantile(0.95, sum by (service, le) (rate(bank_http_duration_seconds_bucket{environment=\"dev\"}[5m])))",
-          "legendFormat": "{{service}}"
+          "legendFormat": "{{service}}",
+          "instant": false,
+          "range": true
         }
       ],
       "fieldConfig": {
@@ -490,11 +518,15 @@
         "w": 12,
         "h": 8
       },
+      "maxDataPoints": 240,
+      "interval": "1m",
       "targets": [
         {
           "refId": "A",
           "expr": "histogram_quantile(0.95, sum by(le) (increase(bank_http_duration_seconds_bucket{service=\"api-gateway\",environment=\"dev\"}[30d])))",
-          "legendFormat": "Gateway"
+          "legendFormat": "Gateway",
+          "instant": false,
+          "range": true
         }
       ],
       "fieldConfig": {
@@ -546,11 +578,15 @@
         "w": 12,
         "h": 8
       },
+      "maxDataPoints": 240,
+      "interval": "1m",
       "targets": [
         {
           "refId": "A",
           "expr": "histogram_quantile(0.95, sum by (service, le) (rate(bank_message_processing_seconds_bucket{environment=\"dev\"}[5m])))",
-          "legendFormat": "{{service}}"
+          "legendFormat": "{{service}}",
+          "instant": false,
+          "range": true
         }
       ],
       "fieldConfig": {
@@ -615,11 +651,15 @@
         "w": 12,
         "h": 8
       },
+      "maxDataPoints": 240,
+      "interval": "1m",
       "targets": [
         {
           "refId": "A",
           "expr": "bank_kyc_customers",
-          "legendFormat": "{{status}}"
+          "legendFormat": "{{status}}",
+          "instant": false,
+          "range": true
         }
       ],
       "fieldConfig": {
@@ -671,11 +711,15 @@
         "w": 12,
         "h": 8
       },
+      "maxDataPoints": 240,
+      "interval": "1m",
       "targets": [
         {
           "refId": "A",
           "expr": "sum by (outcome) (increase(bank_kyc_decisions_total[$__range]))",
-          "legendFormat": "{{outcome}}"
+          "legendFormat": "{{outcome}}",
+          "instant": false,
+          "range": true
         }
       ],
       "fieldConfig": {
@@ -727,11 +771,15 @@
         "w": 12,
         "h": 8
       },
+      "maxDataPoints": 240,
+      "interval": "1m",
       "targets": [
         {
           "refId": "A",
           "expr": "histogram_quantile(0.95, sum by(le) (rate(bank_kyc_duration_seconds_bucket[1h])))",
-          "legendFormat": "Verificación KYC"
+          "legendFormat": "Verificación KYC",
+          "instant": false,
+          "range": true
         }
       ],
       "fieldConfig": {
@@ -796,11 +844,15 @@
         "w": 12,
         "h": 8
       },
+      "maxDataPoints": 240,
+      "interval": "1m",
       "targets": [
         {
           "refId": "A",
           "expr": "sum by(__name__,account_type,direction) (increase({__name__=~\"bank_account_(movements|anomalies)_total\"}[$__range]))",
-          "legendFormat": "{{account_type}} · {{direction}}"
+          "legendFormat": "{{account_type}} · {{direction}}",
+          "instant": false,
+          "range": true
         }
       ],
       "fieldConfig": {
@@ -852,11 +904,15 @@
         "w": 12,
         "h": 8
       },
+      "maxDataPoints": 240,
+      "interval": "1m",
       "targets": [
         {
           "refId": "A",
           "expr": "sum by(outcome) (increase(bank_transfer_results_total[$__range]))",
-          "legendFormat": "{{outcome}}"
+          "legendFormat": "{{outcome}}",
+          "instant": false,
+          "range": true
         }
       ],
       "fieldConfig": {
@@ -908,11 +964,15 @@
         "w": 12,
         "h": 8
       },
+      "maxDataPoints": 240,
+      "interval": "1m",
       "targets": [
         {
           "refId": "A",
           "expr": "histogram_quantile(0.95, sum by(le,outcome) (rate(bank_transfer_flow_duration_seconds_bucket[1h])))",
-          "legendFormat": "{{outcome}}"
+          "legendFormat": "{{outcome}}",
+          "instant": false,
+          "range": true
         }
       ],
       "fieldConfig": {
@@ -964,11 +1024,15 @@
         "w": 12,
         "h": 8
       },
+      "maxDataPoints": 240,
+      "interval": "1m",
       "targets": [
         {
           "refId": "A",
           "expr": "sum by(outcome) (increase(bank_payment_external_results_total[$__range]))",
-          "legendFormat": "{{outcome}}"
+          "legendFormat": "{{outcome}}",
+          "instant": false,
+          "range": true
         }
       ],
       "fieldConfig": {
@@ -1020,11 +1084,15 @@
         "w": 12,
         "h": 8
       },
+      "maxDataPoints": 240,
+      "interval": "1m",
       "targets": [
         {
           "refId": "A",
           "expr": "sum by (direction, status) (increase(bank_interbank_transitions_total[$__range]))",
-          "legendFormat": "{{direction}} · {{status}}"
+          "legendFormat": "{{direction}} · {{status}}",
+          "instant": false,
+          "range": true
         }
       ],
       "fieldConfig": {
@@ -1089,11 +1157,15 @@
         "w": 12,
         "h": 8
       },
+      "maxDataPoints": 240,
+      "interval": "1m",
       "targets": [
         {
           "refId": "A",
           "expr": "k8s_deployment_available{job=\"bank-infra\"}",
-          "legendFormat": "{{k8s_deployment_name}}"
+          "legendFormat": "{{k8s_deployment_name}}",
+          "instant": false,
+          "range": true
         }
       ],
       "fieldConfig": {
@@ -1145,11 +1217,15 @@
         "w": 12,
         "h": 8
       },
+      "maxDataPoints": 240,
+      "interval": "1m",
       "targets": [
         {
           "refId": "A",
           "expr": "100 * avg_over_time((k8s_deployment_available{job=\"bank-infra\"} > bool 0)[30d:1m])",
-          "legendFormat": "{{k8s_deployment_name}}"
+          "legendFormat": "{{k8s_deployment_name}}",
+          "instant": false,
+          "range": true
         }
       ],
       "fieldConfig": {
@@ -1201,11 +1277,15 @@
         "w": 12,
         "h": 8
       },
+      "maxDataPoints": 240,
+      "interval": "1m",
       "targets": [
         {
           "refId": "A",
           "expr": "{__name__=~\"k8s_hpa_(current|desired)_replicas\",job=\"bank-infra\"}",
-          "legendFormat": "{{k8s_hpa_name}} · {{__name__}}"
+          "legendFormat": "{{k8s_hpa_name}} · {{__name__}}",
+          "instant": false,
+          "range": true
         }
       ],
       "fieldConfig": {
@@ -1270,11 +1350,15 @@
         "w": 12,
         "h": 8
       },
+      "maxDataPoints": 240,
+      "interval": "1m",
       "targets": [
         {
           "refId": "A",
           "expr": "rabbitmq_message_current{job=\"bank-infra\"}",
-          "legendFormat": "{{rabbitmq_queue_name}} · {{state}}"
+          "legendFormat": "{{rabbitmq_queue_name}} · {{state}}",
+          "instant": false,
+          "range": true
         }
       ],
       "fieldConfig": {
@@ -1326,11 +1410,15 @@
         "w": 12,
         "h": 8
       },
+      "maxDataPoints": 240,
+      "interval": "1m",
       "targets": [
         {
           "refId": "A",
           "expr": "rabbitmq_consumer_count{job=\"bank-infra\"}",
-          "legendFormat": "{{rabbitmq_queue_name}}"
+          "legendFormat": "{{rabbitmq_queue_name}}",
+          "instant": false,
+          "range": true
         }
       ],
       "fieldConfig": {

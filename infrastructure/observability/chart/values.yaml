@@ -56,8 +56,10 @@ components:
     config: datasources.yaml
     ports: [{name: http, port: 3000}]
     readyPath: /api/health
-    memoryRequest: 96Mi
-    memoryLimit: 384Mi
+    cpuRequest: 25m
+    cpuLimit: 500m
+    memoryRequest: 192Mi
+    memoryLimit: 1Gi
     storage: 1Gi
     dataPath: /var/lib/grafana
 agent:

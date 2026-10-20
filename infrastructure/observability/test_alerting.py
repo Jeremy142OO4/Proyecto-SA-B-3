@@ -9,6 +9,18 @@ import smtp_secret
 
 
 class AlertingTests(unittest.TestCase):
+    def test_dashboard_query_budget(self):
+        panels = alerting.dashboard()['panels']
+        cards = [panel for panel in panels if panel['type'] == 'stat']
+        self.assertEqual(len(cards), 6)
+        for panel in panels:
+            if 'targets' not in panel:
+                continue
+            self.assertEqual(panel['maxDataPoints'], 240)
+            for target in panel['targets']:
+                self.assertEqual(target['instant'], panel['type'] == 'stat')
+                self.assertEqual(target['range'], panel['type'] != 'stat')
+
     def test_slo_and_guardrails(self):
         rules = alerting.provisioning()['groups'][0]['rules']
         self.assertGreaterEqual(len(rules), 4)
