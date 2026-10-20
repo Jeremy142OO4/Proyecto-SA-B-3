@@ -2,6 +2,11 @@ applicationNamespace: bank-usac-dev
 environment: dev
 grafanaSecret: observability-grafana
 storageClass: standard-rwo
+access:
+  enabled: false
+  internalIP: ""
+  sourceCIDR: ""
+  publicURL: ""
 components:
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.163.1

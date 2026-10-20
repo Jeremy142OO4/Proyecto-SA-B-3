@@ -31,6 +31,23 @@ for obj in objects:
         assert all(set(rule['verbs']) <= {'get', 'list', 'watch'} and 'secrets' not in rule['resources'] for rule in obj['rules'])
     assert obj['kind'] not in ['ClusterRole', 'ClusterRoleBinding'], 'Monitoring must stay namespace scoped'
 configmaps={o['metadata']['name']:o['data'] for o in objects if o['kind']=='ConfigMap'}
+access_rendered = subprocess.check_output([
+    'helm', 'template', 'bank-observability', str(directory/'chart'), '--namespace', 'bank-usac-observability',
+    '--set', 'access.enabled=true', '--set-string', 'access.internalIP=10.20.0.200',
+    '--set-string', 'access.sourceCIDR=10.20.0.0/24', '--set-string', 'access.publicURL=https://example.run.app'], text=True)
+access_objects = list(yaml.safe_load_all(access_rendered))
+for obj in access_objects:
+    if obj['kind'] == 'Service' and obj['spec']['type'] != 'ClusterIP':
+        assert obj['metadata']['name'] == 'grafana-private-access'
+        assert obj['metadata']['annotations']['networking.gke.io/load-balancer-type'] == 'Internal'
+        assert obj['spec']['loadBalancerSourceRanges'] == ['10.20.0.0/24']
+        assert obj['spec']['externalTrafficPolicy'] == 'Local'
+    if obj['kind'] == 'StatefulSet' and obj['metadata']['name'] == 'grafana':
+        env = {item['name']: item.get('value') for item in obj['spec']['template']['spec']['containers'][0]['env']}
+        assert env['GF_AUTH_ANONYMOUS_ENABLED'] == 'false'
+        assert env['GF_USERS_ALLOW_SIGN_UP'] == 'false'
+        assert env['GF_SECURITY_COOKIE_SECURE'] == 'true'
+        assert env['GF_SERVER_ROOT_URL'] == 'https://example.run.app/'
 json.loads(configmaps['grafana-dashboards']['overview.json'])
 datasources=yaml.safe_load(configmaps['grafana-config']['config.yaml'])['datasources']
 matcher=datasources[1]['jsonData']['derivedFields'][0]['matcherRegex']

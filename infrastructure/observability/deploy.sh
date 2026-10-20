@@ -13,9 +13,19 @@ if ! kubectl -n "$OBSERVABILITY_NAMESPACE" get secret observability-grafana >/de
   kubectl -n "$OBSERVABILITY_NAMESPACE" create secret generic observability-grafana --from-literal="password=$(openssl rand -hex 24)"
 fi
 python3 "$directory/smtp_secret.py"
+access_arguments=()
+# Persist bootstrap settings outside Helm so later CI deployments keep HTTPS enabled.
+if kubectl -n "$OBSERVABILITY_NAMESPACE" get configmap grafana-access >/dev/null 2>&1; then
+  access_ip="$(kubectl -n "$OBSERVABILITY_NAMESPACE" get configmap grafana-access -o jsonpath='{.data.internalIP}')"
+  access_cidr="$(kubectl -n "$OBSERVABILITY_NAMESPACE" get configmap grafana-access -o jsonpath='{.data.sourceCIDR}')"
+  access_url="$(kubectl -n "$OBSERVABILITY_NAMESPACE" get configmap grafana-access -o jsonpath='{.data.publicURL}')"
+  [[ "$access_url" == https://*.run.app && -n "$access_ip" && -n "$access_cidr" ]] || { echo 'Invalid Grafana HTTPS configuration' >&2; exit 1; }
+  access_arguments=(--set access.enabled=true --set-string "access.internalIP=$access_ip" --set-string "access.sourceCIDR=$access_cidr" --set-string "access.publicURL=$access_url")
+fi
 helm upgrade --install bank-observability "$directory/chart" \
   --namespace "$OBSERVABILITY_NAMESPACE" \
   --set "applicationNamespace=$KUBE_NAMESPACE" \
+  "${access_arguments[@]}" \
   --atomic --wait --timeout 8m --history-max 5
 
 # The same desired value is in the cloud-dev overlay. Only restart if it changed.

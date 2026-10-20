@@ -1,0 +1,29 @@
+{{- if .Values.access.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-private-access
+  annotations:
+    networking.gke.io/load-balancer-type: Internal
+spec:
+  type: LoadBalancer
+  loadBalancerIP: {{ .Values.access.internalIP | quote }}
+  externalTrafficPolicy: Local
+  loadBalancerSourceRanges: [{{ .Values.access.sourceCIDR | quote }}]
+  selector: {app.kubernetes.io/name: grafana}
+  ports:
+    - {name: http, port: 3000, targetPort: http}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grafana-private-access
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: grafana}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - ipBlock: {cidr: {{ .Values.access.sourceCIDR | quote }}}
+      ports: [{protocol: TCP, port: 3000}]
+{{- end }}
