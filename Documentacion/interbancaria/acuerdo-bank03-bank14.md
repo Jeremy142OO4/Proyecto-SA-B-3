@@ -2,7 +2,7 @@
 
 ## Estado y fuente de verdad
 
-La implementación de depósitos, reservas, callbacks, recuperación, reversos y conciliación se describe en [depósitos interbancarios](depositos.md). La recepción se habilita independientemente de la URL de BANK14; la comunicación saliente y las pruebas conjuntas siguen pendientes de esa dirección. No se ha desplegado el mock ni se ha probado una conexión con BANK14.
+La implementación de depósitos, reservas, callbacks, recuperación, reversos y conciliación se describe en [depósitos interbancarios](depositos.md). La recepción se habilita independientemente de la URL de BANK14. Su dirección ya está configurada en dev y en la variable del CI/CD `INTERBANK_PARTNER_BASE_URL`. Se verificaron HTTPS, salud, autenticación y consultas de solo lectura; también la conectividad desde el servicio de transacciones en GKE. No se ha desplegado el mock ni se ha probado una transferencia real con BANK14.
 
 El [OpenAPI original](../../contracts/interbank/openapi.yaml), versión 1.0.0, es la fuente de verdad. La guía recibida de BANK14 es contexto de integración, no una modificación del contrato. Su archivo original contiene claves y no se incorpora al repositorio.
 
@@ -12,8 +12,8 @@ El [OpenAPI original](../../contracts/interbank/openapi.yaml), versión 1.0.0, e
 | --- | --- | --- |
 | Grupo | 3 | 14 |
 | Código oficial | `BANK03` | `BANK14` |
-| URL HTTPS interbancaria | `https://bank-usac-frontend-dev-116700127937.us-central1.run.app/interbank/v1` (Swagger: `/swagger/`) | Pendiente de recibir una dirección real |
-| Credencial de entrada | Intercambiada por privado; configurada como Secret por CI, sin publicarla en Git | Intercambiada por privado; pendiente de probar |
+| URL HTTPS interbancaria | `https://bank-usac-frontend-dev-116700127937.us-central1.run.app/interbank/v1` (Swagger: `/swagger/`) | `https://api.pitagoricos.tech/interbank/v1` |
+| Credencial de entrada | Intercambiada por privado; configurada como Secret por CI, sin publicarla en Git | Configurada como Secret; verificada en consultas autenticadas de solo lectura |
 | Cuentas de prueba | Pendientes de preparar/confirmar, sin asumir que un UUID interno sea número interbancario | Valores abajo; formato aclarado, todavía no verificados contra su API |
 
 BANK14 confirmó retirar los dos últimos caracteres de sus identificadores originales:
@@ -24,6 +24,13 @@ BANK14 confirmó retirar los dos últimos caracteres de sus identificadores orig
 | Ahorro | `bbb4eca9-fc3f-415c-a317-d64e6e2aca` |
 
 Son identificadores opacos publicados por el banco dueño de la cuenta, no UUID que debamos reconstruir. No recortar otros valores automáticamente. Falta verificar que BANK14 reconozca exactamente estos números cuando comparta su URL.
+
+### Verificaciones del 19 de octubre de 2026
+
+- `GET /interbank/v1/health`: `200`, banco `BANK14`.
+- Consulta autenticada de una transferencia inexistente: `404 NOT_FOUND`, sin error de autenticación.
+- Consulta autenticada de conciliación: `200`, pero devuelve `totalTransfers`, `totalAmount` y `transfers`, en lugar de la estructura esperada por nuestra implementación. Pendiente contrastar con el OpenAPI original y resolver la incompatibilidad antes de validar la conciliación conjunta.
+- No se crearon depósitos ni se movieron fondos durante estas verificaciones. La activación de la configuración saliente permite al servicio reanudar sus trabajos automáticos pendientes.
 
 ## Dirección de las claves
 
