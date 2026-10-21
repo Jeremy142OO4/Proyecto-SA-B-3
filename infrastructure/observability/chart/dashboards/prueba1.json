@@ -2,7 +2,7 @@
   "uid": "bank-usac-prueba1",
   "title": "Bank USAC-Prueba1",
   "schemaVersion": 39,
-  "version": 17,
+  "version": 18,
   "timezone": "browser",
   "refresh": "15s",
   "time": {
@@ -15,7 +15,8 @@
     "prueba1",
     "account-service",
     "transaction-service",
-    "payment-service"
+    "payment-service",
+    "notification-audit-service"
   ],
   "editable": false,
   "templating": {
@@ -50,6 +51,52 @@
           "value": ".*"
         },
         "hide": 0
+      },
+      {
+        "name": "logService",
+        "label": "Servicio (logs)",
+        "type": "custom",
+        "query": "api-gateway,customer-service,account-service,transaction-service,payment-service,notification-audit-service",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "logLevel",
+        "label": "Nivel (logs)",
+        "type": "custom",
+        "query": "INFO,WARNING,ERROR",
+        "multi": true,
+        "includeAll": true,
+        "allValue": "INFO|WARNING|WARN|ERROR",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "logCorrelationId",
+        "label": "correlationId (.* = todos)",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        }
+      },
+      {
+        "name": "logTraceId",
+        "label": "traceId (.* = todos)",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        }
       }
     ]
   },
@@ -1064,6 +1111,67 @@
       },
       "options": {
         "showHeader": true
+      }
+    },
+    {
+      "id": 50,
+      "type": "row",
+      "title": "05/Notification_Audit_service",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 131,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 51,
+      "type": "logs",
+      "title": "Logs de los servicios · consulta por correlación y traza",
+      "description": "Logs JSON recolectados por el agente de infraestructura y almacenados en Loki. Combinar los filtros Servicio (logs), Nivel (logs), correlationId y traceId; .* significa todos. IDs se extraen al consultar y no son etiquetas del índice. Expandir una línea para ver atributos y el enlace Abrir traza del campo TraceID; requiere una traza grabada y retenida en Tempo. El cuerpo original se conserva. Hasta 500 líneas por consulta; rango y retención Loki de 48 h. Los eventos de auditoría de negocio siguen en PostgreSQL y se consultan por Gateway; no se envían logs de infraestructura por RabbitMQ.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 132,
+        "w": 24,
+        "h": 13
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service_name=~\"${logService:regex}\",deployment_environment_name=\"$environment\"} | json logLevel=\"level\", logCorrelationId=\"correlationId\", logTraceId=\"traceId\" | __error__=\"\" | logLevel=~\"${logLevel:regex}\" | logCorrelationId=~\"${logCorrelationId:raw}\" | logTraceId=~\"${logTraceId:raw}\"",
+          "queryType": "range",
+          "maxLines": 500
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "wrapLogMessage": false,
+        "prettifyLogMessage": false,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none"
+      }
+    },
+    {
+      "id": 52,
+      "type": "text",
+      "title": "Consulta de logs y auditoría de negocio",
+      "gridPos": {
+        "x": 0,
+        "y": 145,
+        "w": 24,
+        "h": 5
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Buscar:** selecciona servicio y nivel; pega un `correlationId` o `traceId` en los filtros superiores. Usa `.*` para quitar un filtro de ID. WARNING incluye registros antiguos de nivel WARN al seleccionar todos los niveles.\n\n**Abrir la traza:** expande un log y pulsa **Abrir traza** en el campo **TraceID**. Un ID presente en logs no garantiza spans grabados; la traza también debe existir en Tempo.\n\n**Auditoría de negocio:** `GET /api/auditoria/registros?correlationId=…&traceId=…&servicio=…&nivel=…` y `GET /api/auditoria/trazas/{traceId}`, con JWT de rol ADMIN. El dashboard consulta Loki, no guarda JWT ni accede directamente a las bases de los microservicios.\n\nLas notificaciones por **AccountAnomalyDetected** y **SLOAlertTriggered** siguen disponibles en auditoría y el panel administrativo."
       }
     }
   ]

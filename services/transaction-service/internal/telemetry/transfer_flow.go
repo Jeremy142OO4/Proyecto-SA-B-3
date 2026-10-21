@@ -12,6 +12,18 @@ import (
 	"time"
 )
 
+func initializeTransferResults(ctx context.Context) {
+	counter, err := otel.Meter("bank-usac").Int64Counter("bank_transfer_results", metric.WithDescription("Committed terminal transfer outcomes"))
+	if err != nil {
+		return
+	}
+	for _, outcome := range []string{"success", "failure"} {
+		labels := append([]attribute.KeyValue{}, metricIdentity...)
+		labels = append(labels, attribute.String("outcome", outcome))
+		counter.Add(ctx, 0, metric.WithAttributes(labels...))
+	}
+}
+
 func Phase2State(state models.Estado) string {
 	switch state {
 	case models.Completada:

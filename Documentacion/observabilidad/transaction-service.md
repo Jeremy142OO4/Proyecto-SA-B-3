@@ -115,3 +115,9 @@ Corrección: en Gateway, para `dev` y `local`, un padre remoto no muestreado se 
 La corrección requiere publicar la imagen actualizada de API Gateway por CI/CD y repetir una transferencia después del despliegue. No se pueden reconstruir retroactivamente los spans no grabados de esta transferencia. La política de sampling de desarrollo aumenta cobertura respecto a padres externos no muestreados y puede aumentar la ingesta de Tempo.
 
 Durante este diagnóstico se identificó el clúster activo como `bank-usac-gke`, proyecto `bank-usac`, zona `us-central1-a`; el contexto local anterior apuntaba a un proyecto sin clúster. Se usó un kubeconfig temporal separado, sin cambiar el contexto predeterminado. La consulta SQL temporal fue de solo lectura; el pod de diagnóstico y el túnel local se retiraron al finalizar.
+
+### Diagnóstico real del 0% de éxito (21/10/2026)
+
+La lectura de Prometheus mostró la serie `bank_transfer_results_total{outcome="success"}` constante en 1, con su primera muestra disponible ya en 1. No había una muestra cero previa; los incrementos iniciales y reinicios que vuelven al mismo valor no se pueden deducir de esa secuencia. Por eso la tasa de incremento puede resultar cero aunque auditoría confirme una transferencia completada. No es correcto inventar el incremento a partir del valor actual.
+
+Transaction Service inicializa ahora success y failure en cero al configurar el MeterProvider. La prueba local comprueba línea base, exclusión de PENDING y primer éxito. Publicar la imagen por CI/CD y esperar al menos una exportación/recolección antes de probar; después del resultado esperar otra recolección. El gráfico conserva ventana móvil de 5 min, por lo que no equivale a todos los éxitos históricos. No modifica ni restaura retrospectivamente los contadores previos.

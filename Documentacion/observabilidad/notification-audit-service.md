@@ -103,3 +103,21 @@ Pruebas locales verifican filtros individuales/combinados y temporales, paginaci
 La migración 000004 se incluyó en el paso de esquemas anterior al despliegue. El CI/CD de Notification & Audit ejecuta las pruebas de repositorios y servicio con PostgreSQL temporal y `go test -race`. Se validaron localmente el YAML del agente/Collector/Loki, el workflow, el ConfigMap, sintaxis Bash y los tests de scripts de observabilidad. Tras recuperar SSH se ejecutaron en Linux el render Helm, la validación binaria del agente y el Collector 0.163.1 y una prueba de ingestión con logs CRI sintéticos. La prueba verificó INFO/WARNING/ERROR, correlationId y los campos nativos trace/span. Esa comprobación reproducible se añadió al validador de observabilidad del CI/CD. El validador completo también terminó correctamente en el servidor, incluyendo Helm, configuraciones binarias de Collector/Prometheus/Loki y la nueva prueba de los tres niveles de log. También pasaron el nuevo paso de PostgreSQL del CI y las pruebas con detección de carreras del Gateway y de los paquetes de repositorios/servicios de auditoría.
 
 Los primeros intentos de SSH a 201.216.128.230 agotaron el tiempo de espera, pero el último permitió conectarse y ejecutar las verificaciones descritas en contenedores y directorios temporales. No se modificaron las bases desplegadas ni el clúster de Google Cloud. La prueba del agente utilizó una salida de depuración aislada; no constituye una prueba de ingestión del Loki desplegado ni una búsqueda visual en Grafana. Los cambios siguen locales hasta su publicación y ejecución del CI/CD.
+
+## Grafana: 05/Notification_Audit_service
+
+La sección en `Bank USAC-Prueba1` incluye un panel de logs de los seis servicios, almacenados en Loki y recogidos por el agente OpenTelemetry existente. No envía logs al broker ni acopla Notification & Audit a los demás procesos.
+
+Filtros independientes del resto del dashboard:
+
+- Servicio (logs): uno, varios o todos los servicios instrumentados.
+- Nivel (logs): INFO, WARNING o ERROR; la opción todos contempla WARN heredado.
+- correlationId y traceId: pegar el ID buscado o `.*` para todos. Los filtros se combinan con AND. UUID/traceId se extraen al consultar el JSON, sin indexarlos como etiquetas ni añadirlos a métricas.
+
+Expandir un registro permite usar **Abrir traza** del campo derivado TraceID del datasource Loki. Se conserva el cuerpo original para que el regex de extracción y enlace a Tempo funcionen. Un Trace ID en logs no garantiza spans muestreados o retenidos; Tempo debe conservar la traza. No se crean eventos o trazas ficticias para logs sin contexto. La consulta limita 500 líneas y respeta la retención de 48 h.
+
+Las rutas ADMIN existentes `/api/auditoria/registros` y `/api/auditoria/trazas/:traceId` consultan auditoría histórica de negocio en PostgreSQL, con filtros de correlación, traza, servicio y nivel. No son un proxy de Loki ni se invocan guardando JWT en Grafana. AccountAnomalyDetected y SLOAlertTriggered siguen creando notificaciones mediante sus consumidores existentes.
+
+La sección cambia solamente el JSON de dashboard; la infraestructura de logs, datasource Loki→Tempo y endpoints ya estaban implementados. Publicar por el aprovisionamiento Helm/CI-CD existente y verificar consultas, filtros y enlace con eventos nuevos del entorno.
+
+Verificación de consultas (21/10/2026): se ejecutó la consulta nueva contra Loki desplegado. La consulta general devolvió registros; al filtrar correlationId `b833d014-c8da-4e4d-87d3-85cd10830c6a` y por separado traceId `8ed62e5570fa9fbe5a43f8a62ac16bb2`, con servicio transaction-service y nivel INFO, se obtuvieron cinco líneas en cada caso y las cinco coincidieron con el regex del enlace TraceID. Los logs internos sin traza son válidos y no deben fabricar un enlace. La presentación del nuevo panel sigue pendiente de aprovisionar por CI/CD.
