@@ -30,7 +30,7 @@ func StartTransfer(ctx context.Context, id, correlation string) (context.Context
 }
 
 // Called only after a real state change has committed, never for duplicates.
-func TransferCommitted(ctx context.Context, id, correlation, saved string, state models.Estado, elapsed time.Duration) {
+func TransferCommitted(ctx context.Context, id, correlation, saved string, state models.Estado, elapsed time.Duration, accountIDs ...string) {
 	original := Restore(ctx, saved)
 	if sc := trace.SpanContextFromContext(original); sc.IsValid() && sc.TraceID() != trace.SpanContextFromContext(ctx).TraceID() {
 		ctx = original
@@ -42,7 +42,11 @@ func TransferCommitted(ctx context.Context, id, correlation, saved string, state
 	attrs := []attribute.KeyValue{attribute.String("transaction.id", id), attribute.String("transaction.state", string(state)), attribute.String("transaction.phase2.state", phase)}
 	span.SetAttributes(attrs...)
 	span.AddEvent(phase, trace.WithAttributes(attrs...))
-	slog.InfoContext(ctx, "transfer state committed", "transactionId", id, "state", string(state), "phase2State", phase)
+	logAttrs := []any{"transactionId", id, "state", string(state), "phase2State", phase}
+	if len(accountIDs) > 0 {
+		logAttrs = append(logAttrs, "accountId", accountIDs[0])
+	}
+	slog.InfoContext(ctx, "transfer state committed", logAttrs...)
 	if phase == "PENDING" {
 		return
 	}

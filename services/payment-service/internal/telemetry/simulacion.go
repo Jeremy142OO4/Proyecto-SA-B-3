@@ -38,9 +38,13 @@ func ProveedorConfirmado(ctx context.Context, result string, seconds float64) {
 		latency.Record(ctx, seconds, opts)
 	}
 }
-func PagoEstado(ctx context.Context, id, state string) {
+func PagoEstado(ctx context.Context, id, state string, accountIDs ...string) {
 	_, span := otel.Tracer("bank-usac").Start(ctx, "pago.estado", trace.WithAttributes(attribute.String("payment.id", id), attribute.String("payment.state", state)))
 	span.AddEvent(state)
 	span.End()
-	slog.InfoContext(ctx, "payment state committed", "paymentId", id, "state", state)
+	attrs := []any{"paymentId", id, "state", state}
+	if len(accountIDs) > 0 {
+		attrs = append(attrs, "accountId", accountIDs[0])
+	}
+	slog.InfoContext(ctx, "payment state committed", attrs...)
 }

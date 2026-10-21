@@ -15,14 +15,15 @@ func commitEstado(ctx context.Context, tx pgx.Tx, id uuid.UUID) (bool, error) {
 	var correlation uuid.UUID
 	var saved string
 	var seconds float64
-	err := tx.QueryRow(ctx, `SELECT estado,id_correlacion,trace_context,EXTRACT(EPOCH FROM (clock_timestamp()-fecha_creacion))::float8 FROM transferencias WHERE id_transferencia=$1`, id).Scan(&state, &correlation, &saved, &seconds)
+	var accountID uuid.UUID
+	err := tx.QueryRow(ctx, `SELECT estado,id_correlacion,trace_context,EXTRACT(EPOCH FROM (clock_timestamp()-fecha_creacion))::float8,id_cuenta_origen FROM transferencias WHERE id_transferencia=$1`, id).Scan(&state, &correlation, &saved, &seconds, &accountID)
 	if err != nil {
 		return false, err
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return false, err
 	}
-	telemetry.TransferCommitted(ctx, id.String(), correlation.String(), saved, state, time.Duration(seconds*float64(time.Second)))
+	telemetry.TransferCommitted(ctx, id.String(), correlation.String(), saved, state, time.Duration(seconds*float64(time.Second)), accountID.String())
 	return true, nil
 }
 

@@ -333,9 +333,9 @@ func (r *RepositorioPagosPostgres) ProcesarResultadoCuenta(ctx context.Context, 
 	if plan != nil {
 		telemetry.ProveedorConfirmado(ctx, string(plan.Resultado), externalDuration)
 	}
-	telemetry.PagoEstado(ctx, pago.IDPago.String(), string(pago.Estado))
+	telemetry.PagoEstado(ctx, pago.IDPago.String(), string(pago.Estado), pago.IDCuentaOrigen.String())
 	if m.Tipo == events.EventoCuentaCompensada {
-		telemetry.PagoEstado(ctx, pago.IDPago.String(), "COMPENSATED")
+		telemetry.PagoEstado(ctx, pago.IDPago.String(), "COMPENSATED", pago.IDCuentaOrigen.String())
 	}
 	return true, nil
 }

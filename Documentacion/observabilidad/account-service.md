@@ -195,3 +195,19 @@ Account Service inicializa seis series de movimientos y tres series de anomalía
 ### Validación manual pendiente en el entorno desplegado
 
 Realizar un depósito y una transferencia, seleccionar el UUID/rango y comprobar logs, líneas y pastel. Superar N operaciones dentro de M minutos y comprobar la nueva anomalía y su notificación. En Prometheus verificar `bank_account_movements_total{service="account-service"}` y `bank_account_anomalies_total{service="account-service"}`; en Loki comprobar `{service_name="account-service"}`. Si faltan series, revisar entorno, imagen, exportación OTLP y recolección del agente. No se pudo acceder al clúster durante el diagnóstico anterior por timeout.
+
+### Ajuste de conteos y presentación
+
+El panel de columnas usa ahora Loki `sum by (accountType, operation) (count_over_time(...[$__range]))` como consulta instantánea. Incluye MONETARIA. Ya no usa `increase` para presentar el número de movimientos del rango: 5 líneas de movimientos confirmados se cuentan como 5. Esto depende de la recolección y retención de los logs; no reconstruye registros perdidos. No confundir movimientos con operaciones de negocio únicas.
+
+La línea por cuenta usa `count_over_time(...[$__range])` en consulta temporal: cada punto cuenta una ventana móvil del tamaño del rango seleccionado. Se mantiene entre eventos mientras sigan en la ventana, sin inventar actividad ni unir huecos. No es un acumulado desde la hora inicial del dashboard. Si el rango es 1 h, al comienzo de la gráfica también se consultan logs de la hora anterior a ese comienzo. La apariencia escalonada corresponde a conteos enteros, no una interpolación suave de operaciones inexistentes.
+
+Las anomalías muestran `sum by (account_type) (bank_account_anomalies_total{...})`, filtrando AHORRO/CORRIENTE/MONETARIA. Son detecciones acumuladas en procesos actuales, con valores enteros; los reinicios/reemplazos pueden disminuir la línea. No representa un conteo histórico durable ni detecciones exclusivas del rango. El contador se inicializa en cero por tipo. La leyenda muestra el último valor de cada serie.
+
+Los logs de cuentas conservan el JSON original y el enlace a Tempo, con etiquetas visibles, fecha/nivel, orden descendente y líneas compactas sin envolver, como el panel general de microservicios. Expandir para ver accountId y otros campos.
+
+### Pastel por categoría de negocio
+
+El pastel se reemplazó por **Transacciones y pagos completados · cuenta origen**, con dos consultas Loki y nombres explícitos por referencia A/B para evitar `Value #A`. Transacciones significa transferencias con log `transfer state committed`, estado COMPLETADA; Pagos usa `payment state committed`, estado COMPLETADO. Se cuenta una operación completada, no cada movimiento de cuentas. Excluye depósitos, rechazos y compensaciones. Una categoría sin logs puede no aparecer; no implica falta de funcionamiento del panel.
+
+Se agrega accountId (cuenta origen) únicamente a estos logs de Payment/Transaction después del commit. No requiere migraciones y no se añaden IDs a métricas. Desplegar ambos servicios junto al dashboard para filtrar nuevas operaciones por UUID. Los logs anteriores sin accountId pueden contarse con `.*`, pero no se pueden atribuir retroactivamente a una cuenta específica desde este panel. La retención de Loki sigue siendo 48 h y la recolección puede perder registros; el SQL es la evidencia durable.
