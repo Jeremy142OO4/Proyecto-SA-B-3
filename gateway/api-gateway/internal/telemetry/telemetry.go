@@ -267,7 +267,7 @@ func HTTP() fiber.Handler {
 		}
 		carrier := propagation.MapCarrier{"traceparent": c.Get("traceparent"), "tracestate": c.Get("tracestate")}
 		ctx := propagator.Extract(c.UserContext(), carrier)
-		ctx, span := otel.Tracer("bank-usac").Start(ctx, "http request", trace.WithSpanKind(trace.SpanKindServer))
+		ctx, span := otel.Tracer("bank-usac").Start(ctx, "http request", portalSpanOptions(path, ctx)...)
 		c.SetUserContext(ctx)
 		defer span.End()
 		response := propagation.MapCarrier{}
@@ -307,6 +307,18 @@ func HTTP() fiber.Handler {
 		slog.InfoContext(ctx, "http request finished", "method", c.Method(), "route", route, "status", status)
 		return nil
 	}
+}
+
+// Portal API calls begin a bank-owned trace. Proxy-generated external parents
+// are linked rather than inherited: their spans are not exported to our Tempo.
+// Interbank ingress keeps its remote parent to preserve cross-bank propagation.
+func portalSpanOptions(path string, ctx context.Context) []trace.SpanStartOption {
+	opts := []trace.SpanStartOption{trace.WithSpanKind(trace.SpanKindServer)}
+	parent := trace.SpanContextFromContext(ctx)
+	if strings.HasPrefix(path, "/api/") && parent.IsValid() && parent.IsRemote() {
+		opts = append(opts, trace.WithNewRoot(), trace.WithLinks(trace.Link{SpanContext: parent}))
+	}
+	return opts
 }
 
 // JSON handler adds context IDs at emission time, not through mutable global state.

@@ -128,3 +128,17 @@ Requiere desplegar la imagen de Payment Service y el dashboard. JSON y pruebas u
 La tabla de pagos filtra por `span.payment.id =~ ".+"` y agrupa por Trace ID. La versión actual ya tiene `pago.inicio` con payment.id y correlación en Iniciar, antes de guardar el contexto W3C en SQL/outbox. El filtro anterior solo buscaba pago.estado/proveedor.simulado y excluía ese inicio. El nuevo filtro incluye cualquier etapa con payment.id, sin cambiar IDs ni etiquetas de métricas; no requiere duplicar spans ni otra modificación de backend.
 
 La consulta de pago contra Tempo fue válida pero no encontró trazas en los datos existentes. El contexto no muestreado (-00) investigado anteriormente no se corrige retroactivamente: desplegar la corrección de muestreo de Gateway y la instrumentación de Payment Service, luego generar un pago nuevo. La consulta por identificador no reconstruye spans nunca exportados. La tabla conserva el acceso a Explore y no añade un visor vacío al dashboard.
+
+### Verificación del panel vacío en Grafana (21/10/2026)
+
+Se revisaron logs de Payment Service en Grafana y se contrastaron directamente sus Trace ID con Tempo. Los últimos pagos existentes eran anteriores al despliegue de Gateway corregido de las 01:59:33 (UTC-6):
+
+- 07ba6a06-9ebc-44b8-931f-139a2f5fa2ef, último cambio 01:11:24, Trace ID 608cb54a2b8cf6d157421e0ccbc1ae78: Tempo 404.
+- a6139a40-5bc6-4bcb-935e-aa52bd6b1996, último cambio 00:35:21: Tempo 404.
+- 749c5f59-b657-48ed-b780-eced12665878, completado 00:33:49: Tempo 404.
+
+La consulta SQL de solo lectura del primer pago confirmó traceparent terminado en `-00`. El panel no puede reconstruir los spans nunca grabados; sus logs y auditoría sí permanecen.
+
+Se verificó la corrección del Gateway desplegado con GET sin autenticación al portal, sin crear pagos: se envió un Trace ID de diagnóstico con bandera 00 y la respuesta 401 mantuvo ese ID con bandera 01. Tempo devolvió 200 y un span para ese GET. Esta prueba demuestra muestreo/exportación en el Gateway actual, pero no demuestra el flujo de un pago nuevo ni compensaciones. Se solicitó al usuario generar un pago nuevo y compartir su ID. No se crearon usuarios, movimientos ni pagos de diagnóstico.
+
+No se modificaron filtros adicionales ni se fabricaron trazas de pagos para llenar la tabla. Se retiraron el pod de consulta de contexto y los túneles temporales al terminar.
