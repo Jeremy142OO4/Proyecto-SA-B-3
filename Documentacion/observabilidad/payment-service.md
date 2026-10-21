@@ -64,7 +64,7 @@ Los logs JSON de error simulado incluyen `errorCode`, `paymentId`, `simulationVe
 
 Se agregan servicio y entorno; nunca se usan IDs como etiquetas. Los resultados se contabilizan después del commit que confirma la decisión, una sola vez por pago. El histograma mide el intervalo lógico desde el inicio persistido de la llamada hasta su confirmación, incluida la espera; si hubo una caída y reanudación, también incluye ese intervalo. Los pagos internos, llamadas canceladas antes de confirmar y rollbacks no cuentan. Como la telemetría es en memoria, una caída entre commit y registro puede perder una muestra; no sustituye los registros contables persistidos.
 
-La vía existente es OTLP → Collector → Prometheus. `GET /metrics` en Payment Service permite inspección o scrape interno alternativo. No ingerir las mismas métricas por ambas vías, para no duplicarlas. No se hicieron dashboards ni cambios visuales de Grafana.
+La vía existente es OTLP → Collector → Prometheus. `GET /metrics` en Payment Service permite inspección o scrape interno alternativo. No ingerir las mismas métricas por ambas vías, para no duplicarlas. El dashboard se aprovisiona por separado con Helm según la sección descrita al final.
 
 Fallos externos por segundo, incluyendo timeouts:
 
@@ -100,3 +100,15 @@ Pruebas ejecutadas con PostgreSQL local temporal: éxito lento, fallo al 100 %, 
 Las pruebas HTTP verifican las rutas reales del Gateway, autenticación, roles, identidad del administrador, parámetros inválidos y errores de respuesta/timeout. Otras pruebas verifican `/metrics`, el histograma, las etiquetas y los logs JSON de error. El workflow de Payment Service incluye la prueba de PostgreSQL desechable con `go test -race`; en Windows se ejecutaron las pruebas normales y `go vet`, sin afirmar una ejecución local con detección de carreras.
 
 El servidor 201.216.128.230 no respondió por SSH durante esta tarea. Por eso no se probó un flujo desplegado con RabbitMQ ni se inspeccionaron trazas en el Grafana remoto. Las verificaciones descritas son locales y de contratos/eventos; la publicación y el despliegue quedan a cargo del CI/CD al subir los cambios por el flujo de ramas correspondiente.
+
+## Grafana: 04/Payment_service
+
+En `Bank USAC-Prueba1`, la sección `04/Payment_service` contiene:
+
+- **Tasa de fallos externos (%)**: failure + timeout sobre todos los resultados confirmados de `bank_payment_external_results_total`, con rate de 5 min y filtros service/environment. No confundir con el porcentaje configurado de simulación: es el resultado observado. Una serie de fallos ausente solo se reemplaza por cero cuando existe el total; si no hay resultados, no se muestra 0% inventado.
+- **Latencia del proveedor externo simulado · p95**: `histogram_quantile(0.95, sum by (le) (rate(bank_payment_external_duration_seconds_bucket{service="payment-service",environment="$environment"}[5m])))`. Agrega réplicas/resultados antes del percentil. No usa promedios ni la duración de toda la Saga.
+- **Logs de errores simulados**: Loki filtra message `simulated external error` y códigos `SIMULATED_EXTERNAL_FALLO` / `SIMULATED_EXTERNAL_TIMEOUT`. Son WARNING por ser fallos controlados, no necesariamente ERROR. Se conserva JSON original para detalles y enlace a Tempo. No se guarda ningún JWT en el dashboard.
+
+Los paneles respetan el entorno y rango temporal; el UUID de Account Service no aplica. Los fallos/timeouts solo aparecen al confirmar intentos externos; pagos internos y rollbacks no cuentan. La latencia incluye la espera y una eventual reanudación del intervalo lógico persistido. Los logs se limitan a 100 líneas por consulta y 48 h de retención. No sustituir ausencia de datos por cero.
+
+Validación manual pendiente tras despliegue: configurar la simulación mediante el endpoint ADMIN existente, ejecutar pagos externos de éxito lento, fallo y timeout, esperar exportación/recolección y comprobar tasa, p95 y logs. Las Sagas con compensación se inspeccionan desde sus trazas; los paneles no prueban por sí solos que se restauraron fondos. El cambio reutiliza instrumentación existente: JSON de dashboard y documentación, sin nuevas migraciones ni cambios de backend.

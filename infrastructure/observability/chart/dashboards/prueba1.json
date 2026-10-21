@@ -2,7 +2,7 @@
   "uid": "bank-usac-prueba1",
   "title": "Bank USAC-Prueba1",
   "schemaVersion": 39,
-  "version": 11,
+  "version": 13,
   "timezone": "browser",
   "refresh": "15s",
   "time": {
@@ -14,7 +14,8 @@
     "customer-service",
     "prueba1",
     "account-service",
-    "transaction-service"
+    "transaction-service",
+    "payment-service"
   ],
   "editable": false,
   "templating": {
@@ -49,30 +50,6 @@
           "value": ".*"
         },
         "hide": 0
-      },
-      {
-        "name": "sagaStates",
-        "label": "Sagas a consultar",
-        "type": "custom",
-        "query": "Todas : .*, Con compensación : COMPENSANDO|COMPENSADA|COMPENSACION_FALLIDA",
-        "multi": false,
-        "includeAll": false,
-        "current": {
-          "text": "Todas",
-          "value": ".*"
-        },
-        "options": [
-          {
-            "text": "Todas",
-            "value": ".*",
-            "selected": true
-          },
-          {
-            "text": "Con compensación",
-            "value": "COMPENSANDO|COMPENSADA|COMPENSACION_FALLIDA",
-            "selected": false
-          }
-        ]
       }
     ]
   },
@@ -830,8 +807,8 @@
     {
       "id": 33,
       "type": "table",
-      "title": "Trazas completas de Saga · transferencias y compensaciones",
-      "description": "Una fila por Trace ID. Abrir el Trace ID en Explore para ver el flujo distribuido completo: validaciones, débito, crédito y compensación si ocurrió. Expandir la fila permite revisar los spans coincidentes. El selector Sagas a consultar permite buscar solo trazas con estados COMPENSANDO/COMPENSADA/COMPENSACION_FALLIDA. Ver eventos PENDING/APPROVED/FAILED y transaction.state en transferencia.estado. Una Saga exitosa no tiene por qué incluir compensación. El resultado está limitado a 20 trazas y al rango/retención de Tempo (48 h). Los UUID de cuenta del otro apartado no filtran este panel.",
+      "title": "Trazas del flujo de transferencias · Saga",
+      "description": "Una fila por Trace ID que contiene inicio o cambios de estado de una transferencia. Incluye Sagas exitosas, fallidas y pendientes, sin exigir compensación ni un atributo de estado. Expandir la fila para ver spans coincidentes; abrir Trace ID para cargar la traza distribuida completa en Explore, incluidos los otros servicios y compensaciones cuando hayan ocurrido. No muestra sondeos periódicos de outbox. El rango temporal y la retención de Tempo limitan los resultados. No rows significa que no hubo coincidencias; no demuestra por sí solo un fallo de la Saga.",
       "datasource": {
         "type": "tempo",
         "uid": "tempo"
@@ -846,7 +823,7 @@
         {
           "refId": "A",
           "queryType": "traceql",
-          "query": "{ resource.service.name = \"transaction-service\" && resource.deployment.environment.name = \"$environment\" && name = \"transferencia.estado\" && span.transaction.state =~ \"${sagaStates:raw}\" }",
+          "query": "{ resource.service.name = \"transaction-service\" && resource.deployment.environment.name = \"$environment\" && name =~ \"transferencia[.](inicio|estado)\" }",
           "tableType": "traces",
           "limit": 20,
           "spss": 100
@@ -858,6 +835,165 @@
       },
       "options": {
         "showHeader": true
+      }
+    },
+    {
+      "id": 40,
+      "type": "row",
+      "title": "04/Payment_service",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 101,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 41,
+      "type": "timeseries",
+      "title": "Tasa de fallos externos (%)",
+      "description": "Porcentaje de resultados externos failure o timeout entre todos los resultados externos confirmados, en ventana móvil de 5 minutos. No cuenta pagos internos ni rollbacks. Cero solo cuando hay resultados observados sin fallos; sin resultados o telemetría queda sin datos. El resultado del proveedor se cuenta antes de la compensación, no como éxito de la Saga. El filtro UUID de Account Service no aplica.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 102,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(100 * ((sum(rate(bank_payment_external_results_total{service=\"payment-service\",environment=\"$environment\",outcome=~\"failure|timeout\"}[5m])) or (0 * sum(rate(bank_payment_external_results_total{service=\"payment-service\",environment=\"$environment\"}[5m])))) / sum(rate(bank_payment_external_results_total{service=\"payment-service\",environment=\"$environment\"}[5m])))) and (sum(rate(bank_payment_external_results_total{service=\"payment-service\",environment=\"$environment\"}[5m])) > 0)",
+          "legendFormat": "Fallos externos + timeouts",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 42,
+      "type": "timeseries",
+      "title": "Latencia del proveedor externo simulado · p95",
+      "description": "Percentil 95 estimado desde el histograma de duración externa, ventana móvil de 5 min. Agrega buckets por le entre réplicas y todos los resultados antes del percentil. Mide el intervalo lógico desde el inicio persistido de la llamada hasta su confirmación, incluida espera/reanudación; no es latencia total de la Saga ni promedio. Sin muestras aparece sin datos.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 102,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(bank_payment_external_duration_seconds_bucket{service=\"payment-service\",environment=\"$environment\"}[5m])))",
+          "legendFormat": "Latencia externa p95",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 43,
+      "type": "logs",
+      "title": "Logs de errores simulados",
+      "description": "Logs JSON de Payment Service con message=simulated external error y errorCode SIMULATED_EXTERNAL_FALLO o SIMULATED_EXTERNAL_TIMEOUT. Se emiten como WARNING por ser fallos controlados. Expandir para ver paymentId, outcome, simulationVersion, correlationId y traceId cuando existan. No incluye datos personales ni tokens. No exige nivel ERROR: excluiría estos eventos controlados. Máximo 100 líneas del rango; retención de Loki: 48 h.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 111,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service_name=\"payment-service\",deployment_environment_name=\"$environment\"} |= \"simulated external error\" | json message=\"message\", errorCode=\"errorCode\", outcome=\"outcome\" | __error__=\"\" | message=\"simulated external error\" | errorCode=~\"SIMULATED_EXTERNAL_(FALLO|TIMEOUT)\"",
+          "queryType": "range",
+          "maxLines": 100
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "wrapLogMessage": false,
+        "prettifyLogMessage": false,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none"
       }
     }
   ]
