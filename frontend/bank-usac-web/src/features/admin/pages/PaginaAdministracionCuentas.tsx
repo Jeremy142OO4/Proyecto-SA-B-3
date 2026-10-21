@@ -96,7 +96,6 @@ export function PaginaAdministracionCuentas() {
     {exito && <p className="alerta" role="status">{exito}</p>}
     <section className="panel-formulario monitoreo-cuentas" aria-labelledby="monitoreo-titulo">
       <p>Detección de patrones</p><h3 id="monitoreo-titulo">Alta frecuencia de transacciones</h3>
-      <p>Se genera una alerta WARNING cuando una cuenta supera el límite de débitos y créditos confirmados dentro de la ventana indicada. La cuenta permanece operativa hasta que un administrador decida bloquearla.</p>
       {errorConfiguracion && <p className="alerta error" role="alert">{errorConfiguracion}</p>}
       {!configuracion && !errorConfiguracion && <p role="status">Consultando configuración…</p>}
       <form onSubmit={e => void guardar(e)} className="formulario-monitoreo">

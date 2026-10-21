@@ -1,5 +1,21 @@
+.clientes-scroll {
+  max-height: 65vh;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.clientes-scroll article {
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.clientes-scroll article > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .dato-restringido {
-  color: #8a6b35 !important;
+  color: var(--color-warning-text) !important;
   font-style: italic;
 }
 
@@ -10,7 +26,7 @@
   display: grid;
   place-items: center;
   padding: 1rem;
-  background: #102f5088;
+  background: #292c3388;
 }
 
 .modal-confirmacion {
@@ -18,19 +34,19 @@
   padding: 2rem;
   text-align: center;
   background: white;
-  border: 1px solid #dbe5ec;
+  border: 1px solid var(--color-border);
   border-radius: 18px;
-  box-shadow: 0 18px 50px #102f5055;
+  box-shadow: 0 18px 50px #292c3355;
 }
 
 .modal-confirmacion h3 {
   margin: .9rem 0 .4rem;
-  color: #173b5d;
+  color: var(--color-primary-dark);
 }
 
 .modal-confirmacion p {
   margin: 0 0 1.4rem;
-  color: #5c7283;
+  color: var(--color-muted);
   line-height: 1.5;
 }
 
@@ -41,8 +57,8 @@
   height: 52px;
   margin: auto;
   border-radius: 50%;
-  background: #def3e8;
-  color: #1d7350;
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
   font-size: 1.8rem;
   font-weight: 800;
 }

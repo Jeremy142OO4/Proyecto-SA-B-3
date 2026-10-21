@@ -94,7 +94,7 @@ export function PaginaAdministracionClientes() {
       <div><p>Administración</p><h2>Clientes y usuarios</h2></div>
     </div>
     {error && <div className="alerta error">{error}</div>}
-    {!clientes.length ? <EstadoVacio mensaje="No hay clientes registrados." /> : <div className="lista tabla-clientes">
+    {!clientes.length ? <EstadoVacio mensaje="No hay clientes registrados." /> : <div className="lista tabla-clientes clientes-scroll" role="region" aria-label="Clientes y usuarios" tabIndex={0}>
       {clientes.map(cliente => <article key={cliente.customerId}>
         <div>
           <strong>{cliente.fullName}</strong>

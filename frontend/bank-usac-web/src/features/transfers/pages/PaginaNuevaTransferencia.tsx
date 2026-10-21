@@ -85,8 +85,8 @@ export function PaginaNuevaTransferencia() {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle id="titulo-advertencia-transferencia" sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#153b62', pb: 1 }}>
-          <WarningAmberOutlinedIcon sx={{ color: '#c48713', fontSize: 30 }} />
+        <DialogTitle id="titulo-advertencia-transferencia" sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'primary.dark', pb: 1 }}>
+          <WarningAmberOutlinedIcon sx={{ color: 'warning.main', fontSize: 30 }} />
           Tipo de cuenta destino no válido
         </DialogTitle>
         <DialogContent dividers sx={{ pt: 2 }}>

@@ -81,7 +81,7 @@ export function MensajeriaCuentas({ usuarioId }: { usuarioId: string }) {
     </IconButton>
     <Popover open={Boolean(ancla)} anchorEl={ancla} onClose={() => setAncla(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} transformOrigin={{ vertical: 'top', horizontal: 'right' }}>
       <section className="mensajeria-cuentas" role="dialog" aria-label="Alertas de cuentas">
-        <header><div><strong>Mensajería de cuentas</strong><small>Alta frecuencia de transacciones · WARNING</small></div><button type="button" className="secundario" onClick={() => setAncla(null)} aria-label="Cerrar mensajería">Cerrar</button></header>
+        <header><div><strong>Mensajería de cuentas</strong></div><button type="button" className="secundario" onClick={() => setAncla(null)} aria-label="Cerrar mensajería">Cerrar</button></header>
         <div className="mensajeria-acciones"><button type="button" className="secundario" disabled={cargando} onClick={() => setRevision(v => v + 1)}>Actualizar</button><button type="button" className="secundario" disabled={sinLeer === 0} onClick={marcarLeidas}>Marcar como leídas</button></div>
         {error && <p className="alerta error" role="alert">{error} Se conservan las últimas alertas consultadas.</p>}
         {cargando ? <p role="status">Consultando notificaciones…</p> : !alertas.length ? <p>No hay alertas de alta frecuencia disponibles.</p> :

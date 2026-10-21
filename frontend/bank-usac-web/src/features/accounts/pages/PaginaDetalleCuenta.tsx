@@ -1,4 +1,4 @@
-import { useCallback, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useParams } from 'react-router-dom';
 import { EstadoCarga, EstadoError, EstadoVacio } from '../../../components/feedback/EstadoCarga';
 import { usarConsulta } from '../../../hooks/usarConsulta';
@@ -18,6 +18,12 @@ export function PaginaDetalleCuenta() {
     recargaSilenciosa: true, actualizarAlEnfocar: false, pausarOculta: true,
   });
   const movimientos = usarConsulta(consultarMovimientos);
+
+  useEffect(() => {
+    if (!mensaje) return;
+    const temporizador = window.setTimeout(() => setMensaje(''), 5000);
+    return () => window.clearTimeout(temporizador);
+  }, [mensaje]);
 
   async function depositar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
@@ -43,19 +49,22 @@ export function PaginaDetalleCuenta() {
   return <>
     {cuenta.error && <div className="alerta error" role="status">No se pudo actualizar el saldo. Se muestran los últimos datos disponibles.</div>}
     <div className="hero-saldo">
-      <span>{cuenta.datos?.tipoCuenta}</span>
+      <div className="fila cabecera-saldo">
+        <span>{cuenta.datos?.tipoCuenta}</span>
+        <span className={`estado ${cuenta.datos?.estado.toLowerCase()}`} role="status">{cuenta.datos?.estado}</span>
+      </div>
       <h2>{dinero(cuenta.datos?.saldoCentavos ?? 0)}</h2>
       <p>Número de cuenta: {cuenta.datos?.numeroCuenta}</p>
       <p>ID de cuenta: {cuenta.datos?.idCuenta}</p>
     </div>
-    <p className="alerta" role="status">Estado: {cuenta.datos?.estado}. {cuenta.datos?.estado === 'BLOQUEADA' && 'Cuenta bloqueada. Puedes consultar tu historial, pero no realizar transacciones.'}</p>
+    {cuenta.datos?.estado === 'BLOQUEADA' && <p className="alerta" role="status">Cuenta bloqueada. Puedes consultar tu historial, pero no realizar transacciones.</p>}
     {cuenta.datos?.estado === 'ACTIVA' && <div className="panel-formulario">
       <p>Gestión de cuenta</p><h3>Agregar fondos</h3>
       <form className="formulario-deposito" onSubmit={depositar}>
         <label>Monto a agregar (Q)<input required min="0.01" step="0.01" type="number" value={monto} onChange={e => setMonto(e.target.value)} placeholder="100.00" /></label>
         <button disabled={depositando}>{depositando ? 'Procesando…' : 'Agregar fondos'}</button>
       </form>
-      {mensaje && <div className="alerta">{mensaje}</div>}
+      {mensaje && <div className="alerta" role="status">{mensaje}</div>}
       {errorDeposito && <div className="alerta error">{errorDeposito}</div>}
     </div>
     }

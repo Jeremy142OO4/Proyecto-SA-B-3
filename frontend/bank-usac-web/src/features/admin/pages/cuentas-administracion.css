@@ -1,16 +1,16 @@
-.monitoreo-cuentas > p { color: #526c80; line-height: 1.6; }
+.monitoreo-cuentas > p { color: var(--color-muted); line-height: 1.6; }
 .monitoreo-cuentas > p:not(:first-child) { text-transform: none; letter-spacing: normal; font-size: .9rem; font-weight: 400; margin: .8rem 0; }
 .formulario-monitoreo { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; margin: 1.3rem 0; }
-.formulario-monitoreo label, .motivo-bloqueo { display: grid; gap: .5rem; color: #405a70; font-size: .85rem; font-weight: 700; }
-.formulario-monitoreo input, .motivo-bloqueo textarea { padding: .75rem; border: 1px solid #bdccd7; border-radius: 9px; font: inherit; width: 100%; }
+.formulario-monitoreo label, .motivo-bloqueo { display: grid; gap: .5rem; color: var(--color-muted); font-size: .85rem; font-weight: 700; }
+.formulario-monitoreo input, .motivo-bloqueo textarea { padding: .75rem; border: 1px solid var(--color-border); border-radius: 9px; font: inherit; width: 100%; }
 .formulario-monitoreo input { max-width: 240px; }
-.monitoreo-cuentas small { color: #526c80; line-height: 1.6; }
-.cuentas-admin-tabla { overflow-x: auto; background: white; border: 1px solid #dbe5ec; border-radius: 14px; }
+.monitoreo-cuentas small { color: var(--color-muted); line-height: 1.6; }
+.cuentas-admin-tabla { overflow-x: auto; background: white; border: 1px solid var(--color-border); border-radius: 14px; }
 .cuentas-admin-tabla table { width: 100%; border-collapse: collapse; font-size: .85rem; }
-.cuentas-admin-tabla th { text-align: left; background: #eef4f8; color: #405a70; }
-.cuentas-admin-tabla th, .cuentas-admin-tabla td { padding: 1rem; border-bottom: 1px solid #e8eef2; vertical-align: top; }
-.cuentas-admin-tabla small { display: block; color: #6d8190; font-size: .7rem; margin-top: .4rem; overflow-wrap: anywhere; }
+.cuentas-admin-tabla th { text-align: left; background: var(--color-secondary-bg); color: var(--color-muted); }
+.cuentas-admin-tabla th, .cuentas-admin-tabla td { padding: 1rem; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+.cuentas-admin-tabla small { display: block; color: var(--color-muted); font-size: .7rem; margin-top: .4rem; overflow-wrap: anywhere; }
 .paginacion-cuentas { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 1.2rem 0; }
-.paginacion-cuentas span { font-size: .85rem; color: #526c80; }
+.paginacion-cuentas span { font-size: .85rem; color: var(--color-muted); }
 .motivo-bloqueo textarea { min-height: 110px; resize: vertical; }
 @media(max-width: 600px) { .formulario-monitoreo { display: grid; } .formulario-monitoreo input { max-width: none; } }
