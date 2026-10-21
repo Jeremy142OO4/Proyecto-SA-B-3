@@ -2,7 +2,7 @@
   "uid": "bank-usac-prueba1",
   "title": "Bank USAC-Prueba1",
   "schemaVersion": 39,
-  "version": 8,
+  "version": 10,
   "timezone": "browser",
   "refresh": "15s",
   "time": {
@@ -13,7 +13,8 @@
     "bank-usac",
     "customer-service",
     "prueba1",
-    "account-service"
+    "account-service",
+    "transaction-service"
   ],
   "editable": false,
   "templating": {
@@ -252,7 +253,7 @@
       "id": 21,
       "type": "barchart",
       "title": "Número de entradas y salidas por tipo de cuenta",
-      "description": "Conteo entero de logs de movimientos confirmados en el rango seleccionado, por AHORRO/CORRIENTE/MONETARIA. CREDITO es entrada y DEBITO es salida. Si hay cinco logs de entradas se muestra 5, sin extrapolación ni redondear increase. Respeta UUID. Cuenta movimientos, no transferencias únicas. Sujeto a disponibilidad y retención de logs (48 h); no es un conteo histórico de SQL. Una combinación sin registros puede no aparecer.",
+      "description": "Conteo entero de logs de movimientos confirmados en el rango seleccionado, por AHORRO/CORRIENTE/MONETARIA. CREDITO es entrada y DEBITO es salida. Si hay cinco logs de entradas se muestra 5, sin extrapolación ni redondear increase. Respeta UUID. Cuenta movimientos, no transferencias únicas. Sujeto a disponibilidad y retención de logs (48 h); no es un conteo histórico de SQL. Una combinación sin registros puede no aparecer. La consulta devuelve series numéricas de Loki; el panel toma la última muestra (final del rango) y la convierte a la tabla de categorías/operaciones. Las muestras anteriores no se suman.",
       "datasource": {
         "type": "loki",
         "uid": "loki"
@@ -267,7 +268,7 @@
         {
           "refId": "A",
           "expr": "sum by (accountType, operation) (count_over_time({service_name=\"account-service\",deployment_environment_name=\"$environment\"} |= \"account movement committed\" | json message=\"message\", accountId=\"accountId\", operation=\"operation\", accountType=\"accountType\" | __error__=\"\" | message=\"account movement committed\" | accountId!=\"\" | accountId=~\"${accountId:raw}\" | accountType=~\"AHORRO|CORRIENTE|MONETARIA\" | operation=~\"DEBITO|CREDITO\" [$__range]))",
-          "queryType": "instant",
+          "queryType": "range",
           "legendFormat": "{{accountType}} · {{operation}}"
         }
       ],
@@ -278,7 +279,31 @@
             "mode": "seriesToRows",
             "reducers": [
               "lastNotNull"
-            ]
+            ],
+            "includeTimeField": false
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "Field": "Tipo de cuenta y operación",
+              "Last *": "Operaciones",
+              "Last": "Operaciones"
+            },
+            "excludeByName": {}
+          }
+        },
+        {
+          "id": "convertFieldType",
+          "options": {
+            "conversions": [
+              {
+                "targetField": "Operaciones",
+                "destinationType": "number"
+              }
+            ],
+            "fields": {}
           }
         }
       ],
@@ -295,7 +320,7 @@
       },
       "options": {
         "orientation": "vertical",
-        "xField": "Field",
+        "xField": "Tipo de cuenta y operación",
         "showValue": "always",
         "groupWidth": 0.7,
         "barWidth": 0.8,
@@ -306,7 +331,8 @@
         "tooltip": {
           "mode": "single"
         }
-      }
+      },
+      "maxDataPoints": 2
     },
     {
       "id": 22,
@@ -560,7 +586,7 @@
     {
       "id": 27,
       "type": "logs",
-      "title": "Logs de actividad de cuentas · abrir TraceID para ver traza",
+      "title": "Logs de actividad de cuentas",
       "description": "Vista compacta de logs originales con fecha, nivel y etiquetas, como el panel general de microservicios. Expandir una línea para ver accountId, accountType, operation y correlationId/traceId cuando existan; abrir TraceID para la traza. Filtrar UUID arriba (.* = todas). No se reescribe el JSON, para conservar el enlace Loki→Tempo. No añade accountId al índice ni a las métricas Prometheus. Hasta 100 líneas y 48 h de retención.",
       "datasource": {
         "type": "loki",
@@ -588,6 +614,135 @@
         "enableLogDetails": true,
         "dedupStrategy": "none",
         "prettifyLogMessage": false
+      }
+    },
+    {
+      "id": 30,
+      "type": "row",
+      "title": "03/Transaction_service",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 72,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "Latencia del flujo de transferencia · p50, p95 y p99",
+      "description": "Percentiles estimados del histograma bank_transfer_flow_duration_seconds_bucket, en una ventana móvil de 5 minutos. Suma buckets de todas las réplicas y resultados antes de calcular cada percentil. Mide desde creación hasta resultado terminal confirmado e incluye validaciones, esperas del broker y compensaciones. No es promedio ni duración de una consulta SQL. Sin transferencias observadas o sin suficientes muestras de recolección aparece sin datos; no se sustituye por cero. El filtro UUID de Account Service no afecta este panel.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 73,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(bank_transfer_flow_duration_seconds_bucket{service=\"transaction-service\",environment=\"$environment\"}[5m])))",
+          "legendFormat": "p50",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(bank_transfer_flow_duration_seconds_bucket{service=\"transaction-service\",environment=\"$environment\"}[5m])))",
+          "legendFormat": "p95",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(bank_transfer_flow_duration_seconds_bucket{service=\"transaction-service\",environment=\"$environment\"}[5m])))",
+          "legendFormat": "p99",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "decimals": 3,
+          "noValue": "Sin transferencias observadas",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "auto",
+            "pointSize": 4,
+            "spanNulls": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p95"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p99"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     }
   ]

@@ -67,3 +67,11 @@ La compilación TypeScript/Vite y lint de la pantalla modificada también se ver
 ## Retiro de usuarios de prueba del servidor
 
 Con autorización expresa se retiraron exactamente `telprueba924`, `cliflujo070`, `clinotificacion050`, `prukycfase2590` y `prukycexterno041` de la base de clientes en 201.216.128.230. Se comprobó previamente que no tenían cuentas, saldos, pagos ni transferencias. Permanecen `admin` (ADMIN) y `teller` (TELLER); los roles del sistema no se eliminaron. El respaldo previo está en `/home/servidor/bank-usac-test/customer-before-test-cleanup-20261018.dump`, con permisos privados. La prueba aislada anterior de Account Service ya se había eliminado; también se retiró su archivo temporal con credenciales ficticias.
+
+## Dashboard Bank USAC-Prueba1: 03/Transaction_service
+
+Una sola gráfica **Latencia del flujo de transferencia · p50, p95 y p99** muestra tres líneas y sus últimos valores, con datasource Prometheus. Usa `histogram_quantile(Q, sum by (le) (rate(bank_transfer_flow_duration_seconds_bucket{service="transaction-service",environment="$environment"}[5m])))` para Q=0.50, 0.95 y 0.99. Agrega réplicas y resultados antes de calcular los percentiles; no usa promedio ni promedia percentiles. Los valores se almacenan en segundos y Grafana adapta su presentación según magnitud.
+
+La ventana móvil es de 5 minutos. Sin transferencias finalizadas observadas o sin suficientes muestras para rate puede aparecer sin datos; no equivale a cero latencia. La estimación depende de los buckets y del número de muestras. El rango temporal y el entorno son los del dashboard; el filtro de UUID de Account Service no aplica.
+
+Para verificar manualmente, finalizar varias transferencias en el entorno seleccionado, esperar exportación y recolección y revisar las tres curvas. No se generan transferencias de prueba automáticamente ni se añaden paneles de errores, logs o trazas en esta sección. La publicación solo modifica el JSON aprovisionado por Helm y usa la instrumentación existente, sin migraciones ni cambios de backend. Pendiente comprobación de las consultas contra Prometheus desplegado.
