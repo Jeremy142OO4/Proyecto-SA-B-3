@@ -1,0 +1,145 @@
+{
+  "uid": "bank-usac-prueba1",
+  "title": "Bank USAC-Prueba1",
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "refresh": "15s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "tags": [
+    "bank-usac",
+    "customer-service",
+    "prueba1"
+  ],
+  "editable": false,
+  "templating": {
+    "list": [
+      {
+        "name": "environment",
+        "label": "Entorno",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "label_values(bank_kyc_customers{service=\"customer-service\"}, environment)",
+          "refId": "EnvironmentVariableQuery"
+        },
+        "refresh": 1,
+        "multi": false,
+        "includeAll": false,
+        "current": {
+          "text": "dev",
+          "value": "dev"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "01/Customer_Service",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "bargauge",
+      "title": "Clientes verificados vs rechazados",
+      "description": "Cantidad actual de clientes por estado KYC en la base. Incluye clientes anteriores y sobrevive reinicios. Se usa max para evitar duplicar el total compartido entre réplicas. Sin datos significa falta de telemetría; no equivale a cero clientes.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (status) (bank_kyc_customers{service=\"customer-service\",environment=\"$environment\",status=~\"VERIFIED|REJECTED\"})",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "VERIFIED"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Verificados"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "REJECTED"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Rechazados"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        }
+      }
+    }
+  ]
+}

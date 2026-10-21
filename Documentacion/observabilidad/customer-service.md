@@ -1,6 +1,6 @@
 # Customer Service: ciclo de vida y KYC
 
-La migración `000007_customer_lifecycle` agrega la correlación y el contexto W3C de la creación, las fechas `kyc_updated_at` y `kyc_verified_at`, y el historial `customer_lifecycle_events`. Aplicar las migraciones antes de desplegar esta versión del servicio. No requiere cambios en frontend, dashboards o reglas de Grafana.
+La migración `000007_customer_lifecycle` agrega la correlación y el contexto W3C de la creación, las fechas `kyc_updated_at` y `kyc_verified_at`, y el historial `customer_lifecycle_events`. Aplicar las migraciones antes de desplegar esta versión del servicio. La instrumentación no requiere cambios en frontend ni reglas de alerta. El dashboard de consulta se aprovisiona por separado con Helm.
 
 ## Eventos y consistencia
 
@@ -60,3 +60,21 @@ TEST_DATABASE_URL='postgres://usuario:clave@localhost:5432/base_aislada?sslmode=
 Las pruebas de ciclo de vida crean y eliminan un esquema con nombre aleatorio dentro de la base aislada indicada. Validan migraciones, commit/rollback, concurrencia, repetición, activación, continuidad del traceId/correlationId, privacidad, conteos y unidades del histograma. La prueba existente `TestTelemetryOutboxDatabase` requiere que las migraciones también estén aplicadas en el esquema predeterminado de esa base. RabbitMQ se prueba por separado con `TEST_RABBITMQ_URL`.
 
 Validación realizada en el servidor de pruebas: `go test -race ./... -count=1` y `go vet ./...` terminaron correctamente con PostgreSQL 17 y RabbitMQ 4 temporales. También se verificó el endpoint HTTP KYC con autorización de administrador. Los contenedores temporales se retiraron; las bases existentes de Bank USAC y su despliegue no se modificaron.
+
+## Dashboard Bank USAC-Prueba1
+
+En la carpeta **Bank USAC**, abrir **Bank USAC-Prueba1** → fila **01/Customer_Service** → **Clientes verificados vs rechazados**. Elegir el entorno en el selector superior. El panel muestra el estado actual, no el número de decisiones realizadas en el rango de tiempo. Se actualiza cada 15 segundos, sujeto al intervalo de exportación y recolección.
+
+Fuente: `infrastructure/observability/chart/dashboards/prueba1.json`. La plantilla `configmaps.yaml` incluye el JSON y `workloads.yaml` lo monta en Grafana y calcula su checksum para reiniciar el pod al cambiar. El workflow existente ejecuta `infrastructure/observability/deploy.sh`; no hay que modificar ese script ni agregar migraciones.
+
+Consulta PromQL:
+
+```promql
+max by (status) (
+  bank_kyc_customers{service="customer-service",environment="$environment",status=~"VERIFIED|REJECTED"}
+)
+```
+
+El `max` evita duplicar el conteo de la base compartida entre réplicas. Los estados sin clientes tienen valor cero cuando el servicio exporta correctamente; una ausencia de telemetría aparece como **Sin datos**. Para probar, verificar un cliente y rechazar otro desde administración; el panel debe coincidir con sus estados actuales. No se necesita crear usuarios sintéticos. Los logs, trazas, correlación y redacción de datos siguen usando la instrumentación existente; este panel muestra solamente el conteo agregado solicitado.
+
+Como alternativa al despliegue, importar el JSON desde Grafana → Dashboards → New → Import y seleccionar la carpeta Bank USAC. Debe existir el datasource Prometheus con UID `prometheus`. El dashboard aprovisionado se mantiene desde el repositorio.

@@ -22,6 +22,7 @@ spec:
         {{- if eq $name "grafana" }}
         checksum/dashboards: {{ $.Files.Get "dashboards/overview.json" | sha256sum }}
         checksum/slo: {{ $.Files.Get "dashboards/slo.json" | sha256sum }}
+        checksum/prueba1: {{ $.Files.Get "dashboards/prueba1.json" | sha256sum }}
         checksum/alerting: {{ $.Files.Get "alerting/bank.json" | sha256sum }}
         checksum/access: {{ $.Values.access | toJson | sha256sum }}
         {{- end }}
@@ -112,6 +113,7 @@ spec:
             - {name: dashboards, mountPath: /etc/grafana/provisioning/dashboards/bank.yaml, subPath: provider.yaml, readOnly: true}
             - {name: dashboards, mountPath: /etc/grafana/bank-dashboards/overview.json, subPath: overview.json, readOnly: true}
             - {name: dashboards, mountPath: /etc/grafana/bank-dashboards/slo.json, subPath: slo.json, readOnly: true}
+            - {name: dashboards, mountPath: /etc/grafana/bank-dashboards/prueba1.json, subPath: prueba1.json, readOnly: true}
             - {name: alerting, mountPath: /etc/grafana/provisioning/alerting/bank.json, subPath: bank.json, readOnly: true}
             {{- end }}
       volumes:
