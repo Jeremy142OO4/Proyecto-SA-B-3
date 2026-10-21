@@ -88,3 +88,9 @@ Para probar el p95, registrar un cliente nuevo con la instrumentación actual y 
 Tempo conserva trazas durante 48 horas en la configuración actual. Una creación fuera de esa retención no podrá mostrarse aunque persista su correlationId/contexto en SQL. Ampliar el rango visible ayuda solo dentro de la retención; el dashboard no reconstruye spans eliminados ni previos a la instrumentación.
 
 Referencia del visor y navegación entre tabla y traza: https://grafana.com/docs/grafana/latest/visualizations/panels-visualizations/visualizations/traces/
+
+### Tabla por spans y metadatos de raíz
+
+La tabla **Spans de creación y decisión KYC** usa `tableType: spans` y oculta las columnas de nombre/servicio de la raíz de búsqueda. Muestra las etapas individuales; un mismo Trace ID puede aparecer en varias filas. La duración de cada fila es la del span, no el tiempo de espera hasta KYC. El visor inferior conserva la traza completa, incluido el span raíz del Gateway cuando está disponible.
+
+Este ajuste evita presentar `<root span not yet received>` como nombre del servicio del ciclo de vida; no repara ni garantiza la completitud de los metadatos de búsqueda de Tempo. Validar siempre creación, decisión VERIFIED y correlación en la traza completa. No se cambian tiempos de ingesta ni se retienen trazas abiertas en memoria durante la espera humana.

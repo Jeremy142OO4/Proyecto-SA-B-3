@@ -66,7 +66,7 @@ Se emiten logs JSON de débitos, créditos y compensaciones confirmados con acco
 
 
 
-Los IDs permanecen en eventos/logs, nunca en etiquetas de métricas. Los counters son señales operativas en memoria y se reinician con el proceso; el historial SQL y el outbox son la evidencia durable. Una caída entre commit y emisión/exportación puede perder una muestra. No se crearon dashboards de Grafana.
+Los IDs permanecen en eventos/logs, nunca en etiquetas de métricas. Los counters son señales operativas en memoria y se reinician con el proceso; el historial SQL y el outbox son la evidencia durable. Una caída entre commit y emisión/exportación puede perder una muestra. El dashboard Bank USAC-Prueba1 incorpora la sección 02/Account_service.
 
 
 
@@ -173,3 +173,22 @@ El destino es el entorno administrado por GitHub Actions, no una instalación nu
 La validación de sistema ejecuta `python3 infrastructure/scripts/test-feature-schema.py` contra un contenedor PostgreSQL desechable, sin puertos públicos ni acceso a las bases reales. Comprueba los cinco servicios, la reejecución de los esquemas, la conservación de un saldo y la reversión de una migración fallida. La prueba se ejecutó satisfactoriamente en el servidor el 18 de octubre de 2026. También se validó el YAML del workflow y la posición del paso de migraciones antes de Cloud Run en desarrollo y producción.
 
 El workflow conserva los disparadores existentes: un push a `develop` permite desplegar desarrollo cuando pasan las validaciones; el flujo de producción conserva sus propias condiciones. Cambiar archivos locales o ejecutar pruebas en el servidor no inicia GitHub Actions ni demuestra un despliegue en Google Cloud. El Minikube arrancado para diagnóstico se volvió a detener y se restauró el contexto GKE original.
+
+## Grafana: 02/Account_service
+
+El dashboard `Bank USAC-Prueba1` incorpora:
+
+- Columnas: estimación de movimientos confirmados por AHORRO/CORRIENTE y DEBITO/CREDITO durante el rango seleccionado, con `sum by (account_type, direction) (increase(bank_account_movements_total{...}[$__range]))`. Crédito es entrada; débito es salida. `increase` puede devolver fracciones y requiere al menos dos muestras; no es un conteo contable exacto. MONETARIA legado no se mezcla con CORRIENTE.
+- Gráfico de puntos: pegar un UUID en **UUID de cuenta (historial)**. Dos series cuentan entradas y salidas por minuto, desde logs Loki de `account movement committed`. El eje Y es número de operaciones, no dinero ni saldo. La variable vacía no selecciona cuentas.
+- Historial observable: logs originales de esa cuenta, hasta 100 líneas del rango seleccionado. Incluye UUID, tipo y operación; expandir los detalles para correlación/traza cuando estén presentes.
+- Alertas: logs WARNING de `AccountAnomalyDetected` del entorno. La notificación de negocio continúa en auditoría y mensajería administrativa.
+
+Los UUID se extraen del JSON al consultar Loki; no se añaden etiquetas de cuenta a Prometheus ni al índice de Loki. Los logs se conservan 48 h según la configuración actual. El gráfico de puntos no reconstruye movimientos anteriores a la recolección ni sustituye el historial SQL. Los conteos Prometheus incluyen todas las cuentas de los dos tipos, independientemente del UUID seleccionado.
+
+### Endpoint existente de movimientos
+
+`GET /api/cuentas/{idCuenta}/movimientos?limite=50&desplazamiento=0`, autenticado con JWT del rol CLIENTE y validación de propiedad de la cuenta. Devuelve movimientos con `idMovimiento`, `tipoMovimiento`, `montoCentavos`, `saldoNuevoCentavos`, `fechaCreacion` y descripción. No es un endpoint administrativo y no se habilita acceso a cuentas ajenas. El UUID de la cuenta está en la ruta. No se debe guardar un JWT de cliente en el dashboard.
+
+Grafana utiliza los datasources ya aprovisionados Prometheus y Loki; no requiere consultar ese endpoint ni instalar un plugin HTTP. Para probar manualmente, generar un depósito y una transferencia de una cuenta, esperar exportación/recolección, seleccionar su UUID y comprobar entradas/salidas en los puntos y logs. Validar el historial contable mediante el endpoint del propietario. Configuración de N/M y bloqueo siguen en administración; el dashboard no modifica esos valores.
+
+Cambios de publicación: JSON del dashboard y despliegue Helm existente, sin migraciones ni modificaciones de backend para estos paneles. Falta verificar visualmente las consultas contra los datasources del entorno desplegado.

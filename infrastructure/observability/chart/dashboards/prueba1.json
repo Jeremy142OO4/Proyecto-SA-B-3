@@ -2,7 +2,7 @@
   "uid": "bank-usac-prueba1",
   "title": "Bank USAC-Prueba1",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 4,
   "timezone": "browser",
   "refresh": "15s",
   "time": {
@@ -12,7 +12,8 @@
   "tags": [
     "bank-usac",
     "customer-service",
-    "prueba1"
+    "prueba1",
+    "account-service"
   ],
   "editable": false,
   "templating": {
@@ -40,6 +41,17 @@
       {
         "name": "traceId",
         "label": "Trace ID del cliente",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0
+      },
+      {
+        "name": "accountId",
+        "label": "UUID de cuenta (historial)",
         "type": "textbox",
         "query": "",
         "current": {
@@ -204,8 +216,8 @@
     {
       "id": 4,
       "type": "table",
-      "title": "Trazas de creación y decisión KYC",
-      "description": "Busca spans de ciclo de vida, excluyendo consultas periódicas del outbox. Una decisión KYC también puede ser rechazo. Seleccionar Ver ciclo del cliente para cargar la traza abajo; verificar el evento y el estado VERIFIED para evidenciar una verificación. Ampliar el rango si la creación fue anterior.",
+      "title": "Spans de creación y decisión KYC",
+      "description": "Una fila por span de ciclo de vida. Se muestran creación y decisión KYC con su Trace ID, Span ID, nombre y duración del span. Se ocultan los metadatos de raíz del resultado de búsqueda porque pueden estar incompletos en trazas reanudadas. Esto no corrige la indexación de Tempo ni elimina el span raíz. Abrir Ver ciclo del cliente para revisar la traza completa y el evento VERIFIED.",
       "datasource": {
         "type": "tempo",
         "uid": "tempo"
@@ -222,7 +234,8 @@
           "queryType": "traceql",
           "query": "{ resource.service.name = \"customer-service\" && resource.deployment.environment.name = \"$environment\" && name =~ \"customer[.]lifecycle[.](created|kyc)\" }",
           "limit": 20,
-          "tableType": "traces"
+          "tableType": "spans",
+          "spss": 100
         }
       ],
       "fieldConfig": {
@@ -231,7 +244,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "traceID"
+              "options": "Trace ID"
             },
             "properties": [
               {
@@ -250,7 +263,29 @@
       },
       "options": {
         "showHeader": true
-      }
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "traceService": true,
+              "traceName": true,
+              "rootServiceName": true,
+              "rootTraceName": true,
+              "Trace Service": true,
+              "Trace Name": true
+            },
+            "renameByName": {
+              "traceID": "Trace ID",
+              "spanID": "Span ID",
+              "spanName": "Etapa del ciclo",
+              "spanDuration": "Duración del span",
+              "startTime": "Inicio del span"
+            }
+          }
+        }
+      ]
     },
     {
       "id": 5,
@@ -275,6 +310,228 @@
         }
       ],
       "options": {}
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "02/Account_service",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 21,
+      "type": "barchart",
+      "title": "Operaciones por tipo de cuenta · rango seleccionado",
+      "description": "Número estimado de movimientos confirmados durante el rango seleccionado. CREDITO = entrada de dinero; DEBITO = salida. Se agrupan cuentas AHORRO y CORRIENTE y se suman réplicas. increase corrige reinicios y puede producir fracciones por extrapolación. La selección del UUID solo afecta el historial inferior. MONETARIA es un tipo legado excluido de estas cuatro combinaciones. Sin telemetría no se inventan ceros.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 39,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (account_type, direction) (increase(bank_account_movements_total{service=\"account-service\",environment=\"$environment\",account_type=~\"AHORRO|CORRIENTE\",direction=~\"DEBITO|CREDITO\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{account_type}} · {{direction}}"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "reduce",
+          "options": {
+            "mode": "seriesToRows",
+            "reducers": [
+              "lastNotNull"
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "vertical",
+        "xField": "Field",
+        "showValue": "always",
+        "groupWidth": 0.7,
+        "barWidth": 0.8,
+        "stacking": "none",
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Entradas y salidas por minuto · cuenta $accountId",
+      "description": "Pegar el UUID de cuenta en el campo superior. Cada punto cuenta logs de movimientos confirmados de esa cuenta durante el minuto anterior. CREDITO = entrada, DEBITO = salida. No muestra montos ni saldo, y no usa el UUID como etiqueta de Prometheus. Solo hay historial recogido y retenido en Loki (48 h). La ausencia de puntos puede significar falta de operaciones o de logs.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 24,
+        "h": 9
+      },
+      "interval": "1m",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({service_name=\"account-service\",deployment_environment_name=\"$environment\"} |= \"account movement committed\" | json message=\"message\", accountId=\"accountId\", operation=\"operation\", accountType=\"accountType\" | __error__=\"\" | message=\"account movement committed\" | accountId=~\"${accountId:regex}\" | operation=\"CREDITO\" [1m]))",
+          "queryType": "range",
+          "legendFormat": "Entradas · crédito"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(count_over_time({service_name=\"account-service\",deployment_environment_name=\"$environment\"} |= \"account movement committed\" | json message=\"message\", accountId=\"accountId\", operation=\"operation\", accountType=\"accountType\" | __error__=\"\" | message=\"account movement committed\" | accountId=~\"${accountId:regex}\" | operation=\"DEBITO\" [1m]))",
+          "queryType": "range",
+          "legendFormat": "Salidas · débito"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "points",
+            "showPoints": "always",
+            "pointSize": 7,
+            "lineWidth": 0,
+            "spanNulls": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Entradas · crédito"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Salidas · débito"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 23,
+      "type": "logs",
+      "title": "Historial observable de operaciones · cuenta $accountId",
+      "description": "Logs originales de movimientos confirmados para el UUID seleccionado: fecha, accountId, accountType, operation, correlationId y traceId cuando existen. Expandir una línea para ver los campos. No equivale al libro persistido de movimientos: para montos/saldos e historial anterior a la recolección usar el endpoint autenticado de movimientos.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 57,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service_name=\"account-service\",deployment_environment_name=\"$environment\"} |= \"account movement committed\" | json message=\"message\", accountId=\"accountId\", operation=\"operation\", accountType=\"accountType\" | __error__=\"\" | message=\"account movement committed\" | accountId=~\"${accountId:regex}\" | operation=~\"DEBITO|CREDITO\"",
+          "queryType": "range",
+          "maxLines": 100
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none"
+      }
+    },
+    {
+      "id": 24,
+      "type": "logs",
+      "title": "Alertas AccountAnomalyDetected · WARNING",
+      "description": "Logs de anomalías por alta frecuencia, en el entorno seleccionado. El evento durable y su notificación se consultan en auditoría; este panel evidencia el log emitido después del commit. No bloquea cuentas automáticamente.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 67,
+        "w": 24,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service_name=\"account-service\",deployment_environment_name=\"$environment\"} |= \"AccountAnomalyDetected\" | json eventType=\"eventType\", level=\"level\" | __error__=\"\" | eventType=\"AccountAnomalyDetected\" | level=\"WARNING\"",
+          "queryType": "range",
+          "maxLines": 100
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true
+      }
     }
   ]
 }
