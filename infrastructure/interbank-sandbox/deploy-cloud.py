@@ -54,6 +54,8 @@ def isolated_url(raw, password):
 def migration_sql(module):
     parts = ["SELECT pg_advisory_xact_lock(hashtext('bank-scenarios-bootstrap'));",
              "SELECT format('CREATE ROLE bank_scenarios LOGIN PASSWORD %L', :'password') WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='bank_scenarios') \\gexec",
+             # PostgreSQL 16+ grants ADMIN, but not SET, to a CREATEROLE creator.
+             'GRANT bank_scenarios TO CURRENT_USER;',
              'CREATE SCHEMA IF NOT EXISTS bank_scenarios AUTHORIZATION bank_scenarios;',
              'SET LOCAL ROLE bank_scenarios;',
              'SET LOCAL search_path TO bank_scenarios;',

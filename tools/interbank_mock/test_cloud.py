@@ -27,6 +27,7 @@ class CloudIsolationTests(unittest.TestCase):
     def test_migrations_use_separate_schema_and_role_without_resetting_balances(self):
         sql = cloud.migration_sql('account-service')
         self.assertIn('SET LOCAL ROLE bank_scenarios;', sql)
+        self.assertLess(sql.index('GRANT bank_scenarios TO CURRENT_USER;'), sql.index('CREATE SCHEMA'))
         self.assertIn('SET LOCAL search_path TO bank_scenarios;', sql)
         self.assertIn('ON CONFLICT DO NOTHING', sql)
         self.assertIn('Applied lab migration changed', sql)
