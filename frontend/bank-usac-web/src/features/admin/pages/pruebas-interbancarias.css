@@ -1,0 +1,37 @@
+.pruebas-banco { max-width: 1180px; margin: auto; color: #173650; }
+.pruebas-pasos { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 22px; }
+.pruebas-pasos span { flex: 1; min-width: 190px; padding: 16px; background: #eef4f9; border-radius: 12px; font-weight: 600; }
+.pruebas-pasos b { display: inline-grid; place-items: center; width: 28px; height: 28px; margin-right: 8px; background: #173650; color: white; border-radius: 50%; }
+.pruebas-seccion { margin: 30px 0 16px; }
+.pruebas-resultado { margin-top: 24px; padding: 24px; background: #fff5de; border-radius: 12px; border-left: 5px solid #dba633; }
+.pruebas-resultado.finalizado { background: #edf6f3; border-color: #18866f; }
+.pruebas-resultado code { display: block; overflow-wrap: anywhere; }
+.pruebas-estado { font-weight: 800; font-size: 1.2rem; letter-spacing: .03em; }
+.pruebas-titulo { display: flex; gap: 24px; justify-content: space-between; align-items: center; margin-bottom: 26px; }
+.pruebas-titulo p { color: #67839d; font-size: .75rem; letter-spacing: .13em; font-weight: 700; }
+.pruebas-titulo h2 { font-size: 1.9rem; margin: 8px 0; }
+.pruebas-titulo span, .pruebas-escenarios small { color: #637a8d; }
+.pruebas-banco button, .pruebas-acciones a { padding: 11px 16px; border: 1px solid #c8d9e4; border-radius: 9px; background: white; color: #173e5c; cursor: pointer; font: inherit; font-size: .9rem; }
+.pruebas-banco button:focus-visible, .pruebas-acciones a:focus-visible { outline: 3px solid #dcac39; outline-offset: 3px; }
+.pruebas-banco button:disabled { opacity: .5; cursor: not-allowed; }
+.pruebas-entorno { background: #fff5de; border: 1px solid #e9d198; border-radius: 14px; padding: 22px; margin-bottom: 24px; }
+.pruebas-entorno.aislado { background: #e5f5ef; border-color: #a6d8c5; }
+.pruebas-entorno p { margin: 10px 0 0; line-height: 1.6; }
+.pruebas-entorno code { overflow-wrap: anywhere; }
+.pruebas-escenarios { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.pruebas-escenarios article { display: flex; flex-direction: column; align-items: flex-start; background: white; border: 1px solid #d5e2ec; border-radius: 15px; padding: 23px; }
+.pruebas-escenarios article.seleccionado { border: 2px solid #18866f; padding: 22px; box-shadow: 0 5px 20px #18866f12; }
+.pruebas-etiqueta { font-size: .66rem; letter-spacing: .12em; color: #367c72; font-weight: 800; }
+.pruebas-escenarios h3 { margin: 14px 0 5px; }
+.pruebas-escenarios p, .pruebas-escenarios small { line-height: 1.6; }
+.pruebas-escenarios small { display: block; margin: 0 0 20px; }
+.pruebas-escenarios button { margin-top: auto; width: 100%; }
+.pruebas-guion { margin-top: 26px; background: white; border: 1px solid #d5e2ec; border-radius: 15px; padding: 25px; line-height: 1.8; }
+.pruebas-acciones { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+.pruebas-saldos { display: flex; flex-wrap: wrap; gap: 24px; margin: 16px 0; padding: 16px; border-radius: 10px; background: #eff5f9; }
+.pruebas-saldos span { color: #5d768b; }
+.pruebas-saldos strong { display: block; color: #173650; font-size: 1.25rem; }
+.pruebas-guion input { max-width: 150px; padding: 10px; margin: 8px 12px; border: 1px solid #c8d9e4; border-radius: 8px; font: inherit; }
+.pruebas-error { background: #ffeded; padding: 15px; border-radius: 9px; color: #9b3030; }
+.pruebas-exito { background: #e5f5ef; padding: 15px; border-radius: 9px; color: #226c56; }
+@media (max-width: 640px) { .pruebas-titulo { align-items: flex-start; flex-direction: column; } }

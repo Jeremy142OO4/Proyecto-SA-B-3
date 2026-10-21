@@ -60,7 +60,34 @@ class State:
         CREATE TABLE IF NOT EXISTS refund_jobs(reversal_id TEXT PRIMARY KEY, original TEXT UNIQUE,
           transfer_id TEXT UNIQUE, due REAL, attempts INTEGER DEFAULT 0, trace TEXT);
         CREATE TABLE IF NOT EXISTS refund_debits(original TEXT PRIMARY KEY, amount TEXT);
+        CREATE TABLE IF NOT EXISTS control_audit(at TEXT, actor TEXT, scenario TEXT);
         ''')
+        columns = {row[1] for row in self.db.execute('PRAGMA table_info(transfers)')}
+        if 'scenario' not in columns:
+            self.db.execute("ALTER TABLE transfers ADD COLUMN scenario TEXT NOT NULL DEFAULT 'accept'")
+        self.db.commit()
+
+    def control(self, scenario=None, actor=''):
+        """Private demo control, separate from the immutable bank contract.
+
+        The selected scenario is snapshotted on receipt, so restoring normal
+        behavior cannot change the outcome of a transfer already in flight.
+        """
+        options = {'accept': ('accept', 0.1), 'reject': ('reject', 0.1),
+                   'unavailable': ('unavailable', 0.1),
+                   'no_callback': ('no_callback', 0.1), 'delayed': ('accept', 181)}
+        with self.lock, self.db:
+            if scenario is not None:
+                if scenario not in options:
+                    raise ValueError('Unknown demo scenario')
+                self.scenario, self.delay = options[scenario]
+                self.db.execute('INSERT INTO control_audit VALUES(?,?,?)', (utc(), actor[:100], scenario))
+            selected = 'delayed' if self.delay >= 180 else self.scenario
+            last = self.db.execute('SELECT at FROM control_audit ORDER BY rowid DESC LIMIT 1').fetchone()
+            return dict(target='MOCK', scenario=selected, delaySeconds=self.delay,
+                        accounts=sorted(self.accounts), bankCode=self.bank,
+                        updatedAt=last[0] if last else None,
+                        callbackConfigured=bool(self.callback_url))
 
     def row(self, identifier):
         return self.db.execute('SELECT * FROM transfers WHERE id=?', (identifier,)).fetchone()
@@ -113,6 +140,7 @@ class State:
             now = utc(self.clock())
             self.db.execute('INSERT INTO transfers(id,body,status,received,updated,due,trace) VALUES(?,?,\'PROCESSING\',?,?,?,?)',
                             (identifier, canonical, now, now, self.clock()+self.delay, headers['traceparent']))
+            self.db.execute('UPDATE transfers SET scenario=? WHERE id=?', (self.scenario, identifier))
             return 202, {'interbankTransferId': identifier, 'status': 'PROCESSING', 'receivedAt': now}
         match = re.fullmatch(r'/transfers/([^/]+)(/(cancel|result))?', path)
         if match:
@@ -216,7 +244,7 @@ class State:
                     reason = 'AMOUNT_LIMIT_EXCEEDED'
                 elif data['destinationAccount'] not in self.accounts:
                     reason = 'ACCOUNT_NOT_FOUND'
-                elif self.scenario == 'reject':
+                elif row['scenario'] == 'reject':
                     reason = 'PROCESSING_ERROR'
                 status = 'REJECTED' if reason else 'ACCEPTED'
                 if status == 'ACCEPTED':
@@ -225,12 +253,14 @@ class State:
                                 (status, reason, utc(self.clock()), self.clock(), row['id']))
             callbacks = self.db.execute('SELECT * FROM transfers WHERE body IS NOT NULL AND callback_due<=?', (self.clock(),)).fetchall()
         self._send_refunds()
-        if not self.callback_url or self.scenario == 'no_callback':
+        if not self.callback_url:
             return
         for row in callbacks:
             if self.clock() - timestamp(row['updated']).timestamp() > 86400:
                 with self.lock, self.db:
                     self.db.execute('UPDATE transfers SET callback_due=NULL WHERE id=?', (row['id'],))
+                continue
+            if row['scenario'] == 'no_callback':
                 continue
             body = dict(interbankTransferId=row['id'], destinationBankCode=self.bank,
                         status='ACCEPTED' if row['status'] == 'ACCEPTED' else 'REJECTED', processedAt=row['updated'])
@@ -303,10 +333,12 @@ class State:
 class Server(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, state, api_key, port=0):
+    def __init__(self, state, api_key, port=0, control_key=''):
         if len(api_key) < 16:
             raise ValueError('Provide MOCK_API_KEY of at least 16 characters')
-        self.state, self.api_key = state, api_key
+        if control_key and (len(control_key) < 16 or control_key == api_key):
+            raise ValueError('Control requires a separate key of at least 16 characters')
+        self.state, self.api_key, self.control_key = state, api_key, control_key
         super().__init__(('127.0.0.1', port), Handler)
 
 
@@ -320,11 +352,30 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         self.handle_request()
 
+    def do_PUT(self):
+        self.handle_request()
+
     def handle_request(self):
         parsed = urlsplit(self.path)
         path = parsed.path.removeprefix('/interbank/v1')
         contract_path = next((p for p in CONTRACT['paths'] if re.fullmatch(re.sub(r'\{[^}]+\}', '[^/]+', p), path)), None)
         try:
+            if parsed.path == '/__mock/control':
+                if not self.server.control_key:
+                    raise Fault(404, 'NOT_FOUND', 'Control is disabled')
+                if not hmac.compare_digest(self.headers.get('X-Mock-Control-Key', ''), self.server.control_key):
+                    raise Fault(401, 'UNAUTHORIZED', 'Invalid control key')
+                if self.command == 'GET':
+                    return self.respond(200, self.server.state.control())
+                if self.command != 'PUT':
+                    raise Fault(405, 'METHOD_NOT_ALLOWED', 'GET or PUT required')
+                size = int(self.headers.get('Content-Length', '0'))
+                if not 0 < size <= 512 or self.headers.get_content_type() != 'application/json':
+                    raise ValueError('Invalid control request')
+                value = json.loads(self.rfile.read(size))
+                if not isinstance(value, dict) or set(value) != {'scenario'} or not isinstance(value['scenario'], str):
+                    raise ValueError('Only scenario is accepted')
+                return self.respond(200, self.server.state.control(value['scenario'], self.headers.get('X-Mock-Actor', '')))
             if not parsed.path.startswith('/interbank/v1/') or contract_path is None:
                 raise Fault(404, 'NOT_FOUND', 'Unknown contract route')
             if not (path == '/health' and self.command == 'GET'):
@@ -348,8 +399,12 @@ class Handler(BaseHTTPRequestHandler):
             code, value = error.status, dict(code=error.code, message=error.message, timestamp=utc())
         except (ValueError, KeyError, TypeError):
             code, value = 400, dict(code='VALIDATION_ERROR', message='Request does not satisfy the contract', timestamp=utc())
+        self.respond(code, value)
+
+    def respond(self, code, value):
         data = json.dumps(value).encode()
         self.send_response(code)
+        self.send_header('Cache-Control', 'no-store')
         self.send_header('Content-Type', 'application/json')
         self.send_header('Content-Length', str(len(data)))
         self.end_headers()
@@ -373,7 +428,7 @@ def main():
                   accounts=os.environ.get('MOCK_ACCOUNTS', 'TEST-BANK14-001').split(','),
                   delay=args.delay, scenario=args.scenario, callback_url=os.environ.get('MOCK_PARTNER_BASE_URL', ''),
                   callback_key=os.environ.get('MOCK_PARTNER_API_KEY', ''))
-    server = Server(state, os.environ.get('MOCK_API_KEY', ''), args.port)
+    server = Server(state, os.environ.get('MOCK_API_KEY', ''), args.port, os.environ.get('MOCK_CONTROL_KEY', ''))
     if args.cert:
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain(args.cert, args.key)

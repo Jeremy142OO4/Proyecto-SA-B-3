@@ -84,7 +84,15 @@ jobs:
 
             for archivo in "${archivos[@]}"; do
               case "$archivo" in
-                contracts/interbank/*|tools/interbank_mock/*|tools/__init__.py) interbancaria=true ;;
+                contracts/interbank/*|tools/__init__.py) interbancaria=true ;;
+                tools/interbank_mock/*.md|infrastructure/interbank-sandbox/*.md) ;;
+                tools/interbank_mock/*|infrastructure/interbank-sandbox/*)
+                  interbancaria=true
+                  gateway=true
+                  account=true
+                  transaction=true
+                  frontend=true
+                  ;;
                 infrastructure/observability/*) observabilidad=true ;;
                 gateway/api-gateway/*) gateway=true ;;
                 services/account-service/*) account=true ;;
@@ -1169,6 +1177,30 @@ jobs:
           for despliegue in rabbitmq api-gateway customer-service account-service payment-service transaction-service notification-audit-service frontend; do
             kubectl -n "$KUBE_NAMESPACE" rollout status "deployment/$despliegue" --timeout=180s
           done
+
+      - name: Iniciar sesion para publicar el mock de escenarios
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Configurar Buildx para el laboratorio
+        uses: docker/setup-buildx-action@v3
+
+      - name: Publicar mock de escenarios para GCP
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: tools/interbank_mock/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/bank-usac-interbank-mock:${{ github.sha }}
+          cache-from: type=gha,scope=bank-usac-interbank-mock
+          cache-to: type=gha,mode=max,scope=bank-usac-interbank-mock
+
+      - name: Desplegar laboratorio aislado en GKE
+        env:
+          MOCK_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/bank-usac-interbank-mock:${{ github.sha }}
+        run: python3 infrastructure/interbank-sandbox/deploy-cloud.py
 
       - name: Rollback automatico de desarrollo
         if: failure()

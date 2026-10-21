@@ -15,6 +15,7 @@ export function DisenoPrincipal() {
         {usuario?.rol === 'TELLER' && <><NavLink to="/cajero/clientes/nuevo">Registrar cliente</NavLink><NavLink to="/cajero/cuentas/nueva">Crear cuenta</NavLink></>}
         {usuario?.rol === 'ADMIN' && <><NavLink to="/administracion/clientes">Administrar clientes</NavLink><NavLink to="/administracion/cuentas">Administrar cuentas</NavLink><NavLink to="/eventos">Eventos</NavLink><NavLink to="/auditoria">Auditoría</NavLink></>}
       </nav>
+      {usuario?.rol === 'ADMIN' && <nav aria-label="Laboratorio"><NavLink to="/administracion/pruebas-interbancarias">Pruebas interbancarias</NavLink></nav>}
       <div className="usuario">
         <span>{usuario?.rol}</span>
         <strong>{usuario?.nombreCompleto}</strong>

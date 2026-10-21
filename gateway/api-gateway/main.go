@@ -39,6 +39,7 @@ func main() {
 	controladorAuditoria := controllers.NuevoControladorAuditoria(solicitante)
 
 	routes.Registrar(app, gateway, controladorClientes, controladorAuditoria, cfg.SecretoJWT, publicador.Listo)
+	controllers.TestControlFromEnv(cfg.SecretoJWT).Register(app)
 	bankCode := os.Getenv("INTERBANK_BANK_CODE")
 	if bankCode == "" {
 		bankCode = "BANK03"

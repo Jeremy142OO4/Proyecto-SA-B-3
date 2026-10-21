@@ -34,6 +34,21 @@ Configuración opcional de callbacks: `MOCK_PARTNER_BASE_URL` y `MOCK_PARTNER_AP
 
 La configuración de escenarios es local al mock. No modifica el sistema de simulación de Pagos ni decide cómo responderá BANK14 realmente.
 
+## Panel de administración aislado
+
+El panel **Pruebas interbancarias** permite elegir escenarios sin reiniciar procesos.
+El entorno completo y sus fixtures se encuentran en
+[`infrastructure/interbank-sandbox`](../../infrastructure/interbank-sandbox/README.md).
+No cambia automáticamente la URL de BANK14 del banco en GCP.
+
+La API privada `/__mock/control` admite GET y PUT con `{"scenario":"accept"}`
+(también `reject`, `unavailable`, `no_callback`, `delayed`). Está deshabilitada por
+defecto; se habilita con `MOCK_CONTROL_KEY`, diferente de `MOCK_API_KEY`, y requiere
+el header `X-Mock-Control-Key`. El Gateway valida ADMIN y nunca entrega esa clave
+al navegador. No es parte del OpenAPI interbancario. Escenario y demora quedan
+capturados por depósito; las decisiones ya iniciadas no cambian al restablecer
+el comportamiento normal. La auditoría registra actor/fecha/escenario sin claves.
+
 ## Alcance y límites
 
 El contrato original se verifica por SHA-256; el validador implementa el subconjunto de esquemas utilizado por ese archivo, no es un validador OpenAPI de propósito general. Se verifican tipos, campos requeridos, campos extra prohibidos, enums, patrones, fechas, UUIDs y respuestas exitosas contra los esquemas originales.
