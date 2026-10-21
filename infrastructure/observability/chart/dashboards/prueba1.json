@@ -2,7 +2,7 @@
   "uid": "bank-usac-prueba1",
   "title": "Bank USAC-Prueba1",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "timezone": "browser",
   "refresh": "15s",
   "time": {
@@ -36,6 +36,17 @@
           "text": "dev",
           "value": "dev"
         }
+      },
+      {
+        "name": "traceId",
+        "label": "Trace ID del cliente",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0
       }
     ]
   },
@@ -140,6 +151,130 @@
           "fields": ""
         }
       }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Creación → primera verificación KYC · p95 (24 h)",
+      "description": "Percentil 95 estimado del histograma de tiempo desde creación hasta primera verificación. Cada punto utiliza verificaciones observadas en las últimas 24 horas, sumando buckets entre réplicas antes de calcular el percentil. No es duración de una consulta SQL ni promedio. Sin muestras aparece sin datos.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(bank_kyc_duration_seconds_bucket{service=\"customer-service\",environment=\"$environment\"}[24h])))",
+          "legendFormat": "Tiempo KYC p95",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "decimals": 2,
+          "noValue": "Sin verificaciones observadas",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "Trazas de creación y decisión KYC",
+      "description": "Busca spans de ciclo de vida, excluyendo consultas periódicas del outbox. Una decisión KYC también puede ser rechazo. Seleccionar Ver ciclo del cliente para cargar la traza abajo; verificar el evento y el estado VERIFIED para evidenciar una verificación. Ampliar el rango si la creación fue anterior.",
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceql",
+          "query": "{ resource.service.name = \"customer-service\" && resource.deployment.environment.name = \"$environment\" && name =~ \"customer[.]lifecycle[.](created|kyc)\" }",
+          "limit": 20,
+          "tableType": "traces"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "traceID"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Ver ciclo del cliente",
+                    "url": "/d/bank-usac-prueba1?${__url_time_range}&var-environment=${environment:percentencode}&var-traceId=${__value.raw}",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "id": 5,
+      "type": "traces",
+      "title": "Ciclo del cliente · traza seleccionada",
+      "description": "Seleccionar una traza en la tabla o pegar su Trace ID en el selector superior. Revisar customer.lifecycle.created y customer.lifecycle.kyc con estado VERIFIED, correlationId y el mismo traceId. Las esperas humanas son huecos entre spans; no un span abierto. Sin un Trace ID seleccionado no se muestra una traza.",
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 24,
+        "h": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceql",
+          "query": "${traceId}"
+        }
+      ],
+      "options": {}
     }
   ]
 }
