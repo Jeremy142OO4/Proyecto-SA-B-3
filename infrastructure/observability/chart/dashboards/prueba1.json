@@ -2,7 +2,7 @@
   "uid": "bank-usac-prueba1",
   "title": "Bank USAC-Prueba1",
   "schemaVersion": 39,
-  "version": 10,
+  "version": 11,
   "timezone": "browser",
   "refresh": "15s",
   "time": {
@@ -49,6 +49,30 @@
           "value": ".*"
         },
         "hide": 0
+      },
+      {
+        "name": "sagaStates",
+        "label": "Sagas a consultar",
+        "type": "custom",
+        "query": "Todas : .*, Con compensación : COMPENSANDO|COMPENSADA|COMPENSACION_FALLIDA",
+        "multi": false,
+        "includeAll": false,
+        "current": {
+          "text": "Todas",
+          "value": ".*"
+        },
+        "options": [
+          {
+            "text": "Todas",
+            "value": ".*",
+            "selected": true
+          },
+          {
+            "text": "Con compensación",
+            "value": "COMPENSANDO|COMPENSADA|COMPENSACION_FALLIDA",
+            "selected": false
+          }
+        ]
       }
     ]
   },
@@ -743,6 +767,97 @@
           "mode": "multi",
           "sort": "desc"
         }
+      }
+    },
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "Tasa de error del flujo de transferencia (%)",
+      "description": "Porcentaje de resultados terminales fallidos sobre todos los resultados terminales en una ventana móvil de 5 min. Incluye RECHAZADA, COMPENSADA y COMPENSACION_FALLIDA: una compensación exitosa devuelve fondos pero la transferencia original sigue siendo fallida. PENDING no entra en el denominador. Solo muestra 0% cuando hay resultados observados y ningún fallo; sin tráfico o telemetría no se presenta cero. No mide errores HTTP ni errores de consultas SQL.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 83,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(100 * ((sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"$environment\",outcome=\"failure\"}[5m])) or (0 * sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"$environment\"}[5m])))) / sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"$environment\"}[5m])))) and (sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"$environment\"}[5m])) > 0)",
+          "legendFormat": "Transferencias fallidas (%)",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 2,
+          "noValue": "Sin resultados terminales observados",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 33,
+      "type": "table",
+      "title": "Trazas completas de Saga · transferencias y compensaciones",
+      "description": "Una fila por Trace ID. Abrir el Trace ID en Explore para ver el flujo distribuido completo: validaciones, débito, crédito y compensación si ocurrió. Expandir la fila permite revisar los spans coincidentes. El selector Sagas a consultar permite buscar solo trazas con estados COMPENSANDO/COMPENSADA/COMPENSACION_FALLIDA. Ver eventos PENDING/APPROVED/FAILED y transaction.state en transferencia.estado. Una Saga exitosa no tiene por qué incluir compensación. El resultado está limitado a 20 trazas y al rango/retención de Tempo (48 h). Los UUID de cuenta del otro apartado no filtran este panel.",
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 91,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceql",
+          "query": "{ resource.service.name = \"transaction-service\" && resource.deployment.environment.name = \"$environment\" && name = \"transferencia.estado\" && span.transaction.state =~ \"${sagaStates:raw}\" }",
+          "tableType": "traces",
+          "limit": 20,
+          "spss": 100
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
       }
     }
   ]

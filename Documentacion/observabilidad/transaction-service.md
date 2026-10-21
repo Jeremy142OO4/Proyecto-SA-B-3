@@ -25,7 +25,7 @@ La migración aditiva y reejecutable `000005_traza_transferencia` guarda `trace_
 
 La consulta de trazabilidad devuelve 400 para UUID inválido, 404 si no existe y 503 si falla la base. Son rutas del servicio dentro del clúster; no se añadieron rutas públicas al Gateway ni cambios para exponer el servicio a Internet. La consulta pública existente `GET /api/transferencias/:idTransferencia` mantiene la validación de propietario y agrega el `traceId` en su respuesta.
 
-El flujo existente Collector → Prometheus recibe las métricas por OTLP. `/metrics` es una alternativa para inspección o scrape directo; usar una sola vía de ingestión para estas series para evitar duplicarlas. No se modificaron dashboards ni reglas de Grafana.
+El flujo existente Collector → Prometheus recibe las métricas por OTLP. `/metrics` es una alternativa para inspección o scrape directo; usar una sola vía de ingestión para estas series para evitar duplicarlas. El dashboard de consulta se aprovisiona por separado; no se modifican las reglas de alerta.
 
 ## Consultas para Grafana
 
@@ -74,4 +74,14 @@ Una sola gráfica **Latencia del flujo de transferencia · p50, p95 y p99** mues
 
 La ventana móvil es de 5 minutos. Sin transferencias finalizadas observadas o sin suficientes muestras para rate puede aparecer sin datos; no equivale a cero latencia. La estimación depende de los buckets y del número de muestras. El rango temporal y el entorno son los del dashboard; el filtro de UUID de Account Service no aplica.
 
-Para verificar manualmente, finalizar varias transferencias en el entorno seleccionado, esperar exportación y recolección y revisar las tres curvas. No se generan transferencias de prueba automáticamente ni se añaden paneles de errores, logs o trazas en esta sección. La publicación solo modifica el JSON aprovisionado por Helm y usa la instrumentación existente, sin migraciones ni cambios de backend. Pendiente comprobación de las consultas contra Prometheus desplegado.
+Para verificar manualmente, finalizar varias transferencias en el entorno seleccionado, esperar exportación y recolección y revisar las tres curvas. No se generan transferencias de prueba automáticamente. La sección incorpora también la tasa de error y la tabla de trazas Saga descritas a continuación. La publicación solo modifica el JSON aprovisionado por Helm y usa la instrumentación existente, sin migraciones ni cambios de backend. Pendiente comprobación de las consultas contra Prometheus desplegado.
+
+### Tasa de error y traza Saga
+
+El panel **Tasa de error del flujo de transferencia (%)** divide la tasa de resultados `failure` entre todos los resultados terminales de `bank_transfer_results_total`, con servicio/entorno y ventana móvil de 5 min. Se suman las réplicas antes del cociente. Una serie de fallos ausente se reemplaza por cero solo si existe la tasa total; si el denominador no es positivo no se muestra porcentaje. Así el panel no representa ausencia de tráfico/telemetría como éxito. RECHAZADA, COMPENSADA y COMPENSACION_FALLIDA son fallos; las Sagas pendientes no se cuentan todavía. Es tasa de error del negocio, no porcentaje de respuestas HTTP 5xx.
+
+La tabla **Trazas completas de Saga · transferencias y compensaciones** agrupa por Trace ID como Customer Service. Abrir Trace ID lleva al visor Explore de Tempo, que carga la traza completa. El selector **Sagas a consultar** permite todas o solo trazas con estados COMPENSANDO, COMPENSADA o COMPENSACION_FALLIDA. La consulta filtra `transferencia.estado` y `span.transaction.state`; los spans contienen eventos PENDING/APPROVED/FAILED y correlationId. Los filtros de búsqueda identifican trazas; no limitan el contenido que se carga al abrir el ID.
+
+Validación manual: ejecutar una transferencia exitosa y una con fallo posterior al débito que provoque compensación. Confirmar el resultado terminal en la tasa de error; abrir la segunda traza y comprobar mismo Trace ID/correlationId para la Saga, comando de compensación y su respuesta, COMPENSANDO y COMPENSADA (o COMPENSACION_FALLIDA si esa recuperación falla). Una compensación correcta sigue contando como fallo de la transferencia original. El filtro de compensaciones solo obtiene resultados cuando existen eventos dentro del rango y la retención de Tempo (48 h).
+
+Estos paneles reutilizan métricas/spans existentes: solo cambia el dashboard, sin migraciones ni modificaciones de backend. JSON y referencias comprobados localmente; pendiente validación con Prometheus/Tempo desplegados.
