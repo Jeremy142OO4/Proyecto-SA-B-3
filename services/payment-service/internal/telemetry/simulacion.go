@@ -10,13 +10,25 @@ import (
 	"log/slog"
 )
 
+func initializeExternalResults(ctx context.Context) {
+	counter, err := otel.Meter("bank-usac").Int64Counter("bank_payment_external_results", metric.WithDescription("Committed logical simulated provider results"))
+	if err != nil {
+		return
+	}
+	for _, outcome := range []string{"success", "failure", "timeout"} {
+		labels := append([]attribute.KeyValue{}, metricIdentity...)
+		labels = append(labels, attribute.String("outcome", outcome))
+		counter.Add(ctx, 0, metric.WithAttributes(labels...))
+	}
+}
+
 func ProveedorSimulado(ctx context.Context, id, result string, version int64, delay int) {
 	span := trace.SpanFromContext(ctx)
 	span.SetAttributes(attribute.String("payment.id", id), attribute.Bool("external.simulated", true), attribute.String("external.outcome", result), attribute.Int64("simulation.version", version), attribute.Int("simulation.delay_ms", delay))
 	if result != "EXITO" {
 		span.SetStatus(codes.Error, "controlled simulated external failure")
 		span.AddEvent("external.simulated_failure")
-		slog.WarnContext(ctx, "simulated external error", "paymentId", id, "simulationVersion", version, "outcome", result, "errorCode", "SIMULATED_EXTERNAL_"+result)
+		slog.ErrorContext(ctx, "simulated external error", "paymentId", id, "simulationVersion", version, "outcome", result, "errorCode", "SIMULATED_EXTERNAL_"+result)
 	}
 }
 func ProveedorConfirmado(ctx context.Context, result string, seconds float64) {
@@ -46,5 +58,9 @@ func PagoEstado(ctx context.Context, id, state string, accountIDs ...string) {
 	if len(accountIDs) > 0 {
 		attrs = append(attrs, "accountId", accountIDs[0])
 	}
-	slog.InfoContext(ctx, "payment state committed", attrs...)
+	if state == "COMPENSANDO" || state == "RECHAZADO" || state == "COMPENSACION_FALLIDA" {
+		slog.ErrorContext(ctx, "payment state committed", attrs...)
+	} else {
+		slog.InfoContext(ctx, "payment state committed", attrs...)
+	}
 }

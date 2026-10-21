@@ -25,7 +25,7 @@ func TestSimulatedErrorStructuredLog(t *testing.T) {
 	if e := json.Unmarshal(bytes.TrimSpace(b.Bytes()), &record); e != nil {
 		t.Fatal(e)
 	}
-	if record["correlationId"] != corr || record["traceId"] != span.SpanContext().TraceID().String() || record["errorCode"] != "SIMULATED_EXTERNAL_TIMEOUT" || record["paymentId"] != id || record["level"] != "WARNING" {
+	if record["correlationId"] != corr || record["traceId"] != span.SpanContext().TraceID().String() || record["errorCode"] != "SIMULATED_EXTERNAL_TIMEOUT" || record["paymentId"] != id || record["level"] != "ERROR" {
 		t.Fatalf("structured simulation log incomplete: %v", record)
 	}
 }

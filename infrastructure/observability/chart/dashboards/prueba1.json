@@ -2,7 +2,7 @@
   "uid": "bank-usac-prueba1",
   "title": "Bank USAC-Prueba1",
   "schemaVersion": 39,
-  "version": 13,
+  "version": 15,
   "timezone": "browser",
   "refresh": "15s",
   "time": {
@@ -807,8 +807,8 @@
     {
       "id": 33,
       "type": "table",
-      "title": "Trazas del flujo de transferencias · Saga",
-      "description": "Una fila por Trace ID que contiene inicio o cambios de estado de una transferencia. Incluye Sagas exitosas, fallidas y pendientes, sin exigir compensación ni un atributo de estado. Expandir la fila para ver spans coincidentes; abrir Trace ID para cargar la traza distribuida completa en Explore, incluidos los otros servicios y compensaciones cuando hayan ocurrido. No muestra sondeos periódicos de outbox. El rango temporal y la retención de Tempo limitan los resultados. No rows significa que no hubo coincidencias; no demuestra por sí solo un fallo de la Saga.",
+      "title": "Trazas de Transaction Service",
+      "description": "Todas las trazas con participación de transaction-service en el entorno y rango seleccionados, agrupadas por Trace ID. No exige un nombre de span ni estado. Puede incluir consultas y sondeos del outbox, además de transferencias. Abrir el Trace ID de la transferencia para ver el flujo distribuido y sus compensaciones cuando correspondan. Para distinguirla, revisar transaction.id en los atributos o usar el traceId de la respuesta/historial de esa transferencia. La consulta está limitada a 50 trazas; estrechar el rango ayuda a localizar una operación concreta.",
       "datasource": {
         "type": "tempo",
         "uid": "tempo"
@@ -823,9 +823,9 @@
         {
           "refId": "A",
           "queryType": "traceql",
-          "query": "{ resource.service.name = \"transaction-service\" && resource.deployment.environment.name = \"$environment\" && name =~ \"transferencia[.](inicio|estado)\" }",
+          "query": "{ resource.service.name = \"transaction-service\" && resource.deployment.environment.name = \"$environment\" }",
           "tableType": "traces",
-          "limit": 20,
+          "limit": 50,
           "spss": 100
         }
       ],
@@ -966,8 +966,8 @@
     {
       "id": 43,
       "type": "logs",
-      "title": "Logs de errores simulados",
-      "description": "Logs JSON de Payment Service con message=simulated external error y errorCode SIMULATED_EXTERNAL_FALLO o SIMULATED_EXTERNAL_TIMEOUT. Se emiten como WARNING por ser fallos controlados. Expandir para ver paymentId, outcome, simulationVersion, correlationId y traceId cuando existan. No incluye datos personales ni tokens. No exige nivel ERROR: excluiría estos eventos controlados. Máximo 100 líneas del rango; retención de Loki: 48 h.",
+      "title": "Logs de errores y compensaciones de pagos",
+      "description": "Errores simulados del proveedor y transiciones de pago COMPENSANDO, RECHAZADO y COMPENSACION_FALLIDA. Las nuevas versiones emiten estos logs con nivel ERROR. Los logs antiguos WARNING se conservan y también se muestran: no se reescribe su nivel. Una misma falla puede generar varias líneas de estados, pero solo un resultado externo en la métrica. Expandir para correlationId, paymentId y traceId cuando existan.",
       "datasource": {
         "type": "loki",
         "uid": "loki"
@@ -981,7 +981,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{service_name=\"payment-service\",deployment_environment_name=\"$environment\"} |= \"simulated external error\" | json message=\"message\", errorCode=\"errorCode\", outcome=\"outcome\" | __error__=\"\" | message=\"simulated external error\" | errorCode=~\"SIMULATED_EXTERNAL_(FALLO|TIMEOUT)\"",
+          "expr": "{service_name=\"payment-service\",deployment_environment_name=\"$environment\"} |~ \"simulated external error|payment state committed\" | json message=\"message\", state=\"state\", errorCode=\"errorCode\" | __error__=\"\" | (message=\"simulated external error\" or (message=\"payment state committed\" and state=~\"COMPENSANDO|RECHAZADO|COMPENSACION_FALLIDA\"))",
           "queryType": "range",
           "maxLines": 100
         }
@@ -994,6 +994,39 @@
         "sortOrder": "Descending",
         "enableLogDetails": true,
         "dedupStrategy": "none"
+      }
+    },
+    {
+      "id": 44,
+      "type": "table",
+      "title": "Trazas de pagos · Saga y compensaciones",
+      "description": "Una fila por Trace ID de Payment Service. Abrir el ID carga el recorrido completo en Tempo, incluidos débito y compensación en Account Service. Busca spans pago.estado o pago.proveedor.simulado. Revisar COMPENSANDO, respuesta cuenta.compensada, RECHAZADO y evento COMPENSATED. No confundir con transferencias de Transaction Service. Retención 48 h y rango seleccionado.",
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 121,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceql",
+          "query": "{ resource.service.name = \"payment-service\" && resource.deployment.environment.name = \"$environment\" && name =~ \"pago[.](estado|proveedor[.]simulado)\" }",
+          "tableType": "traces",
+          "limit": 20,
+          "spss": 100
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
       }
     }
   ]
