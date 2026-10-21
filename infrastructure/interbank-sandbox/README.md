@@ -20,7 +20,8 @@ abre en el portal HTTPS habitual, entrando como ADMIN y seleccionando
 - El pod recibe telemetría OTLP del proyecto con entorno `interbank-cloud-tests`.
   En Grafana Explore filtrar ese entorno y buscar el ID de la prueba. No usar
   únicamente los paneles filtrados a `dev` para demostrar pruebas del laboratorio.
-- Recursos solicitados: 150m CPU / 304 MiB RAM; límites agregados 1.4 CPU /
+- Perfil compacto para demostraciones secuenciales: solicitudes de 30m CPU /
+  304 MiB RAM; límites agregados 1.4 CPU /
   1,056 MiB RAM. PVC 2 GiB. Revisar capacidad antes de ampliar escenarios.
 - El escenario seleccionado es compartido entre administradores; coordinar la
   demostración para no cambiarlo antes de que el mock reciba una solicitud.

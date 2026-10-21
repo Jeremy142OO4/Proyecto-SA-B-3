@@ -101,7 +101,7 @@ def main():
                     env=[dict(name='DATABASE_URL', valueFrom=dict(secretKeyRef=dict(name='bank-usac-secrets', key='URL_BASE_DATOS_'+key))),
                          dict(name='TEST_DB_PASSWORD', valueFrom=dict(secretKeyRef=dict(name=NAME, key='TEST_DB_PASSWORD'))),
                          dict(name='PGCONNECT_TIMEOUT', value='10'), dict(name='PGOPTIONS', value='-c lock_timeout=5000 -c statement_timeout=30000')],
-                    resources=dict(requests=dict(cpu='25m', memory='32Mi'), limits=dict(cpu='100m', memory='96Mi')),
+                    resources=dict(requests=dict(cpu='5m', memory='32Mi'), limits=dict(cpu='100m', memory='96Mi')),
                     volumeMounts=[dict(name='sql', mountPath='/migration', readOnly=True)])],
                 volumes=[dict(name='sql', configMap=dict(name=job))])))
         apply(manifest)
@@ -123,7 +123,7 @@ def main():
         settings = dict(common, PUERTO_HTTP=str(port), OTEL_SERVICE_NAME='lab-'+name, **(extra or {}))
         return dict(name=name, image=img, envFrom=[dict(secretRef=dict(name=NAME))],
                     env=[dict(name=k, value=v) for k,v in settings.items()],
-                    resources=dict(requests=dict(cpu='25m', memory='48Mi'), limits=dict(cpu='300m', memory='192Mi')),
+                    resources=dict(requests=dict(cpu='5m', memory='48Mi'), limits=dict(cpu='300m', memory='192Mi')),
                     readinessProbe=dict(httpGet=dict(path='/salud', port=port), initialDelaySeconds=5, periodSeconds=5),
                     livenessProbe=dict(httpGet=dict(path='/salud', port=port), initialDelaySeconds=30, periodSeconds=10),
                     securityContext=dict(allowPrivilegeEscalation=False, capabilities=dict(drop=['ALL'])) )
@@ -138,12 +138,12 @@ def main():
              dict(name='MOCK_PARTNER_API_KEY', valueFrom=dict(secretKeyRef=dict(name=NAME,key='INTERBANK_API_KEY'))),
              dict(name='MOCK_PARTNER_BASE_URL', value='http://127.0.0.1:8080/interbank/v1')],
         volumeMounts=[dict(name='state',mountPath='/app/state',subPath='mock')],
-        resources=dict(requests=dict(cpu='25m',memory='32Mi'),limits=dict(cpu='200m',memory='96Mi')),
+        resources=dict(requests=dict(cpu='5m',memory='32Mi'),limits=dict(cpu='200m',memory='96Mi')),
         readinessProbe=dict(exec=dict(command=['python','-c',"import socket; socket.create_connection(('127.0.0.1',8099),2).close()"]),periodSeconds=5))
     rabbit = dict(name='rabbit',image='rabbitmq:3.13-alpine',
         env=[dict(name='RABBITMQ_NODENAME',value='rabbit@interbank-scenarios'),dict(name='ERL_FLAGS',value='+S 1:1 +A 2')],
         volumeMounts=[dict(name='state',mountPath='/var/lib/rabbitmq',subPath='rabbit')],
-        resources=dict(requests=dict(cpu='50m',memory='128Mi'),limits=dict(cpu='300m',memory='384Mi')))
+        resources=dict(requests=dict(cpu='10m',memory='128Mi'),limits=dict(cpu='300m',memory='384Mi')))
     apply(resource('PersistentVolumeClaim', NAME, spec=dict(accessModes=['ReadWriteOnce'],resources=dict(requests=dict(storage='2Gi')))))
     manifest = resource('Deployment', NAME)
     manifest['apiVersion']='apps/v1'

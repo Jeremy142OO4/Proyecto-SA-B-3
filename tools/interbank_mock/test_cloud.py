@@ -50,6 +50,7 @@ class CloudIsolationTests(unittest.TestCase):
         deployment = next(r for r in applied if r['kind']=='Deployment')
         pod = deployment['spec']['template']['spec']
         self.assertEqual(len(pod['containers']), 5)
+        self.assertEqual(sum(int(c['resources']['requests']['cpu'][:-1]) for c in pod['containers']),30)
         self.assertFalse(pod['automountServiceAccountToken'])
         self.assertEqual(deployment['spec']['strategy']['type'], 'Recreate')
         self.assertNotIn('database', [c['name'] for c in pod['containers']])
