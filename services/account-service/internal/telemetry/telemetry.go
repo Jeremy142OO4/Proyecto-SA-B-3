@@ -108,6 +108,7 @@ func Setup(service string) func() {
 	mp := sdkmetric.NewMeterProvider(metricOpts...)
 	otel.SetTracerProvider(tp)
 	otel.SetMeterProvider(mp)
+	initializeAccountUsage(context.Background())
 	otel.SetTextMapPropagator(propagator)
 	return func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

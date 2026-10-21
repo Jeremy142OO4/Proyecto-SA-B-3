@@ -179,7 +179,7 @@ El workflow conserva los disparadores existentes: un push a `develop` permite de
 El dashboard `Bank USAC-Prueba1` incorpora:
 
 - Columnas: estimación de movimientos confirmados por AHORRO/CORRIENTE y DEBITO/CREDITO durante el rango seleccionado, con `sum by (account_type, direction) (increase(bank_account_movements_total{...}[$__range]))`. Crédito es entrada; débito es salida. `increase` puede devolver fracciones y requiere al menos dos muestras; no es un conteo contable exacto. MONETARIA legado no se mezcla con CORRIENTE.
-- Gráfico de puntos: pegar un UUID en **UUID de cuenta (historial)**. Dos series cuentan entradas y salidas por minuto, desde logs Loki de `account movement committed`. El eje Y es número de operaciones, no dinero ni saldo. La variable vacía no selecciona cuentas.
+- Gráfico de puntos: pegar un UUID en **UUID de cuenta (historial)**. Dos series cuentan entradas y salidas por minuto, desde logs Loki de `account movement committed`. El eje Y es número de operaciones, no dinero ni saldo. El filtro inicia con .* para consultar todas las cuentas; reemplazarlo por un UUID para una cuenta específica.
 - Historial observable: logs originales de esa cuenta, hasta 100 líneas del rango seleccionado. Incluye UUID, tipo y operación; expandir los detalles para correlación/traza cuando estén presentes.
 - Alertas: logs WARNING de `AccountAnomalyDetected` del entorno. La notificación de negocio continúa en auditoría y mensajería administrativa.
 
@@ -192,3 +192,11 @@ Los UUID se extraen del JSON al consultar Loki; no se añaden etiquetas de cuent
 Grafana utiliza los datasources ya aprovisionados Prometheus y Loki; no requiere consultar ese endpoint ni instalar un plugin HTTP. Para probar manualmente, generar un depósito y una transferencia de una cuenta, esperar exportación/recolección, seleccionar su UUID y comprobar entradas/salidas en los puntos y logs. Validar el historial contable mediante el endpoint del propietario. Configuración de N/M y bloqueo siguen en administración; el dashboard no modifica esos valores.
 
 Cambios de publicación: JSON del dashboard y despliegue Helm existente, sin migraciones ni modificaciones de backend para estos paneles. Falta verificar visualmente las consultas contra los datasources del entorno desplegado.
+
+### Ajustes por paneles sin datos
+
+El filtro de cuenta inicia ahora con `.*` (todas las cuentas) en lugar de vacío, que antes excluía todos los registros. Se interpreta como regex; usar solamente un UUID o `.*`. Los puntos se agrupan por accountId al consultar Loki; esto no agrega etiquetas al índice ni a Prometheus. La tabla Customer vuelve al formato por trazas, sin visor separado.
+
+Account Service inicializa al arrancar seis series del contador (AHORRO/CORRIENTE/MONETARIA por DEBITO/CREDITO) con valor cero real. Esto permite exportar una línea base antes de recibir movimientos y observar incrementos posteriores; `increase` sigue requiriendo al menos dos muestras. Requiere desplegar la imagen actualizada de Account Service además del dashboard.
+
+Si continúan sin datos: consultar primero `bank_account_movements_total{service="account-service"}` en Prometheus y `{service_name="account-service"}` en Loki, comprobar entorno y rango de tiempo, imagen desplegada y exportación OTLP/recolección del agente. El panel de anomalías solo tiene registros cuando se supera N dentro de M. No se usa `or vector(0)` para ocultar fallos de telemetría. No se pudo validar el clúster durante este ajuste porque su API no respondió.

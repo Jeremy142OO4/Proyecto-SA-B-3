@@ -16,6 +16,28 @@ func TestAccountMovementsByAccountTypeAndDirection(t *testing.T) {
 	previous := otel.GetMeterProvider()
 	otel.SetMeterProvider(provider)
 	t.Cleanup(func() { _ = provider.Shutdown(ctx); otel.SetMeterProvider(previous) })
+	initializeAccountUsage(ctx)
+	var baseline metricdata.ResourceMetrics
+	if err := reader.Collect(ctx, &baseline); err != nil {
+		t.Fatal(err)
+	}
+	baselineSeries := 0
+	for _, scope := range baseline.ScopeMetrics {
+		for _, instrument := range scope.Metrics {
+			if instrument.Name != "bank_account_movements" {
+				continue
+			}
+			for _, point := range instrument.Data.(metricdata.Sum[int64]).DataPoints {
+				baselineSeries++
+				if point.Value != 0 {
+					t.Fatalf("baseline must be zero, got %d", point.Value)
+				}
+			}
+		}
+	}
+	if baselineSeries != 6 {
+		t.Fatalf("expected six initialized series, got %d", baselineSeries)
+	}
 	for _, accountType := range []string{"AHORRO", "CORRIENTE"} {
 		for _, direction := range []string{"DEBITO", "CREDITO"} {
 			AccountMovementCommitted(ctx, accountType, direction, "synthetic-account", false)
@@ -40,8 +62,8 @@ func TestAccountMovementsByAccountTypeAndDirection(t *testing.T) {
 			}
 		}
 	}
-	if len(seen) != 4 {
-		t.Fatalf("expected four series, got %v", seen)
+	if len(seen) != 6 {
+		t.Fatalf("expected six series including legacy zero series, got %v", seen)
 	}
 	for _, key := range []string{"AHORRO/DEBITO", "AHORRO/CREDITO", "CORRIENTE/DEBITO", "CORRIENTE/CREDITO"} {
 		if seen[key] != 1 {

@@ -79,18 +79,8 @@ El `max` evita duplicar el conteo de la base compartida entre réplicas. Los est
 
 Como alternativa al despliegue, importar el JSON desde Grafana → Dashboards → New → Import y seleccionar la carpeta Bank USAC. Debe existir el datasource Prometheus con UID `prometheus`. El dashboard aprovisionado se mantiene desde el repositorio.
 
-### Tiempo KYC y traza en la misma sección
+### Tiempo KYC y trazas por Trace ID
 
-`01/Customer_Service` incluye una gráfica de series temporales del p95 KYC (ventana móvil de 24 h), una tabla de trazas de creación/decisión KYC y el visor de la traza seleccionada. La tabla filtra `customer.lifecycle.created` y `customer.lifecycle.kyc`, por servicio y entorno; no muestra sondeos de outbox. Seleccionar **Ver ciclo del cliente** en Trace ID o copiar ese ID al campo superior. El visor presenta los spans y sus eventos, no una gráfica agregada de latencia. La creación y la verificación deben compartir traceId y correlationId; el evento de decisión debe tener estado VERIFIED. Un rechazo también puede aparecer en la búsqueda KYC, pero no prueba una verificación.
+La sección incluye el p95 KYC y una tabla en formato `traces`: una fila por Trace ID y sus spans de creación/decisión KYC al expandirla. Abrir el Trace ID permite inspeccionar el recorrido en Explore. Se retiraron la variable traceId y el panel de traza seleccionada. El visor independiente ya no genera errores por un Trace ID vacío. Puede persistir el aviso de raíz ausente en metadatos de búsqueda de Tempo aunque se encuentre la raíz al abrir la traza; no se presenta como una corrección de la ingesta.
 
-Para probar el p95, registrar un cliente nuevo con la instrumentación actual y luego verificarlo. Esperar exportación y al menos dos recolecciones del contador del histograma; si el primer incremento ocurrió antes de la primera muestra, `rate` puede no observarlo. No se sustituyen resultados sin observaciones por cero. El p95 es una estimación por buckets; no es el tiempo individual del cliente ni el p95 de consultas SQL.
-
-Tempo conserva trazas durante 48 horas en la configuración actual. Una creación fuera de esa retención no podrá mostrarse aunque persista su correlationId/contexto en SQL. Ampliar el rango visible ayuda solo dentro de la retención; el dashboard no reconstruye spans eliminados ni previos a la instrumentación.
-
-Referencia del visor y navegación entre tabla y traza: https://grafana.com/docs/grafana/latest/visualizations/panels-visualizations/visualizations/traces/
-
-### Tabla por spans y metadatos de raíz
-
-La tabla **Spans de creación y decisión KYC** usa `tableType: spans` y oculta las columnas de nombre/servicio de la raíz de búsqueda. Muestra las etapas individuales; un mismo Trace ID puede aparecer en varias filas. La duración de cada fila es la del span, no el tiempo de espera hasta KYC. El visor inferior conserva la traza completa, incluido el span raíz del Gateway cuando está disponible.
-
-Este ajuste evita presentar `<root span not yet received>` como nombre del servicio del ciclo de vida; no repara ni garantiza la completitud de los metadatos de búsqueda de Tempo. Validar siempre creación, decisión VERIFIED y correlación en la traza completa. No se cambian tiempos de ingesta ni se retienen trazas abiertas en memoria durante la espera humana.
+Validar creación, decisión con estado VERIFIED y correlationId compartido en el recorrido. Tempo conserva trazas durante 48 h; la configuración del dashboard no reconstruye datos eliminados. El p95 usa verificaciones observadas durante las últimas 24 h y buckets de histograma, no la duración de la consulta SQL.

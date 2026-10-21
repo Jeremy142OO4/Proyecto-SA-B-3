@@ -2,7 +2,7 @@
   "uid": "bank-usac-prueba1",
   "title": "Bank USAC-Prueba1",
   "schemaVersion": 39,
-  "version": 4,
+  "version": 5,
   "timezone": "browser",
   "refresh": "15s",
   "time": {
@@ -39,24 +39,13 @@
         }
       },
       {
-        "name": "traceId",
-        "label": "Trace ID del cliente",
-        "type": "textbox",
-        "query": "",
-        "current": {
-          "text": "",
-          "value": ""
-        },
-        "hide": 0
-      },
-      {
         "name": "accountId",
-        "label": "UUID de cuenta (historial)",
+        "label": "UUID de cuenta (.* = todas)",
         "type": "textbox",
-        "query": "",
+        "query": ".*",
         "current": {
-          "text": "",
-          "value": ""
+          "text": ".*",
+          "value": ".*"
         },
         "hide": 0
       }
@@ -216,8 +205,8 @@
     {
       "id": 4,
       "type": "table",
-      "title": "Spans de creación y decisión KYC",
-      "description": "Una fila por span de ciclo de vida. Se muestran creación y decisión KYC con su Trace ID, Span ID, nombre y duración del span. Se ocultan los metadatos de raíz del resultado de búsqueda porque pueden estar incompletos en trazas reanudadas. Esto no corrige la indexación de Tempo ni elimina el span raíz. Abrir Ver ciclo del cliente para revisar la traza completa y el evento VERIFIED.",
+      "title": "Trazas de creación y decisión KYC",
+      "description": "Una fila por Trace ID, con creación y decisión KYC agrupadas. Expandir la fila para ver los spans y abrir el Trace ID para consultar el recorrido completo en Explore. El aviso root span not yet received puede aparecer en metadatos de búsqueda aunque la raíz esté disponible al abrir la traza.",
       "datasource": {
         "type": "tempo",
         "uid": "tempo"
@@ -234,82 +223,17 @@
           "queryType": "traceql",
           "query": "{ resource.service.name = \"customer-service\" && resource.deployment.environment.name = \"$environment\" && name =~ \"customer[.]lifecycle[.](created|kyc)\" }",
           "limit": 20,
-          "tableType": "spans",
+          "tableType": "traces",
           "spss": 100
         }
       ],
       "fieldConfig": {
         "defaults": {},
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Trace ID"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "title": "Ver ciclo del cliente",
-                    "url": "/d/bank-usac-prueba1?${__url_time_range}&var-environment=${environment:percentencode}&var-traceId=${__value.raw}",
-                    "targetBlank": false
-                  }
-                ]
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "options": {
         "showHeader": true
-      },
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "traceService": true,
-              "traceName": true,
-              "rootServiceName": true,
-              "rootTraceName": true,
-              "Trace Service": true,
-              "Trace Name": true
-            },
-            "renameByName": {
-              "traceID": "Trace ID",
-              "spanID": "Span ID",
-              "spanName": "Etapa del ciclo",
-              "spanDuration": "Duración del span",
-              "startTime": "Inicio del span"
-            }
-          }
-        }
-      ]
-    },
-    {
-      "id": 5,
-      "type": "traces",
-      "title": "Ciclo del cliente · traza seleccionada",
-      "description": "Seleccionar una traza en la tabla o pegar su Trace ID en el selector superior. Revisar customer.lifecycle.created y customer.lifecycle.kyc con estado VERIFIED, correlationId y el mismo traceId. Las esperas humanas son huecos entre spans; no un span abierto. Sin un Trace ID seleccionado no se muestra una traza.",
-      "datasource": {
-        "type": "tempo",
-        "uid": "tempo"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 26,
-        "w": 24,
-        "h": 12
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "queryType": "traceql",
-          "query": "${traceId}"
-        }
-      ],
-      "options": {}
+      }
     },
     {
       "id": 20,
@@ -318,7 +242,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 38,
+        "y": 26,
         "w": 24,
         "h": 1
       },
@@ -335,7 +259,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 39,
+        "y": 27,
         "w": 24,
         "h": 9
       },
@@ -388,15 +312,15 @@
     {
       "id": 22,
       "type": "timeseries",
-      "title": "Entradas y salidas por minuto · cuenta $accountId",
-      "description": "Pegar el UUID de cuenta en el campo superior. Cada punto cuenta logs de movimientos confirmados de esa cuenta durante el minuto anterior. CREDITO = entrada, DEBITO = salida. No muestra montos ni saldo, y no usa el UUID como etiqueta de Prometheus. Solo hay historial recogido y retenido en Loki (48 h). La ausencia de puntos puede significar falta de operaciones o de logs.",
+      "title": "Entradas y salidas por minuto · cuenta(s): $accountId",
+      "description": "Pegar el UUID de cuenta en el campo superior. Cada punto cuenta logs de movimientos confirmados de esa cuenta durante el minuto anterior. CREDITO = entrada, DEBITO = salida. No muestra montos ni saldo, y no usa el UUID como etiqueta de Prometheus. Solo hay historial recogido y retenido en Loki (48 h). La ausencia de puntos puede significar falta de operaciones o de logs. Con .* se consultan todas las cuentas del entorno; pegar un UUID para consultar solo esa cuenta. El UUID es un filtro de regex (usar .* para todas). El agrupamiento por accountId se calcula al consultar logs; no modifica las etiquetas indexadas ni Prometheus.",
       "datasource": {
         "type": "loki",
         "uid": "loki"
       },
       "gridPos": {
         "x": 0,
-        "y": 48,
+        "y": 36,
         "w": 24,
         "h": 9
       },
@@ -404,15 +328,15 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(count_over_time({service_name=\"account-service\",deployment_environment_name=\"$environment\"} |= \"account movement committed\" | json message=\"message\", accountId=\"accountId\", operation=\"operation\", accountType=\"accountType\" | __error__=\"\" | message=\"account movement committed\" | accountId=~\"${accountId:regex}\" | operation=\"CREDITO\" [1m]))",
+          "expr": "sum by (accountId) (count_over_time({service_name=\"account-service\",deployment_environment_name=\"$environment\"} |= \"account movement committed\" | json message=\"message\", accountId=\"accountId\", operation=\"operation\", accountType=\"accountType\" | __error__=\"\" | message=\"account movement committed\" | accountId=~\"${accountId:raw}\" | operation=\"CREDITO\" [1m]))",
           "queryType": "range",
-          "legendFormat": "Entradas · crédito"
+          "legendFormat": "Entradas · crédito · {{accountId}}"
         },
         {
           "refId": "B",
-          "expr": "sum(count_over_time({service_name=\"account-service\",deployment_environment_name=\"$environment\"} |= \"account movement committed\" | json message=\"message\", accountId=\"accountId\", operation=\"operation\", accountType=\"accountType\" | __error__=\"\" | message=\"account movement committed\" | accountId=~\"${accountId:regex}\" | operation=\"DEBITO\" [1m]))",
+          "expr": "sum by (accountId) (count_over_time({service_name=\"account-service\",deployment_environment_name=\"$environment\"} |= \"account movement committed\" | json message=\"message\", accountId=\"accountId\", operation=\"operation\", accountType=\"accountType\" | __error__=\"\" | message=\"account movement committed\" | accountId=~\"${accountId:raw}\" | operation=\"DEBITO\" [1m]))",
           "queryType": "range",
-          "legendFormat": "Salidas · débito"
+          "legendFormat": "Salidas · débito · {{accountId}}"
         }
       ],
       "fieldConfig": {
@@ -431,8 +355,8 @@
         "overrides": [
           {
             "matcher": {
-              "id": "byName",
-              "options": "Entradas · crédito"
+              "id": "byRegexp",
+              "options": "/^Entradas.*/"
             },
             "properties": [
               {
@@ -446,8 +370,8 @@
           },
           {
             "matcher": {
-              "id": "byName",
-              "options": "Salidas · débito"
+              "id": "byRegexp",
+              "options": "/^Salidas.*/"
             },
             "properties": [
               {
@@ -474,22 +398,22 @@
     {
       "id": 23,
       "type": "logs",
-      "title": "Historial observable de operaciones · cuenta $accountId",
-      "description": "Logs originales de movimientos confirmados para el UUID seleccionado: fecha, accountId, accountType, operation, correlationId y traceId cuando existen. Expandir una línea para ver los campos. No equivale al libro persistido de movimientos: para montos/saldos e historial anterior a la recolección usar el endpoint autenticado de movimientos.",
+      "title": "Historial observable de operaciones · cuenta(s): $accountId",
+      "description": "Logs originales de movimientos confirmados para el UUID seleccionado: fecha, accountId, accountType, operation, correlationId y traceId cuando existen. Expandir una línea para ver los campos. No equivale al libro persistido de movimientos: para montos/saldos e historial anterior a la recolección usar el endpoint autenticado de movimientos. Con .* se consultan todas las cuentas del entorno; pegar un UUID para consultar solo esa cuenta.",
       "datasource": {
         "type": "loki",
         "uid": "loki"
       },
       "gridPos": {
         "x": 0,
-        "y": 57,
+        "y": 45,
         "w": 24,
         "h": 10
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "{service_name=\"account-service\",deployment_environment_name=\"$environment\"} |= \"account movement committed\" | json message=\"message\", accountId=\"accountId\", operation=\"operation\", accountType=\"accountType\" | __error__=\"\" | message=\"account movement committed\" | accountId=~\"${accountId:regex}\" | operation=~\"DEBITO|CREDITO\"",
+          "expr": "{service_name=\"account-service\",deployment_environment_name=\"$environment\"} |= \"account movement committed\" | json message=\"message\", accountId=\"accountId\", operation=\"operation\", accountType=\"accountType\" | __error__=\"\" | message=\"account movement committed\" | accountId=~\"${accountId:raw}\" | operation=~\"DEBITO|CREDITO\"",
           "queryType": "range",
           "maxLines": 100
         }
@@ -514,7 +438,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 67,
+        "y": 55,
         "w": 24,
         "h": 7
       },

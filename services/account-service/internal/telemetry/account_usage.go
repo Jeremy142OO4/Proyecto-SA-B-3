@@ -8,6 +8,22 @@ import (
 	"log/slog"
 )
 
+// Export a baseline before the first movement so a fresh deployment has real
+// zero series and Prometheus can observe the first subsequent increment.
+func initializeAccountUsage(ctx context.Context) {
+	counter, err := otel.Meter("bank-usac").Int64Counter("bank_account_movements")
+	if err != nil {
+		return
+	}
+	for _, accountType := range []string{"AHORRO", "CORRIENTE", "MONETARIA"} {
+		for _, direction := range []string{"DEBITO", "CREDITO"} {
+			labels := append([]attribute.KeyValue{}, metricIdentity...)
+			labels = append(labels, attribute.String("account_type", accountType), attribute.String("direction", direction))
+			counter.Add(ctx, 0, metric.WithAttributes(labels...))
+		}
+	}
+}
+
 func AccountMovementCommitted(ctx context.Context, accountType, operation, accountID string, anomaly bool) {
 	slog.InfoContext(ctx, "account movement committed", "accountId", accountID, "accountType", accountType, "operation", operation)
 	if operation == "DEBITO" || operation == "CREDITO" {
