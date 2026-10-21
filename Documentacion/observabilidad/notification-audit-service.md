@@ -121,3 +121,9 @@ Las rutas ADMIN existentes `/api/auditoria/registros` y `/api/auditoria/trazas/:
 La sección cambia solamente el JSON de dashboard; la infraestructura de logs, datasource Loki→Tempo y endpoints ya estaban implementados. Publicar por el aprovisionamiento Helm/CI-CD existente y verificar consultas, filtros y enlace con eventos nuevos del entorno.
 
 Verificación de consultas (21/10/2026): se ejecutó la consulta nueva contra Loki desplegado. La consulta general devolvió registros; al filtrar correlationId `b833d014-c8da-4e4d-87d3-85cd10830c6a` y por separado traceId `8ed62e5570fa9fbe5a43f8a62ac16bb2`, con servicio transaction-service y nivel INFO, se obtuvieron cinco líneas en cada caso y las cinco coincidieron con el regex del enlace TraceID. Los logs internos sin traza son válidos y no deben fabricar un enlace. La presentación del nuevo panel sigue pendiente de aprovisionar por CI/CD.
+
+### Pastel por nivel y retiro del bloque de instrucciones
+
+Se retiró el panel de texto **Consulta de logs y auditoría de negocio**. El pastel **Registros de logs por nivel · INFO, WARNING y ERROR** cuenta líneas de Loki por nivel dentro del rango y filtros seleccionados, con nombres de categoría explícitos. WARN legado se normaliza a WARNING al consultar, también al seleccionar ese nivel individualmente. No son eventos únicos de la tabla SQL: un mismo evento puede generar varias líneas de servicios. Los conteos del pastel no se limitan a las 500 líneas visibles del panel.
+
+Verificado contra Loki desplegado: las tres consultas fueron válidas y devolvieron cantidades positivas. El JSON y el formato de etiquetas se comprobaron localmente; la presentación final requiere aprovisionar el dashboard.

@@ -2,7 +2,7 @@
   "uid": "bank-usac-prueba1",
   "title": "Bank USAC-Prueba1",
   "schemaVersion": 39,
-  "version": 18,
+  "version": 19,
   "timezone": "browser",
   "refresh": "15s",
   "time": {
@@ -1083,8 +1083,8 @@
     {
       "id": 44,
       "type": "table",
-      "title": "Trazas de pagos · Saga y compensaciones",
-      "description": "Una fila por Trace ID de Payment Service. Abrir el ID carga el recorrido completo en Tempo, incluidos débito y compensación en Account Service. Busca spans pago.estado o pago.proveedor.simulado. Revisar COMPENSANDO, respuesta cuenta.compensada, RECHAZADO y evento COMPENSATED. No confundir con transferencias de Transaction Service. Retención 48 h y rango seleccionado.",
+      "title": "Trazas de pagos · flujo por payment_id",
+      "description": "Una fila por Trace ID de negocio con atributo payment.id. Incluye estados del pago y proveedor simulado; no sondeos sin pago. Abrir el Trace ID muestra la Saga completa y sus compensaciones cuando ocurran. Los contextos antiguos no muestreados (-00) no tienen spans recuperables en Tempo: tras desplegar la corrección de muestreo del Gateway, generar un pago nuevo. El historial previo sin spans no se reconstruye. Respeta entorno, rango y retención 48 h.",
       "datasource": {
         "type": "tempo",
         "uid": "tempo"
@@ -1099,9 +1099,9 @@
         {
           "refId": "A",
           "queryType": "traceql",
-          "query": "{ resource.service.name = \"payment-service\" && resource.deployment.environment.name = \"$environment\" && name =~ \"pago[.](estado|proveedor[.]simulado)\" }",
+          "query": "{ resource.service.name = \"payment-service\" && resource.deployment.environment.name = \"$environment\" && span.payment.id =~ \".+\" }",
           "tableType": "traces",
-          "limit": 20,
+          "limit": 50,
           "spss": 100
         }
       ],
@@ -1144,7 +1144,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{service_name=~\"${logService:regex}\",deployment_environment_name=\"$environment\"} | json logLevel=\"level\", logCorrelationId=\"correlationId\", logTraceId=\"traceId\" | __error__=\"\" | logLevel=~\"${logLevel:regex}\" | logCorrelationId=~\"${logCorrelationId:raw}\" | logTraceId=~\"${logTraceId:raw}\"",
+          "expr": "{service_name=~\"${logService:regex}\",deployment_environment_name=\"$environment\"} | json logLevel=\"level\", logCorrelationId=\"correlationId\", logTraceId=\"traceId\" | __error__=\"\" | label_format logLevel=`{{ if eq .logLevel \"WARN\" }}WARNING{{ else }}{{ .logLevel }}{{ end }}` | logLevel=~\"${logLevel:regex}\" | logCorrelationId=~\"${logCorrelationId:raw}\" | logTraceId=~\"${logTraceId:raw}\"",
           "queryType": "range",
           "maxLines": 500
         }
@@ -1160,18 +1160,131 @@
       }
     },
     {
-      "id": 52,
-      "type": "text",
-      "title": "Consulta de logs y auditoría de negocio",
+      "id": 53,
+      "type": "piechart",
+      "title": "Registros de logs por nivel · INFO, WARNING y ERROR",
+      "description": "Conteo de líneas JSON en Loki dentro del rango seleccionado. Respeta servicio, nivel, correlationId y traceId del panel de logs. WARNING incorpora WARN legado. Cada línea cuenta una vez: un mismo evento de negocio puede producir varios logs. No es un conteo de eventos únicos de la tabla de auditoría. Una categoría sin registros puede no aparecer; no se inventan datos cuando falta telemetría. Retención 48 h.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
       "gridPos": {
         "x": 0,
         "y": 145,
         "w": 24,
-        "h": 5
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({service_name=~\"${logService:regex}\",deployment_environment_name=\"$environment\"} | json logLevel=\"level\", logCorrelationId=\"correlationId\", logTraceId=\"traceId\" | __error__=\"\" | label_format logLevel=`{{ if eq .logLevel \"WARN\" }}WARNING{{ else }}{{ .logLevel }}{{ end }}` | logLevel=~\"${logLevel:regex}\" | logCorrelationId=~\"${logCorrelationId:raw}\" | logTraceId=~\"${logTraceId:raw}\" | logLevel=\"INFO\" [$__range]))",
+          "queryType": "instant",
+          "legendFormat": "INFO"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(count_over_time({service_name=~\"${logService:regex}\",deployment_environment_name=\"$environment\"} | json logLevel=\"level\", logCorrelationId=\"correlationId\", logTraceId=\"traceId\" | __error__=\"\" | label_format logLevel=`{{ if eq .logLevel \"WARN\" }}WARNING{{ else }}{{ .logLevel }}{{ end }}` | logLevel=~\"${logLevel:regex}\" | logCorrelationId=~\"${logCorrelationId:raw}\" | logTraceId=~\"${logTraceId:raw}\" | logLevel=\"WARNING\" [$__range]))",
+          "queryType": "instant",
+          "legendFormat": "WARNING"
+        },
+        {
+          "refId": "C",
+          "expr": "sum(count_over_time({service_name=~\"${logService:regex}\",deployment_environment_name=\"$environment\"} | json logLevel=\"level\", logCorrelationId=\"correlationId\", logTraceId=\"traceId\" | __error__=\"\" | label_format logLevel=`{{ if eq .logLevel \"WARN\" }}WARNING{{ else }}{{ .logLevel }}{{ end }}` | logLevel=~\"${logLevel:regex}\" | logCorrelationId=~\"${logCorrelationId:raw}\" | logTraceId=~\"${logTraceId:raw}\" | logLevel=\"ERROR\" [$__range]))",
+          "queryType": "instant",
+          "legendFormat": "ERROR"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "INFO"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "WARNING"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ERROR"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
-        "mode": "markdown",
-        "content": "**Buscar:** selecciona servicio y nivel; pega un `correlationId` o `traceId` en los filtros superiores. Usa `.*` para quitar un filtro de ID. WARNING incluye registros antiguos de nivel WARN al seleccionar todos los niveles.\n\n**Abrir la traza:** expande un log y pulsa **Abrir traza** en el campo **TraceID**. Un ID presente en logs no garantiza spans grabados; la traza también debe existir en Tempo.\n\n**Auditoría de negocio:** `GET /api/auditoria/registros?correlationId=…&traceId=…&servicio=…&nivel=…` y `GET /api/auditoria/trazas/{traceId}`, con JWT de rol ADMIN. El dashboard consulta Loki, no guarda JWT ni accede directamente a las bases de los microservicios.\n\nLas notificaciones por **AccountAnomalyDetected** y **SLOAlertTriggered** siguen disponibles en auditoría y el panel administrativo."
+        "pieType": "pie",
+        "displayLabels": [
+          "name",
+          "percent"
+        ],
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "tooltip": {
+          "mode": "single"
+        }
       }
     }
   ]

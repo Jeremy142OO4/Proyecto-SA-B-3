@@ -122,3 +122,9 @@ Los nuevos errores simulados se emiten con ERROR; también los estados confirmad
 Se añadió **Trazas de pagos · Saga y compensaciones** en 04/Payment_service. Filtra spans pago.estado/pago.proveedor.simulado y agrupa Trace ID. Los pagos no generan por sí mismos spans transferencia.inicio/estado de Transaction Service: la tabla 03 solo muestra transferencias. La traza completa del pago incluye Account Service y la compensación al abrir su Trace ID. Para validar Transaction Service ejecutar una transferencia, no únicamente un pago.
 
 Requiere desplegar la imagen de Payment Service y el dashboard. JSON y pruebas unitarias locales verificadas; pendiente comprobar las series y las trazas del entorno remoto. Tras el despliegue esperar la primera recolección de ceros antes de repetir el fallo.
+
+### Traza localizable desde el inicio del pago
+
+La tabla de pagos filtra por `span.payment.id =~ ".+"` y agrupa por Trace ID. La versión actual ya tiene `pago.inicio` con payment.id y correlación en Iniciar, antes de guardar el contexto W3C en SQL/outbox. El filtro anterior solo buscaba pago.estado/proveedor.simulado y excluía ese inicio. El nuevo filtro incluye cualquier etapa con payment.id, sin cambiar IDs ni etiquetas de métricas; no requiere duplicar spans ni otra modificación de backend.
+
+La consulta de pago contra Tempo fue válida pero no encontró trazas en los datos existentes. El contexto no muestreado (-00) investigado anteriormente no se corrige retroactivamente: desplegar la corrección de muestreo de Gateway y la instrumentación de Payment Service, luego generar un pago nuevo. La consulta por identificador no reconstruye spans nunca exportados. La tabla conserva el acceso a Explore y no añade un visor vacío al dashboard.
