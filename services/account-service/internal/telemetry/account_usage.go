@@ -15,7 +15,14 @@ func initializeAccountUsage(ctx context.Context) {
 	if err != nil {
 		return
 	}
+	anomalies, err := otel.Meter("bank-usac").Int64Counter("bank_account_anomalies")
+	if err != nil {
+		return
+	}
 	for _, accountType := range []string{"AHORRO", "CORRIENTE", "MONETARIA"} {
+		labels := append([]attribute.KeyValue{}, metricIdentity...)
+		labels = append(labels, attribute.String("account_type", accountType))
+		anomalies.Add(ctx, 0, metric.WithAttributes(labels...))
 		for _, direction := range []string{"DEBITO", "CREDITO"} {
 			labels := append([]attribute.KeyValue{}, metricIdentity...)
 			labels = append(labels, attribute.String("account_type", accountType), attribute.String("direction", direction))

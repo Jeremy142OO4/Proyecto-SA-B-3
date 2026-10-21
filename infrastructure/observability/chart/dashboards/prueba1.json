@@ -2,7 +2,7 @@
   "uid": "bank-usac-prueba1",
   "title": "Bank USAC-Prueba1",
   "schemaVersion": 39,
-  "version": 5,
+  "version": 6,
   "timezone": "browser",
   "refresh": "15s",
   "time": {
@@ -313,7 +313,7 @@
       "id": 22,
       "type": "timeseries",
       "title": "Entradas y salidas por minuto · cuenta(s): $accountId",
-      "description": "Pegar el UUID de cuenta en el campo superior. Cada punto cuenta logs de movimientos confirmados de esa cuenta durante el minuto anterior. CREDITO = entrada, DEBITO = salida. No muestra montos ni saldo, y no usa el UUID como etiqueta de Prometheus. Solo hay historial recogido y retenido en Loki (48 h). La ausencia de puntos puede significar falta de operaciones o de logs. Con .* se consultan todas las cuentas del entorno; pegar un UUID para consultar solo esa cuenta. El UUID es un filtro de regex (usar .* para todas). El agrupamiento por accountId se calcula al consultar logs; no modifica las etiquetas indexadas ni Prometheus.",
+      "description": "Pegar el UUID de cuenta en el campo superior. Cada valor cuenta logs de movimientos confirmados de esa cuenta durante el minuto anterior. CREDITO = entrada, DEBITO = salida. No muestra montos ni saldo, y no usa el UUID como etiqueta de Prometheus. Solo hay historial recogido y retenido en Loki (48 h). La ausencia de puntos puede significar falta de operaciones o de logs. Con .* se consultan todas las cuentas del entorno; pegar un UUID para consultar solo esa cuenta. El UUID es un filtro de regex (usar .* para todas). El agrupamiento por accountId se calcula al consultar logs; no modifica las etiquetas indexadas ni Prometheus.",
       "datasource": {
         "type": "loki",
         "uid": "loki"
@@ -345,11 +345,12 @@
           "decimals": 0,
           "min": 0,
           "custom": {
-            "drawStyle": "points",
-            "showPoints": "always",
-            "pointSize": 7,
-            "lineWidth": 0,
-            "spanNulls": false
+            "drawStyle": "line",
+            "showPoints": "auto",
+            "pointSize": 5,
+            "lineWidth": 2,
+            "spanNulls": false,
+            "fillOpacity": 8
           }
         },
         "overrides": [
@@ -396,24 +397,133 @@
       }
     },
     {
-      "id": 23,
-      "type": "logs",
-      "title": "Historial observable de operaciones · cuenta(s): $accountId",
-      "description": "Logs originales de movimientos confirmados para el UUID seleccionado: fecha, accountId, accountType, operation, correlationId y traceId cuando existen. Expandir una línea para ver los campos. No equivale al libro persistido de movimientos: para montos/saldos e historial anterior a la recolección usar el endpoint autenticado de movimientos. Con .* se consultan todas las cuentas del entorno; pegar un UUID para consultar solo esa cuenta.",
+      "id": 25,
+      "type": "timeseries",
+      "title": "Anomalías detectadas a lo largo del tiempo · últimos 5 min",
+      "description": "Número estimado de anomalías nuevas por tipo de cuenta en una ventana móvil de 5 minutos. Usa el contador bank_account_anomalies_total después del commit. La ventana de visualización no modifica N/M del detector. Cuenta detecciones emitidas, no cada operación que supera N; la supresión de alertas repetidas sigue aplicándose. No contiene accountId. El filtro UUID no afecta este panel agregado.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 45,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (account_type) (increase(bank_account_anomalies_total{service=\"account-service\",environment=\"$environment\"}[5m]))",
+          "range": true,
+          "instant": false,
+          "legendFormat": "{{account_type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 26,
+      "type": "piechart",
+      "title": "Distribución de todos los movimientos por cuenta",
+      "description": "Cada porción representa el número de movimientos confirmados de una cuenta en el rango seleccionado, calculado desde logs Loki. Incluye depósitos, pagos, transferencias y compensaciones registradas; cuenta movimientos sobre cuentas, no operaciones de negocio únicas (una transferencia puede generar débito y crédito). Es cantidad, no monto. Cuenta todos los tipos de cuenta. Respeta el filtro UUID. No crea métricas Prometheus con accountId ni nuevas etiquetas indexadas. Sujeto a retención y recolección de logs.",
       "datasource": {
         "type": "loki",
         "uid": "loki"
       },
       "gridPos": {
         "x": 0,
-        "y": 45,
+        "y": 53,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (accountId) (count_over_time({service_name=\"account-service\",deployment_environment_name=\"$environment\"} |= \"account movement committed\" | json message=\"message\", accountId=\"accountId\", operation=\"operation\", accountType=\"accountType\" | __error__=\"\" | message=\"account movement committed\" | accountId!=\"\" | accountId=~\"${accountId:raw}\" [$__range]))",
+          "queryType": "instant",
+          "legendFormat": "{{accountId}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "pieType": "pie",
+        "displayLabels": [
+          "percent"
+        ],
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ],
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 27,
+      "type": "logs",
+      "title": "Logs de actividad con accountId",
+      "description": "Detalle por cuenta consultado en logs JSON: accountId, accountType y operation, además de correlationId/traceId cuando existen. Incluye compensaciones. Usar .* para todas las cuentas o pegar un UUID para una cuenta. Expandir una línea para ver sus atributos. No expone documento, correo ni tokens. Hasta 100 líneas; consultar Explore para profundizar. Retención actual: 48 h.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 62,
         "w": 24,
         "h": 10
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "{service_name=\"account-service\",deployment_environment_name=\"$environment\"} |= \"account movement committed\" | json message=\"message\", accountId=\"accountId\", operation=\"operation\", accountType=\"accountType\" | __error__=\"\" | message=\"account movement committed\" | accountId=~\"${accountId:raw}\" | operation=~\"DEBITO|CREDITO\"",
+          "expr": "{service_name=\"account-service\",deployment_environment_name=\"$environment\"} |= \"account movement committed\" | json message=\"message\", accountId=\"accountId\", operation=\"operation\", accountType=\"accountType\" | __error__=\"\" | message=\"account movement committed\" | accountId!=\"\" | accountId=~\"${accountId:raw}\"",
           "queryType": "range",
           "maxLines": 100
         }
@@ -425,36 +535,6 @@
         "sortOrder": "Descending",
         "enableLogDetails": true,
         "dedupStrategy": "none"
-      }
-    },
-    {
-      "id": 24,
-      "type": "logs",
-      "title": "Alertas AccountAnomalyDetected · WARNING",
-      "description": "Logs de anomalías por alta frecuencia, en el entorno seleccionado. El evento durable y su notificación se consultan en auditoría; este panel evidencia el log emitido después del commit. No bloquea cuentas automáticamente.",
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 55,
-        "w": 24,
-        "h": 7
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "{service_name=\"account-service\",deployment_environment_name=\"$environment\"} |= \"AccountAnomalyDetected\" | json eventType=\"eventType\", level=\"level\" | __error__=\"\" | eventType=\"AccountAnomalyDetected\" | level=\"WARNING\"",
-          "queryType": "range",
-          "maxLines": 100
-        }
-      ],
-      "options": {
-        "showTime": true,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending",
-        "enableLogDetails": true
       }
     }
   ]

@@ -176,27 +176,22 @@ El workflow conserva los disparadores existentes: un push a `develop` permite de
 
 ## Grafana: 02/Account_service
 
-El dashboard `Bank USAC-Prueba1` incorpora:
+Dashboard `Bank USAC-Prueba1`, sección `02/Account_service`:
 
-- Columnas: estimación de movimientos confirmados por AHORRO/CORRIENTE y DEBITO/CREDITO durante el rango seleccionado, con `sum by (account_type, direction) (increase(bank_account_movements_total{...}[$__range]))`. Crédito es entrada; débito es salida. `increase` puede devolver fracciones y requiere al menos dos muestras; no es un conteo contable exacto. MONETARIA legado no se mezcla con CORRIENTE.
-- Gráfico de puntos: pegar un UUID en **UUID de cuenta (historial)**. Dos series cuentan entradas y salidas por minuto, desde logs Loki de `account movement committed`. El eje Y es número de operaciones, no dinero ni saldo. El filtro inicia con .* para consultar todas las cuentas; reemplazarlo por un UUID para una cuenta específica.
-- Historial observable: logs originales de esa cuenta, hasta 100 líneas del rango seleccionado. Incluye UUID, tipo y operación; expandir los detalles para correlación/traza cuando estén presentes.
-- Alertas: logs WARNING de `AccountAnomalyDetected` del entorno. La notificación de negocio continúa en auditoría y mensajería administrativa.
+- Columnas de movimientos por AHORRO/CORRIENTE y DEBITO/CREDITO durante el rango seleccionado. Crédito = entrada, débito = salida. `increase` estima incrementos entre muestras y puede devolver fracciones.
+- Líneas de entradas/salidas por minuto y cuenta desde logs. Reemplaza el gráfico de puntos. La variable UUID acepta un UUID específico o `.*` para todas; el agrupamiento por cuenta se calcula al consultar Loki.
+- Línea de anomalías detectadas en ventanas móviles de 5 min por tipo de cuenta: `sum by (account_type) (increase(bank_account_anomalies_total{service="account-service",environment="$environment"}[5m]))`. La ventana de la gráfica no cambia N/M ni la supresión de notificaciones repetidas. Este panel agregado no se filtra por UUID.
+- Pastel de **todos los movimientos confirmados por cuenta**, obtenido desde `account movement committed` en Loki durante el rango seleccionado. Incluye depósitos, pagos, transferencias y compensaciones registradas. No representa montos ni transacciones de negocio únicas: una transferencia puede generar dos movimientos. Respeta el filtro UUID.
+- **Logs de actividad con accountId**: detalle original JSON por UUID, tipo, operación y correlación/traza cuando existen. Hasta 100 líneas del rango seleccionado. Sustituye el anterior historial observable. Se retiró el panel de logs WARNING de anomalías; las notificaciones siguen disponibles en administración/auditoría.
 
-Los UUID se extraen del JSON al consultar Loki; no se añaden etiquetas de cuenta a Prometheus ni al índice de Loki. Los logs se conservan 48 h según la configuración actual. El gráfico de puntos no reconstruye movimientos anteriores a la recolección ni sustituye el historial SQL. Los conteos Prometheus incluyen todas las cuentas de los dos tipos, independientemente del UUID seleccionado.
+No se añade accountId a las métricas Prometheus ni al índice de Loki. Las consultas por cuenta lo extraen del cuerpo JSON al leer los logs. La retención de Loki es 48 h: las gráficas derivadas de logs no reconstruyen movimientos anteriores a la recolección ni sustituyen el historial SQL. No convertir ausencia de telemetría en cero mediante `or vector(0)`.
 
-### Endpoint existente de movimientos
+Account Service inicializa seis series de movimientos y tres series de anomalías en cero al arrancar, sin UUID. Esto permite registrar una línea base antes de los primeros incrementos; `increase` requiere al menos dos muestras. Publicar tanto el dashboard como la imagen actualizada de Account Service para incorporar esta inicialización.
 
-`GET /api/cuentas/{idCuenta}/movimientos?limite=50&desplazamiento=0`, autenticado con JWT del rol CLIENTE y validación de propiedad de la cuenta. Devuelve movimientos con `idMovimiento`, `tipoMovimiento`, `montoCentavos`, `saldoNuevoCentavos`, `fechaCreacion` y descripción. No es un endpoint administrativo y no se habilita acceso a cuentas ajenas. El UUID de la cuenta está en la ruta. No se debe guardar un JWT de cliente en el dashboard.
+### Endpoint existente
 
-Grafana utiliza los datasources ya aprovisionados Prometheus y Loki; no requiere consultar ese endpoint ni instalar un plugin HTTP. Para probar manualmente, generar un depósito y una transferencia de una cuenta, esperar exportación/recolección, seleccionar su UUID y comprobar entradas/salidas en los puntos y logs. Validar el historial contable mediante el endpoint del propietario. Configuración de N/M y bloqueo siguen en administración; el dashboard no modifica esos valores.
+`GET /api/cuentas/{idCuenta}/movimientos?limite=50&desplazamiento=0`, con JWT de rol CLIENTE y validación de propiedad. Devuelve el historial SQL con `idMovimiento`, `tipoMovimiento`, `montoCentavos`, `saldoNuevoCentavos`, `fechaCreacion` y descripción. Grafana consulta Prometheus y Loki; no almacena JWT de clientes ni usa este endpoint para sus paneles.
 
-Cambios de publicación: JSON del dashboard y despliegue Helm existente, sin migraciones ni modificaciones de backend para estos paneles. Falta verificar visualmente las consultas contra los datasources del entorno desplegado.
+### Validación manual pendiente en el entorno desplegado
 
-### Ajustes por paneles sin datos
-
-El filtro de cuenta inicia ahora con `.*` (todas las cuentas) en lugar de vacío, que antes excluía todos los registros. Se interpreta como regex; usar solamente un UUID o `.*`. Los puntos se agrupan por accountId al consultar Loki; esto no agrega etiquetas al índice ni a Prometheus. La tabla Customer vuelve al formato por trazas, sin visor separado.
-
-Account Service inicializa al arrancar seis series del contador (AHORRO/CORRIENTE/MONETARIA por DEBITO/CREDITO) con valor cero real. Esto permite exportar una línea base antes de recibir movimientos y observar incrementos posteriores; `increase` sigue requiriendo al menos dos muestras. Requiere desplegar la imagen actualizada de Account Service además del dashboard.
-
-Si continúan sin datos: consultar primero `bank_account_movements_total{service="account-service"}` en Prometheus y `{service_name="account-service"}` en Loki, comprobar entorno y rango de tiempo, imagen desplegada y exportación OTLP/recolección del agente. El panel de anomalías solo tiene registros cuando se supera N dentro de M. No se usa `or vector(0)` para ocultar fallos de telemetría. No se pudo validar el clúster durante este ajuste porque su API no respondió.
+Realizar un depósito y una transferencia, seleccionar el UUID/rango y comprobar logs, líneas y pastel. Superar N operaciones dentro de M minutos y comprobar la nueva anomalía y su notificación. En Prometheus verificar `bank_account_movements_total{service="account-service"}` y `bank_account_anomalies_total{service="account-service"}`; en Loki comprobar `{service_name="account-service"}`. Si faltan series, revisar entorno, imagen, exportación OTLP y recolección del agente. No se pudo acceder al clúster durante el diagnóstico anterior por timeout.
