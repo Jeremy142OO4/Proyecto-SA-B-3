@@ -150,6 +150,7 @@ func (s *Service) Step(parent context.Context) (worked bool, failureErr error) {
 	}
 	ctx = telemetry.WithCorrelation(telemetry.Restore(ctx, row.Trace), row.Transfer.ID)
 	ctx, span := otel.Tracer("bank-usac").Start(ctx, "interbank process "+row.Direction)
+	span.SetAttributes(attribute.String("transaction.id", row.Transfer.ID))
 	defer span.End()
 	// A failing peer/account must not starve other transfers at the head of
 	// the work queue. Roll back first, then schedule this durable row again.

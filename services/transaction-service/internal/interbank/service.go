@@ -116,6 +116,8 @@ func scan(row pgx.Row) (record, error) {
 const columns = `solicitud,direccion,cliente,estado,motivo,resultado,trace_context,recibido,actualizado,intentos,COALESCE(refund_of::text,'')`
 
 func (s *Service) create(ctx context.Context, t Transfer, direction, customer string) bankrpc.Response {
+	ctx, finishTrace := telemetry.StartTransfer(ctx, t.ID, t.ID)
+	defer finishTrace()
 	// Timestamp normalization permits different ISO8601 offsets for the same instant.
 	t.Created = t.Created.UTC().Truncate(time.Microsecond)
 	t.Expires = t.Expires.UTC().Truncate(time.Microsecond)

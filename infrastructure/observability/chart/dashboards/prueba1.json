@@ -2,7 +2,7 @@
   "uid": "bank-usac-prueba1",
   "title": "Bank USAC-Prueba1",
   "schemaVersion": 39,
-  "version": 15,
+  "version": 16,
   "timezone": "browser",
   "refresh": "15s",
   "time": {
@@ -807,8 +807,8 @@
     {
       "id": 33,
       "type": "table",
-      "title": "Trazas de Transaction Service",
-      "description": "Todas las trazas con participación de transaction-service en el entorno y rango seleccionados, agrupadas por Trace ID. No exige un nombre de span ni estado. Puede incluir consultas y sondeos del outbox, además de transferencias. Abrir el Trace ID de la transferencia para ver el flujo distribuido y sus compensaciones cuando correspondan. Para distinguirla, revisar transaction.id en los atributos o usar el traceId de la respuesta/historial de esa transferencia. La consulta está limitada a 50 trazas; estrechar el rango ayuda a localizar una operación concreta.",
+      "title": "Trazas de transacciones · flujo por transaction_id",
+      "description": "Una fila por Trace ID de negocio, buscando spans que contienen transaction.id. Excluye sondeos ListarPendientes y consultas de partner sin identificador de transacción. Abrir Trace ID para ver validaciones, débito, crédito y compensaciones de esa operación. transaction.id es el UUID de negocio; Trace ID identifica el recorrido distribuido y Span ID cada paso, no son el mismo identificador. Las consultas internas son spans válidos pero no deben mostrarse como transacciones. Requiere instrumentación transaction.id en las versiones desplegadas; no reconstruye spans antiguos sin ese atributo.",
       "datasource": {
         "type": "tempo",
         "uid": "tempo"
@@ -823,7 +823,7 @@
         {
           "refId": "A",
           "queryType": "traceql",
-          "query": "{ resource.service.name = \"transaction-service\" && resource.deployment.environment.name = \"$environment\" }",
+          "query": "{ resource.service.name = \"transaction-service\" && resource.deployment.environment.name = \"$environment\" && span.transaction.id =~ \".+\" }",
           "tableType": "traces",
           "limit": 50,
           "spss": 100
