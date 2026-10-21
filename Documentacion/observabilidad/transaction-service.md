@@ -97,3 +97,21 @@ Para localizar una transferencia concreta, tomar el traceId de su consulta/histo
 La tabla filtra ahora `span.transaction.id =~ ".+"` además de servicio/entorno. Así las consultas ListarPendientes y los sondeos HTTP al partner dejan de ocupar filas. La transferencia interna ya incorpora transaction.id en inicio/estado y mantiene el contexto persistido. La creación y el procesamiento asíncrono interbancario también se anotan con transaction.id (ID del depósito); el worker retoma el trace_context guardado antes de crear su span. No se cambia el ID de negocio ni se crean etiquetas de métricas con UUID. Los spans previos sin ese atributo no se seleccionan retroactivamente.
 
 transaction.id identifica la operación de negocio, Trace ID el recorrido y Span ID un paso. Se agrupa visualmente por Trace ID; el atributo transaction.id permite asociarlo a la transacción. Los sondeos periódicos siguen siendo observables en Explore, pero no son transacciones del usuario.
+
+### Comparación de éxito y fallo
+
+El panel de tasa incluye dos líneas: **Exitosas (%)** (verde) y **Fallidas (%)** (rojo), con la misma tasa total de resultados terminales como denominador y ventana de 5 min. Para muestras válidas con tráfico, suman 100%; pendientes quedan fuera. Los huecos fuera de actividad no son pérdida automática de datos: el panel no muestra porcentajes si la tasa total no es positiva. El último valor visible puede corresponder al último intervalo con operaciones.
+
+Una captura del visor de Customer Service obtenida por Trace ID no es equivalente a una búsqueda filtrada de Transaction Service: se debe tomar el traceId real de la transferencia y abrirlo directamente en Tempo para distinguir ausencia de indexación/atributos de pérdida de spans. No se considera resuelto un No rows sin revisar esa operación contra el entorno desplegado. Se solicitó el ID/traceId y URL de Grafana para esa comprobación.
+
+## Diagnóstico real de traza ausente (21/10/2026)
+
+Se consultó la transferencia `d9948c11-3057-479f-bfbd-9552b494f38a` en el entorno dev. Loki conserva cinco cambios confirmados (VALIDANDO_KYC, VALIDANDO_CUENTAS, PENDIENTE, PROCESANDO, COMPLETADA), todos con Trace ID `8ed62e5570fa9fbe5a43f8a62ac16bb2` y correlación `b833d014-c8da-4e4d-87d3-85cd10830c6a`. Los logs de servicios participantes también comparten el Trace ID. Tempo devuelve 404 al consultarlo por `/api/traces/{id}` y no encuentra datos en su API v2.
+
+La consulta SQL de solo lectura de `trace_id,trace_context` para esa fila devolvió un traceparent terminado en `-00`. Es un contexto válido **no muestreado**: tener traceId en logs no demuestra que existan spans exportados. El sampler ParentBased anterior respeta esa decisión heredada, incluso con ratio raíz igual a 1. Esta evidencia explica por qué no bastaba cambiar filtros de Grafana. No se modificaron la transferencia, sus saldos ni su historial.
+
+Corrección: en Gateway, para `dev` y `local`, un padre remoto no muestreado se evalúa con el ratio de muestreo configurado del banco (por defecto 1). Se conserva el Trace ID original y se propaga la decisión resultante a RabbitMQ y downstream. En `prod` se conserva ParentBased normal; `OTEL_SDK_DISABLED=true` sigue deshabilitando grabación. Una prueba reproduce el padre remoto `-00`, comprueba exportación, conservación de ID y propagación; también verifica ratio 0 y comportamiento prod.
+
+La corrección requiere publicar la imagen actualizada de API Gateway por CI/CD y repetir una transferencia después del despliegue. No se pueden reconstruir retroactivamente los spans no grabados de esta transferencia. La política de sampling de desarrollo aumenta cobertura respecto a padres externos no muestreados y puede aumentar la ingesta de Tempo.
+
+Durante este diagnóstico se identificó el clúster activo como `bank-usac-gke`, proyecto `bank-usac`, zona `us-central1-a`; el contexto local anterior apuntaba a un proyecto sin clúster. Se usó un kubeconfig temporal separado, sin cambiar el contexto predeterminado. La consulta SQL temporal fue de solo lectura; el pod de diagnóstico y el túnel local se retiraron al finalizar.

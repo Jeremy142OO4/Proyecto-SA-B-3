@@ -2,7 +2,7 @@
   "uid": "bank-usac-prueba1",
   "title": "Bank USAC-Prueba1",
   "schemaVersion": 39,
-  "version": 16,
+  "version": 17,
   "timezone": "browser",
   "refresh": "15s",
   "time": {
@@ -749,8 +749,8 @@
     {
       "id": 32,
       "type": "timeseries",
-      "title": "Tasa de error del flujo de transferencia (%)",
-      "description": "Porcentaje de resultados terminales fallidos sobre todos los resultados terminales en una ventana móvil de 5 min. Incluye RECHAZADA, COMPENSADA y COMPENSACION_FALLIDA: una compensación exitosa devuelve fondos pero la transferencia original sigue siendo fallida. PENDING no entra en el denominador. Solo muestra 0% cuando hay resultados observados y ningún fallo; sin tráfico o telemetría no se presenta cero. No mide errores HTTP ni errores de consultas SQL.",
+      "title": "Tasa de éxito y error de transferencias (%)",
+      "description": "Comparación de resultados terminales en ventanas de 5 min: COMPLETADA es éxito; RECHAZADA/COMPENSADA/COMPENSACION_FALLIDA son fallo de la transferencia original. Cuando hay resultados observados, éxito + fallo suma 100%. Pendientes no entran en el denominador. Sin tráfico observado se deja un hueco, no se inventa éxito. Last muestra el último dato disponible y no significa necesariamente actividad en este instante.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -765,7 +765,14 @@
         {
           "refId": "A",
           "expr": "(100 * ((sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"$environment\",outcome=\"failure\"}[5m])) or (0 * sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"$environment\"}[5m])))) / sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"$environment\"}[5m])))) and (sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"$environment\"}[5m])) > 0)",
-          "legendFormat": "Transferencias fallidas (%)",
+          "legendFormat": "Fallidas (%)",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "B",
+          "expr": "(100 * ((sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"$environment\",outcome=\"success\"}[5m])) or (0 * sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"$environment\"}[5m])))) / sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"$environment\"}[5m])))) and (sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"$environment\"}[5m])) > 0)",
+          "legendFormat": "Exitosas (%)",
           "range": true,
           "instant": false
         }
@@ -778,8 +785,7 @@
           "decimals": 2,
           "noValue": "Sin resultados terminales observados",
           "color": {
-            "mode": "fixed",
-            "fixedColor": "red"
+            "mode": "palette-classic"
           },
           "custom": {
             "drawStyle": "line",
@@ -789,7 +795,38 @@
             "spanNulls": false
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fallidas (%)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Exitosas (%)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
@@ -800,7 +837,7 @@
           ]
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       }
     },

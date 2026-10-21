@@ -81,7 +81,7 @@ func Setup(service string) func() {
 			slog.Warn("invalid trace sampling ratio; using 1")
 		}
 	}
-	opts := []sdktrace.TracerProviderOption{sdktrace.WithResource(res), sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.TraceIDRatioBased(ratio)))}
+	opts := []sdktrace.TracerProviderOption{sdktrace.WithResource(res), sdktrace.WithSampler(gatewaySampler(environment, ratio))}
 	metricOpts := []sdkmetric.Option{sdkmetric.WithResource(res)}
 	if os.Getenv("OTEL_SDK_DISABLED") != "true" {
 		if firstEnv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT") != "" {
@@ -115,6 +115,17 @@ func Setup(service string) func() {
 		_ = mp.Shutdown(ctx)
 		_ = tp.Shutdown(ctx)
 	}
+}
+
+// Development must record banking flows even when an upstream proxy supplies
+// traceparent with sampled=0. Keep the upstream TraceID, but make the recording
+// decision at our gateway boundary. Production retains normal parent sampling.
+func gatewaySampler(environment string, ratio float64) sdktrace.Sampler {
+	root := sdktrace.TraceIDRatioBased(ratio)
+	if environment == "dev" || environment == "local" {
+		return sdktrace.ParentBased(root, sdktrace.WithRemoteParentNotSampled(root))
+	}
+	return sdktrace.ParentBased(root)
 }
 
 func firstEnv(keys ...string) string {
