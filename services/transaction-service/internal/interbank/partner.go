@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/Proyecto-SA-B-3/transaction-service/internal/bankrpc"
+	"github.com/Proyecto-SA-B-3/transaction-service/internal/telemetry"
 )
 
 // Partner transport is exclusively AMQP. Payment owns the external HTTP client.
@@ -13,10 +14,11 @@ type BrokerPartner struct {
 	Call   func(context.Context, string, string, any) (bankrpc.Response, error)
 }
 type transportRequest struct {
-	Method string          `json:"method"`
-	Path   string          `json:"path"`
-	Key    string          `json:"key,omitempty"`
-	Body   json.RawMessage `json:"body,omitempty"`
+	Correlation string          `json:"idCorrelacion,omitempty"`
+	Method      string          `json:"method"`
+	Path        string          `json:"path"`
+	Key         string          `json:"key,omitempty"`
+	Body        json.RawMessage `json:"body,omitempty"`
 }
 type transportResult struct {
 	Status int    `json:"status"`
@@ -39,6 +41,7 @@ func (p *BrokerPartner) Get(ctx context.Context, path string) (int, []byte, erro
 	return p.request(ctx, transportRequest{Method: "GET", Path: path})
 }
 func (p *BrokerPartner) request(ctx context.Context, request transportRequest) (int, []byte, error) {
+	request.Correlation = telemetry.Correlation(ctx)
 	if !p.Ready() {
 		return 0, nil, ErrPartnerNotConfigured
 	}

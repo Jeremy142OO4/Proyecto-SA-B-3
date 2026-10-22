@@ -34,7 +34,9 @@ metadata:
   name: $name
 spec:
   backoffLimit: 0
-  activeDeadlineSeconds: 90
+  # Includes scheduling, autoscaler warm-up and image pull, not only SQL execution.
+  # PostgreSQL connection/statement/lock timeouts remain independently bounded.
+  activeDeadlineSeconds: 300
   ttlSecondsAfterFinished: 300
   template:
     spec:
@@ -77,7 +79,7 @@ service-notification-audit URL_BASE_DATOS_AUDITORIA 000002_add_event_severity 00
 SERVICES
 for resource in "${resources[@]}"; do
   if [[ "$resource" == job/* ]]; then
-    if ! kubectl -n "$KUBE_NAMESPACE" wait --for=condition=complete "$resource" --timeout=120s; then
+    if ! kubectl -n "$KUBE_NAMESPACE" wait --for=condition=complete "$resource" --timeout=330s; then
       echo "Migration failed: $resource; rollout stopped" >&2
       kubectl -n "$KUBE_NAMESPACE" logs "$resource" || true
       exit 1

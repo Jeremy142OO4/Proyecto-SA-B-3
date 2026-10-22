@@ -34,6 +34,8 @@ class ScenarioDashboardTests(unittest.TestCase):
         self.assertIn('checksum/scenarios:', workloads)
 
     def test_payment_egress_and_transaction_coordination(self):
+        agent = (ROOT / 'config/agent.yaml').read_text()
+        self.assertIn('_interbank-scenarios-*/payments/*.log', agent)
         panels = {p['id']: p for p in self.dashboard['panels']}
         self.assertIn('payment-service', panels[12]['targets'][0]['expr'])
         self.assertIn('interbank partner HTTP', panels[12]['targets'][0]['expr'])

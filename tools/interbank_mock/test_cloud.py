@@ -3,6 +3,7 @@ import base64
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -15,6 +16,14 @@ spec.loader.exec_module(cloud)
 
 
 class CloudIsolationTests(unittest.TestCase):
+    def test_schema_gate_allows_autoscaler_startup_without_relaxing_sql_limits(self):
+        script = (ROOT/'infrastructure/scripts/prepare-telemetry-schema.sh').read_text()
+        deadline = int(re.search(r'activeDeadlineSeconds: (\d+)', script)[1])
+        wait = int(re.search(r'--timeout=(\d+)s', script)[1])
+        self.assertGreaterEqual(deadline, 300)
+        self.assertGreater(wait, deadline)
+        self.assertIn('lock_timeout=5000 -c statement_timeout=30000', script)
+
     def test_database_uri_cannot_inherit_public_search_path_or_bank_role(self):
         url = cloud.isolated_url('postgres://bank:real-password@10.2.3.4:5432/cuentas?sslmode=require&options=bad&search_path=public&user=bank&password=bad', 'fixture-password')
         parsed = urlsplit(url)

@@ -89,6 +89,7 @@ func TestPaymentBrokerHTTPPipeline(t *testing.T) {
 		{Method: "GET", Path: "/reversals/" + testID},
 		{Method: "GET", Path: "/reconciliation?date=2026-10-22&page=1&pageSize=100"},
 	} {
+		r.Correlation = testID
 		response, e := bankrpc.Call(trace.ContextWithSpanContext(ctx, sc), broker, queue, r)
 		if e != nil {
 			t.Fatal(e)

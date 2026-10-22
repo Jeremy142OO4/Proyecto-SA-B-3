@@ -18,6 +18,7 @@ receivers:
       - /var/log/pods/{{ .Values.applicationNamespace }}_interbank-scenarios-*/gateway/*.log
       - /var/log/pods/{{ .Values.applicationNamespace }}_interbank-scenarios-*/accounts/*.log
       - /var/log/pods/{{ .Values.applicationNamespace }}_interbank-scenarios-*/transactions/*.log
+      - /var/log/pods/{{ .Values.applicationNamespace }}_interbank-scenarios-*/payments/*.log
     start_at: end
     include_file_path: true
     max_log_size: 64KiB

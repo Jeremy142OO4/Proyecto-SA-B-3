@@ -25,10 +25,11 @@ import (
 const Queue = "pagos.interbancarios.salida"
 
 type Request struct {
-	Method string          `json:"method"`
-	Path   string          `json:"path"`
-	Key    string          `json:"key,omitempty"`
-	Body   json.RawMessage `json:"body,omitempty"`
+	Correlation string          `json:"idCorrelacion,omitempty"`
+	Method      string          `json:"method"`
+	Path        string          `json:"path"`
+	Key         string          `json:"key,omitempty"`
+	Body        json.RawMessage `json:"body,omitempty"`
 }
 type Result struct {
 	Status int    `json:"status"`
@@ -98,6 +99,7 @@ func (p *Transport) Handle(ctx context.Context, raw json.RawMessage) bankrpc.Res
 	if p.BaseURL == "" || len(p.Key) < 16 {
 		return bankrpc.Reply(200, Result{Error: "not_configured"})
 	}
+	ctx = telemetry.WithCorrelation(ctx, r.Correlation)
 	ctx, span := otel.Tracer("bank-usac").Start(ctx, "interbank partner HTTP")
 	span.SetAttributes(attribute.String("interbank.transport.owner", "payment-service"))
 	// Copy only the opaque transfer ID into telemetry, never account numbers or keys.

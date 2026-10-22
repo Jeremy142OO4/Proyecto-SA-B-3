@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/Proyecto-SA-B-3/transaction-service/internal/bankrpc"
+	"github.com/Proyecto-SA-B-3/transaction-service/internal/telemetry"
 	"strings"
 	"testing"
 )
@@ -25,13 +26,16 @@ func TestBrokerPartnerPreservesWireContract(t *testing.T) {
 		}
 		var r transportRequest
 		_ = json.Unmarshal(raw, &r)
+		if r.Correlation != "11111111-1111-4111-8111-111111111111" {
+			t.Fatal("operation correlation lost over AMQP")
+		}
 		if r.Method != "POST" || r.Path != "/transfers" || r.Key != "stable-id" || string(r.Body) != `{"amount":"100.00"}` {
 			t.Fatalf("%+v", r)
 		}
 		return bankrpc.Reply(200, transportResult{Status: 202, Body: response}), nil
 	}
 	for i := 0; i < 2; i++ {
-		code, body, err := p.Post(context.Background(), "/transfers", "stable-id", map[string]string{"amount": "100.00"})
+		code, body, err := p.Post(telemetry.WithCorrelation(context.Background(), "11111111-1111-4111-8111-111111111111"), "/transfers", "stable-id", map[string]string{"amount": "100.00"})
 		if err != nil || code != 202 || string(body) != string(response) {
 			t.Fatalf("%d %s %v", code, body, err)
 		}
