@@ -100,9 +100,13 @@ def dashboard():
     panel('Pendientes por consumidor activo · promedio',
           [(f'{queue} / on(rabbitmq_queue_name,rabbitmq_vhost_name,rabbitmq_node_name) ({consumers} > 0)', '{{rabbitmq_queue_name}}')], x=12,
           description='ready / consumidores activos. Es un promedio por cola; RabbitMQ no asigna mensajes ready a un consumidor individual. Las colas sin consumidor se muestran en el panel siguiente.')
-    panel('Colas con pendientes y sin consumidores',
-          [(f'({queue} > 0) and on(rabbitmq_queue_name,rabbitmq_vhost_name,rabbitmq_node_name) ({consumers} == 0)', '{{rabbitmq_queue_name}}')], width=24,
-          description='Sin series significa que ninguna cola observada cumple la condición; comprobar también la recolección del broker.')
+    blocked_queues = panel('Colas con pendientes y sin consumidores',
+          [(f'(count(({queue} > 0) and on(rabbitmq_queue_name,rabbitmq_vhost_name,rabbitmq_node_name) ({consumers} == 0)) or (0 * count({queue}))) and on() (count({consumers}) > 0) and on() (up{{job="bank-infra"}} == 1)', 'Colas afectadas')],
+          kind='stat', width=24, height=5,
+          description='Número de colas con ready > 0 y cero consumidores. 0 = ninguna cola afectada entre las observadas. Sin datos = falta la métrica de colas/consumidores o falla la recolección; no se rellena una ausencia con cero.')
+    blocked_queues['fieldConfig']['defaults'].update(
+        decimals=0, min=0, color=dict(mode='thresholds'),
+        thresholds=dict(mode='absolute', steps=[dict(color='green', value=None), dict(color='red', value=1)]))
 
     row('04 / SLO y error budget · ventana móvil de 30 días')
     panel('SLO-01 · errores permitidos y presupuesto restante',
@@ -172,7 +176,7 @@ def dashboard():
             else:
                 defaults['custom']['thresholdsStyle'] = dict(mode='line')
 
-    return dict(uid='bank-system-metrics', title='Métricas sistema', schemaVersion=39, version=1, editable=False,
+    return dict(uid='bank-system-metrics', title='Métricas sistema', schemaVersion=39, version=2, editable=False,
                 timezone='browser', refresh='30s', time=dict(**{'from':'now-6h','to':'now'}), tags=['bank-usac','SLI','SLO','dev'],
                 description='SLI base y SLO medibles con datos reales de dev. Sin muestras no se presume éxito. Despliegues nuevos se detectan por cambios de revisión Kubernetes.',
                 links=[dict(title='Servicios y búsqueda de logs',type='link',url='/d/bank-usac-prueba1'),

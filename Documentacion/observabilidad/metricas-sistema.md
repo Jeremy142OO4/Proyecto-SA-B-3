@@ -96,6 +96,34 @@ no requiere migraciones SQL. Luego abrir `/d/bank-system-metrics` y comprobar
 `bank_system_source_up=1`, CPU/memoria, paneles y estados de las nueve reglas.
 Los percentiles/rates necesitan al menos dos muestras y actividad en su ventana.
 
+### Verificación de RabbitMQ
+
+En la revisión del 21 de octubre de 2026 se compararon las consultas del JSON provisionado
+con el generador y con RabbitMQ directamente (`rabbitmqctl list_queues`, solo metadatos).
+Prometheus recibió ready/unacknowledged y consumidores para las 18 colas persistentes:
+14 con consumidor y cuatro colas de fallidos vacías sin consumidor. Los valores actuales
+coincidieron con el broker: cero mensajes pendientes y cero sin confirmar.
+
+Las tres consultas de throughput devolvieron 13 series por cola. Los incrementos de
+publicación y ACK en las últimas 24 horas fueron distintos de cero en varias colas,
+incluidas pagos, cuentas y transacciones. Las colas sin contadores de message_stats no se
+rellenan con movimientos ficticios. Estos incrementos son estimaciones de Prometheus,
+no cantidades contables de operaciones únicas. Las consultas de throughput de aplicación
+por servicio/routing key son otra fuente, separada de los contadores del broker.
+
+El panel «Colas con pendientes y sin consumidores» ahora cuenta las colas afectadas:
+**0** indica que ninguna cola observada cumple ready > 0 y consumidores = 0.
+Si faltan métricas de colas/consumidores o falla el scrape bank-infra, conserva **Sin datos**.
+No confunde una DLQ vacía sin consumidor con una cola bloqueada.
+Siete escenarios de esa consulta se ejecutaron con promtool, sin publicar mensajes,
+detener consumidores ni modificar operaciones del banco; quedan incluidos en el CI.
+
+El receiver mide el estado del broker cada 30 s y Prometheus recolecta cada 15 s.
+Los gauges ready/unacked pueden permanecer en cero cuando los mensajes se procesan
+entre mediciones; el throughput y los contadores históricos permiten verificar actividad.
+`up{job="bank-infra"}=1` solo prueba el scrape del Collector; también se verificó la
+presencia de las métricas específicas de RabbitMQ y sus valores contra el broker.
+
 ### Bootstrap de permisos del Collector
 
 La identidad CI puede desplegar workloads, pero no necesariamente modificar Roles.

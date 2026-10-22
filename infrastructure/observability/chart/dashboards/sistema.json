@@ -2,7 +2,7 @@
   "uid": "bank-system-metrics",
   "title": "Métricas sistema",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "editable": false,
   "timezone": "browser",
   "refresh": "30s",
@@ -966,13 +966,13 @@
     {
       "id": 19,
       "title": "Colas con pendientes y sin consumidores",
-      "description": "Sin series significa que ninguna cola observada cumple la condición; comprobar también la recolección del broker.",
-      "type": "timeseries",
+      "description": "Número de colas con ready > 0 y cero consumidores. 0 = ninguna cola afectada entre las observadas. Sin datos = falta la métrica de colas/consumidores o falla la recolección; no se rellena una ausencia con cero.",
+      "type": "stat",
       "gridPos": {
         "x": 0,
         "y": 64,
         "w": 24,
-        "h": 8
+        "h": 5
       },
       "datasource": {
         "type": "prometheus",
@@ -981,10 +981,10 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(rabbitmq_message_current{job=\"bank-infra\",state=\"ready\"} > 0) and on(rabbitmq_queue_name,rabbitmq_vhost_name,rabbitmq_node_name) (rabbitmq_consumer_count{job=\"bank-infra\"} == 0)",
-          "legendFormat": "{{rabbitmq_queue_name}}",
-          "instant": false,
-          "range": true
+          "expr": "(count((rabbitmq_message_current{job=\"bank-infra\",state=\"ready\"} > 0) and on(rabbitmq_queue_name,rabbitmq_vhost_name,rabbitmq_node_name) (rabbitmq_consumer_count{job=\"bank-infra\"} == 0)) or (0 * count(rabbitmq_message_current{job=\"bank-infra\",state=\"ready\"}))) and on() (count(rabbitmq_consumer_count{job=\"bank-infra\"}) > 0) and on() (up{job=\"bank-infra\"} == 1)",
+          "legendFormat": "Colas afectadas",
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
@@ -992,32 +992,38 @@
           "unit": "short",
           "noValue": "Sin datos",
           "color": {
-            "mode": "palette-classic"
+            "mode": "thresholds"
           },
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "fillOpacity": 8,
-            "showPoints": "auto",
-            "spanNulls": false
+          "decimals": 0,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
           }
         },
         "overrides": []
       },
       "maxDataPoints": 300,
       "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
+        "reduceOptions": {
+          "values": false,
           "calcs": [
             "lastNotNull"
-          ]
+          ],
+          "fields": ""
         },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value_and_name"
       }
     },
     {
@@ -1028,7 +1034,7 @@
       "panels": [],
       "gridPos": {
         "x": 0,
-        "y": 72,
+        "y": 69,
         "w": 24,
         "h": 1
       }
@@ -1040,7 +1046,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 73,
+        "y": 70,
         "w": 24,
         "h": 8
       },
@@ -1104,7 +1110,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 81,
+        "y": 78,
         "w": 12,
         "h": 8
       },
@@ -1177,7 +1183,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 12,
-        "y": 81,
+        "y": 78,
         "w": 12,
         "h": 8
       },
@@ -1250,7 +1256,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 89,
+        "y": 86,
         "w": 12,
         "h": 8
       },
@@ -1323,7 +1329,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 12,
-        "y": 89,
+        "y": 86,
         "w": 12,
         "h": 8
       },
@@ -1396,7 +1402,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 97,
+        "y": 94,
         "w": 24,
         "h": 8
       },
@@ -1467,7 +1473,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 105,
+        "y": 102,
         "w": 24,
         "h": 8
       },
@@ -1530,7 +1536,7 @@
       "title": "Alcance de los SLO medidos",
       "gridPos": {
         "x": 0,
-        "y": 113,
+        "y": 110,
         "w": 24,
         "h": 5
       },
@@ -1545,7 +1551,7 @@
       "title": "Alertas del sistema",
       "gridPos": {
         "x": 0,
-        "y": 118,
+        "y": 115,
         "w": 24,
         "h": 6
       },
@@ -1574,7 +1580,7 @@
       "panels": [],
       "gridPos": {
         "x": 0,
-        "y": 124,
+        "y": 121,
         "w": 24,
         "h": 1
       }
@@ -1586,7 +1592,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 125,
+        "y": 122,
         "w": 12,
         "h": 8
       },
@@ -1643,7 +1649,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 12,
-        "y": 125,
+        "y": 122,
         "w": 12,
         "h": 8
       },
@@ -1700,7 +1706,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 133,
+        "y": 130,
         "w": 12,
         "h": 8
       },
@@ -1757,7 +1763,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 12,
-        "y": 133,
+        "y": 130,
         "w": 12,
         "h": 8
       },
@@ -1814,7 +1820,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 141,
+        "y": 138,
         "w": 24,
         "h": 8
       },
@@ -1872,7 +1878,7 @@
       "panels": [],
       "gridPos": {
         "x": 0,
-        "y": 149,
+        "y": 146,
         "w": 24,
         "h": 1
       }
@@ -1884,7 +1890,7 @@
       "type": "logs",
       "gridPos": {
         "x": 0,
-        "y": 150,
+        "y": 147,
         "w": 24,
         "h": 10
       },
@@ -1927,7 +1933,7 @@
       "type": "table",
       "gridPos": {
         "x": 0,
-        "y": 160,
+        "y": 157,
         "w": 24,
         "h": 10
       },

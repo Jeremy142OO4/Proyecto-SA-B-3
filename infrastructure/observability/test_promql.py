@@ -4,6 +4,35 @@ from pathlib import Path
 import subprocess
 import tempfile
 import alerting
+import system_dashboard
+
+
+def rabbitmq_dashboard_cases():
+    panel = next(p for p in system_dashboard.dashboard()['panels']
+                 if p['title'] == 'Colas con pendientes y sin consumidores')
+    expression = panel['targets'][0]['expr']
+    attributes = 'job="bank-infra",rabbitmq_queue_name="cuentas.comandos",rabbitmq_vhost_name="/",rabbitmq_node_name="rabbit@test"'
+    cases = []
+    for name, ready, consumers, up, expected in [
+        ('empty queue with consumer', 0, 1, 1, 0),
+        ('pending with consumer', 5, 1, 1, 0),
+        ('pending without consumers', 5, 0, 1, 1),
+        ('empty DLQ without consumers', 0, 0, 1, 0),
+        ('missing broker telemetry', None, None, None, None),
+        ('missing consumer telemetry', 5, None, 1, None),
+        ('failed scrape is not healthy', 0, 1, 0, None),
+    ]:
+        inputs = []
+        if ready is not None:
+            inputs.append({'series': 'rabbitmq_message_current{' + attributes + ',state="ready"}', 'values': str(ready) + '+0x10'})
+        if consumers is not None:
+            inputs.append({'series': 'rabbitmq_consumer_count{' + attributes + '}', 'values': str(consumers) + '+0x10'})
+        if up is not None:
+            inputs.append({'series': 'up{job="bank-infra"}', 'values': str(up) + '+0x10'})
+        cases.append({'name': 'RabbitMQ dashboard: ' + name, 'interval': '1m', 'input_series': inputs,
+                      'promql_expr_test': [{'expr': expression, 'eval_time': '5m',
+                                           'exp_samples': [] if expected is None else [{'labels': '{}', 'value': expected}]}]})
+    return cases
 
 
 def main():
@@ -43,6 +72,7 @@ def main():
         case('backlog ' + str(backlog), [{'series': 'rabbitmq_message_current{job="bank-infra",state="ready",rabbitmq_queue_name="cuentas"}',
                                         'values': str(backlog) + '+0x400'}], {'bank-rabbitmq-backlog': expected})
 
+    cases.extend(rabbitmq_dashboard_cases())
     with tempfile.TemporaryDirectory(prefix='bank-promql-') as temp:
         path = Path(temp)
         path.chmod(0o755)
