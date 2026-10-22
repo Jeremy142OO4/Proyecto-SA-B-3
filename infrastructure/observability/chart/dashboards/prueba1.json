@@ -2,7 +2,7 @@
   "uid": "bank-usac-prueba1",
   "title": "Bank USAC-Prueba1",
   "schemaVersion": 39,
-  "version": 19,
+  "version": 20,
   "timezone": "browser",
   "refresh": "15s",
   "time": {
@@ -16,7 +16,8 @@
     "account-service",
     "transaction-service",
     "payment-service",
-    "notification-audit-service"
+    "notification-audit-service",
+    "api-gateway"
   ],
   "editable": false,
   "templating": {
@@ -1285,6 +1286,366 @@
         "tooltip": {
           "mode": "single"
         }
+      }
+    },
+    {
+      "id": 60,
+      "type": "row",
+      "title": "06/API_gateway",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 154,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 61,
+      "type": "timeseries",
+      "title": "Tráfico HTTP por resultado · solicitudes/s",
+      "description": "Intentos HTTP atendidos por el Gateway, por clase de respuesta, en ventana de 5 min. 4xx son respuestas de cliente/autorización; 5xx son fallos del servidor. No cuenta operaciones de negocio únicas.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 155,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (status_class) (rate(bank_http_requests_total{service=\"api-gateway\",environment=\"$environment\",route!~\"/salud|/health.*|/ready.*|/metrics\"}[5m]))",
+          "legendFormat": "{{status_class}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 5,
+            "spanNulls": false,
+            "showPoints": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 62,
+      "type": "timeseries",
+      "title": "Latencia HTTP del Gateway · p50, p95 y p99",
+      "description": "Percentiles desde el histograma HTTP, agregando buckets entre rutas y réplicas antes del cálculo. Mide respuesta HTTP del Gateway; no toda la Saga asíncrona. Sin incrementos observados puede no haber percentil.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 155,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(bank_http_duration_seconds_bucket{service=\"api-gateway\",environment=\"$environment\",route!~\"/salud|/health.*|/ready.*|/metrics\"}[5m])))",
+          "legendFormat": "p50",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(bank_http_duration_seconds_bucket{service=\"api-gateway\",environment=\"$environment\",route!~\"/salud|/health.*|/ready.*|/metrics\"}[5m])))",
+          "legendFormat": "p95",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(bank_http_duration_seconds_bucket{service=\"api-gateway\",environment=\"$environment\",route!~\"/salud|/health.*|/ready.*|/metrics\"}[5m])))",
+          "legendFormat": "p99",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 5,
+            "spanNulls": false,
+            "showPoints": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 63,
+      "type": "timeseries",
+      "title": "Respuestas HTTP 4xx y 5xx (%)",
+      "description": "Porcentajes sobre intentos HTTP observados en 5 min. No implica fallo de una transferencia ni cumplimiento de SLO. Sin tráfico/telemetría no se presenta éxito artificial.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 163,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(100 * ((sum(rate(bank_http_requests_total{service=\"api-gateway\",environment=\"$environment\",route!~\"/salud|/health.*|/ready.*|/metrics\",status_class=\"5xx\"}[5m])) or (0 * sum(rate(bank_http_requests_total{service=\"api-gateway\",environment=\"$environment\",route!~\"/salud|/health.*|/ready.*|/metrics\"}[5m])))) / sum(rate(bank_http_requests_total{service=\"api-gateway\",environment=\"$environment\",route!~\"/salud|/health.*|/ready.*|/metrics\"}[5m])))) and (sum(rate(bank_http_requests_total{service=\"api-gateway\",environment=\"$environment\",route!~\"/salud|/health.*|/ready.*|/metrics\"}[5m])) > 0)",
+          "legendFormat": "Errores del servidor · 5xx (%)",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "B",
+          "expr": "(100 * ((sum(rate(bank_http_requests_total{service=\"api-gateway\",environment=\"$environment\",route!~\"/salud|/health.*|/ready.*|/metrics\",status_class=\"4xx\"}[5m])) or (0 * sum(rate(bank_http_requests_total{service=\"api-gateway\",environment=\"$environment\",route!~\"/salud|/health.*|/ready.*|/metrics\"}[5m])))) / sum(rate(bank_http_requests_total{service=\"api-gateway\",environment=\"$environment\",route!~\"/salud|/health.*|/ready.*|/metrics\"}[5m])))) and (sum(rate(bank_http_requests_total{service=\"api-gateway\",environment=\"$environment\",route!~\"/salud|/health.*|/ready.*|/metrics\"}[5m])) > 0)",
+          "legendFormat": "Respuestas de cliente · 4xx (%)",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 5,
+            "spanNulls": false,
+            "showPoints": "auto"
+          },
+          "max": 100
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 64,
+      "type": "timeseries",
+      "title": "Mensajería RabbitMQ · intentos/s",
+      "description": "Publicaciones y procesamientos del Gateway por acción: published, publish_failed, processed y failed. Intentos de transporte, no eventos únicos ni prueba por sí solos de propagación de contexto.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 163,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (action) (rate(bank_messages_total{service=\"api-gateway\",environment=\"$environment\"}[5m]))",
+          "legendFormat": "{{action}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "min": 0,
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 5,
+            "spanNulls": false,
+            "showPoints": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 65,
+      "type": "timeseries",
+      "title": "Procesamiento de mensajes del Gateway · p95",
+      "description": "Percentil 95 del tiempo del consumidor, incluidos intentos exitosos y fallidos, en ventana de 5 min. No representa el tiempo de espera dentro de la cola.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 171,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(bank_message_processing_seconds_bucket{service=\"api-gateway\",environment=\"$environment\"}[5m])))",
+          "legendFormat": "Consumo AMQP p95",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 5,
+            "spanNulls": false,
+            "showPoints": "auto"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 66,
+      "type": "table",
+      "title": "Trazas de entrada del Gateway",
+      "description": "Una fila por Trace ID con un span HTTP de servidor en /api/. Abrir Trace ID carga los servicios y mensajes de ese recorrido. Ver traceId/spanId nativos, correlationId como atributo y spans productores/consumidores. Las solicitudes nuevas del portal tienen una raíz propia del banco y un enlace al contexto externo cuando existe; las trazas antiguas pueden conservar padres externos ausentes. Hasta 50 trazas en el rango y retención de Tempo.",
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 179,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceql",
+          "query": "{ resource.service.name = \"api-gateway\" && resource.deployment.environment.name = \"$environment\" && kind = server && span.http.route =~ \"/api/.*\" }",
+          "tableType": "traces",
+          "limit": 50,
+          "spss": 20
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "id": 67,
+      "type": "logs",
+      "title": "Logs del Gateway · HTTP y broker",
+      "description": "JSON del Gateway con traceId, spanId y correlationId cuando hay contexto. Reutiliza los filtros correlationId/traceId superiores; servicio fijado en api-gateway. El filtro Nivel (logs) aplica; Servicio (logs) de auditoría no afecta este panel. Expandir una línea para sus IDs y enlace a Tempo. No se añaden IDs a métricas ni al índice de Loki; cuerpo original conservado. Hasta 300 líneas, retención 48 h.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 189,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service_name=\"api-gateway\",deployment_environment_name=\"$environment\"} | json logLevel=\"level\", logCorrelationId=\"correlationId\", logTraceId=\"traceId\" | __error__=\"\" | label_format logLevel=`{{ if eq .logLevel \"WARN\" }}WARNING{{ else }}{{ .logLevel }}{{ end }}` | logLevel=~\"${logLevel:regex}\" | logCorrelationId=~\"${logCorrelationId:raw}\" | logTraceId=~\"${logTraceId:raw}\"",
+          "queryType": "range",
+          "maxLines": 300
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "wrapLogMessage": false,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none"
       }
     }
   ]
