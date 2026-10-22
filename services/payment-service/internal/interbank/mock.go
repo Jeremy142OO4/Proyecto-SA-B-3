@@ -27,6 +27,18 @@ type mockTransfer struct {
 
 func (s *Service) mock(ctx context.Context, r Request) bankrpc.Response {
 	// Each deposit snapshots its own scenario: concurrent clients cannot change each other's tests.
+	if strings.HasSuffix(r.Path, "/resume") && r.Method == "POST" {
+		id := strings.TrimSuffix(strings.TrimPrefix(r.Path, "/transfers/"), "/resume")
+		var t mockTransfer
+		if json.Unmarshal(r.Body, &t) != nil || t.ID != id {
+			return bankrpc.Reply(400, nil)
+		}
+		_, err := s.DB.Exec(ctx, `INSERT INTO mock_interbank(id,body,scenario,due,expires,trace_context,recovered) VALUES($1,$2,$3,clock_timestamp(),$4,$5,true) ON CONFLICT(id) DO UPDATE SET recovered=true,due=clock_timestamp(),callback_delivered=false WHERE mock_interbank.scenario=excluded.scenario`, id, r.Body, r.Scenario, t.Expires, telemetry.Serialize(ctx))
+		if err != nil {
+			return bankrpc.Reply(503, nil)
+		}
+		return bankrpc.Reply(200, map[string]bool{"restored": true})
+	}
 	if r.Path == "/transfers" && r.Method == "POST" {
 		var t mockTransfer
 		if json.Unmarshal(r.Body, &t) != nil || t.ID != r.Key || t.Expires.IsZero() {
@@ -36,7 +48,9 @@ func (s *Service) mock(ctx context.Context, r Request) bankrpc.Response {
 			return bankrpc.Reply(400, nil)
 		}
 		ctx = telemetry.WithCorrelation(ctx, t.ID)
-		if r.Scenario == "unavailable" {
+		var recovered bool
+		_ = s.DB.QueryRow(ctx, `SELECT recovered FROM mock_interbank WHERE id=$1`, t.ID).Scan(&recovered)
+		if r.Scenario == "unavailable" && !recovered {
 			slog.ErrorContext(ctx, "simulated interbank external failure", "interbankTransferId", t.ID)
 			return bankrpc.Reply(503, map[string]string{"code": "SERVICE_UNAVAILABLE"})
 		}
@@ -162,7 +176,11 @@ func (s *Service) StepMock(ctx context.Context) error {
 		// Commit the durable result before callback; a failed callback never reprocesses money.
 		return tx.Commit(ctx)
 	}
-	delivered := scenario == "no_callback" || state == "CANCELLED"
+	var recovered bool
+	if e = tx.QueryRow(ctx, `SELECT recovered FROM mock_interbank WHERE id=$1`, id).Scan(&recovered); e != nil {
+		return e
+	}
+	delivered := (scenario == "no_callback" && !recovered) || state == "CANCELLED"
 	if !delivered {
 		result := map[string]any{"interbankTransferId": id, "destinationBankCode": s.PartnerBank, "status": state, "reasonCode": reason, "processedAt": updated}
 		r, err := bankrpc.Call(ctx, s.Rabbit, "transacciones.interbancarias", map[string]any{"action": "result", "id": id, "peer": s.PartnerBank, "body": result})

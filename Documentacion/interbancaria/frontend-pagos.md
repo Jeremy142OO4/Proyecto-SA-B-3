@@ -9,3 +9,9 @@ La Saga persiste el escenario, reserva mediante Account y consulta el KYC actual
 Migraciones nuevas: Transaction 000008_interbank_scenario y Payment 000006_mock_interbank, incluidas en prepare-telemetry-schema.sh. El contrato OpenAPI entre bancos no cambia. Los UUID permanecen en trazas/logs, no en etiquetas de métricas.
 
 Validación local: TypeScript, build Vite y pruebas Go/Node. Las pruebas con PostgreSQL se ejecutan en CI con una base desechable; no se realizaron pagos reales desde el agente.
+
+## Restablecer una prueba
+
+El historial muestra «Restablecer proceso normal» para escenarios pendientes de banco no disponible, respuesta lenta y ausencia de callback. POST `/api/interbancarias/{id}/restablecer` comprueba titularidad y que sea una simulación; jamás cambia el banco real ni otros depósitos. Payment guarda la recuperación y adelanta el trabajo pendiente. Se conserva el ID y la fecha de vencimiento original: después del vencimiento se resuelve como rechazo/compensación, sin autorizar un débito tardío. Un estado final no se reabre.
+
+El historial usa GET `/api/interbancarias/historial`. El error 405 observado correspondía a un Gateway desplegado anterior a esta ruta; se comprobó la versión 8e9dd9c frente al frontend más reciente. Deben desplegarse Gateway, Customer, Transaction y Payment antes de verificar el flujo completo. Migración nueva: Payment 000007_mock_recovery.

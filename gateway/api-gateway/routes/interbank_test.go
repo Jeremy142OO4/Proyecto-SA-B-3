@@ -105,3 +105,35 @@ func TestInterbankRoutesAuthorization(t *testing.T) {
 	}
 	r.Body.Close()
 }
+
+func TestInterbankHistoryGETAndResumePOST(t *testing.T) {
+	t.Setenv("ENTORNO", "dev")
+	app := fiber.New()
+	calls := 0
+	controllers.InterbankGateway{Enabled: true, JWT: "test-only", Call: func(_ context.Context, _ string, _ string, body any) (bankrpc.Response, error) {
+		calls++
+		return bankrpc.Reply(200, []any{}), nil
+	}}.Register(app)
+	for _, path := range []string{"/api/interbancarias/", "/api/interbancarias/historial"} {
+		req := httptest.NewRequest("GET", path, nil)
+		req.Header.Set("Authorization", "Bearer "+simulationToken("CLIENTE"))
+		res, err := app.Test(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode != 200 {
+			t.Fatal(path, res.StatusCode)
+		}
+	}
+	req := httptest.NewRequest("POST", "/api/interbancarias/"+uuid.NewString()+"/restablecer", strings.NewReader("{}"))
+	req.Header.Set("Authorization", "Bearer "+simulationToken("CLIENTE"))
+	res, err := app.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != 200 || calls != 3 {
+		t.Fatal(res.StatusCode, calls)
+	}
+}

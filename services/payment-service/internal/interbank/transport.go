@@ -60,7 +60,7 @@ func New() (*Transport, error) {
 	return &Transport{BaseURL: raw, Key: key, Client: &http.Client{Timeout: 5 * time.Second, Transport: telemetry.Transport{}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }
 
-var transferPath = regexp.MustCompile(`^/transfers/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(/result|/cancel)?$`)
+var transferPath = regexp.MustCompile(`^/transfers/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})(/result|/cancel|/resume)?$`)
 var reversalPath = regexp.MustCompile("^/reversals/[0-9a-fA-F-]{36}$")
 
 func valid(r Request) bool {
@@ -75,7 +75,7 @@ func valid(r Request) bool {
 	}
 	if transferPath.MatchString(r.Path) {
 		return (r.Method == "GET" && !strings.HasSuffix(r.Path, "/result") && !strings.HasSuffix(r.Path, "/cancel")) ||
-			(r.Method == "POST" && (strings.HasSuffix(r.Path, "/result") || strings.HasSuffix(r.Path, "/cancel")))
+			(r.Method == "POST" && (strings.HasSuffix(r.Path, "/result") || strings.HasSuffix(r.Path, "/cancel") || strings.HasSuffix(r.Path, "/resume")))
 	}
 	if r.Method == "GET" {
 		u, e := url.Parse(r.Path)
@@ -109,6 +109,9 @@ func (p *Transport) Handle(ctx context.Context, raw json.RawMessage) bankrpc.Res
 		}
 		response := p.Mock.mock(ctx, r)
 		return bankrpc.Reply(200, Result{Status: response.Status, Body: response.Body})
+	}
+	if strings.HasSuffix(r.Path, "/resume") {
+		return bankrpc.Reply(400, nil)
 	}
 	if p.BaseURL == "" || len(p.Key) < 16 {
 		return bankrpc.Reply(200, Result{Error: "not_configured"})

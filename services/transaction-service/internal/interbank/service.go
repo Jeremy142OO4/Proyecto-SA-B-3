@@ -96,6 +96,8 @@ func (s *Service) Handle(ctx context.Context, raw json.RawMessage) bankrpc.Respo
 			return failure(400, "VALIDATION_ERROR")
 		}
 		return s.callback(ctx, result)
+	case "resume":
+		return s.resume(ctx, r)
 	case "client_list":
 		return s.listClient(ctx, r)
 	case "get", "client_get":
@@ -327,4 +329,37 @@ func (s *Service) listClient(ctx context.Context, r Request) bankrpc.Response {
 		return failure(503, "SERVICE_UNAVAILABLE")
 	}
 	return bankrpc.Reply(200, items)
+}
+
+// Only the owner can recover their own mock operation; this never changes the partner URL.
+func (s *Service) resume(ctx context.Context, r Request) bankrpc.Response {
+	if !simulationEnabled() {
+		return failure(403, "SIMULATION_DISABLED")
+	}
+	row, e := scan(s.DB.QueryRow(ctx, `SELECT `+columns+` FROM depositos_interbancarios WHERE id=$1`, r.ID))
+	if errors.Is(e, pgx.ErrNoRows) {
+		return failure(404, "NOT_FOUND")
+	}
+	if e != nil {
+		return failure(503, "SERVICE_UNAVAILABLE")
+	}
+	if row.Customer != r.Customer || row.Direction != "OUT" || r.Customer == "" {
+		return failure(403, "UNAUTHORIZED")
+	}
+	if row.Scenario != "unavailable" && row.Scenario != "delayed" && row.Scenario != "no_callback" {
+		return failure(409, "NOT_RECOVERABLE")
+	}
+	if row.State == "ACCEPTED" || row.State == "REVERSED" || row.State == "REJECTED" || row.State == "CANCELLED" {
+		return bankrpc.Reply(200, status(row))
+	}
+	p := &BrokerPartner{Config: s.Config, Scenario: row.Scenario, Call: bankrpc.Call}
+	code, _, err := p.Post(ctx, "/transfers/"+r.ID+"/resume", "", row.Transfer)
+	if err != nil || code != 200 {
+		return failure(503, "SERVICE_UNAVAILABLE")
+	}
+	_, e = s.DB.Exec(ctx, `UPDATE depositos_interbancarios SET proximo=clock_timestamp() WHERE id=$1`, r.ID)
+	if e != nil {
+		return failure(503, "SERVICE_UNAVAILABLE")
+	}
+	return bankrpc.Reply(200, status(row))
 }

@@ -1,0 +1,1 @@
+ALTER TABLE mock_interbank ADD COLUMN IF NOT EXISTS recovered BOOLEAN NOT NULL DEFAULT false;

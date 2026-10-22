@@ -42,3 +42,31 @@ func TestMockResultAndCancellationDatabase(t *testing.T) {
 		t.Fatal(response)
 	}
 }
+
+func TestRestoreUnavailableMockDatabase(t *testing.T) {
+	t.Setenv("ENTORNO", "dev")
+	db := testDB(t)
+	s := &Service{DB: db}
+	ctx := context.Background()
+	id := uuid.NewString()
+	body, _ := json.Marshal(map[string]any{"interbankTransferId": id, "expiresAt": time.Now().UTC().Add(time.Minute)})
+	request := Request{Method: "POST", Path: "/transfers", Key: id, Body: body, Scenario: "unavailable"}
+	if r := s.mock(ctx, request); r.Status != 503 {
+		t.Fatal(r)
+	}
+	request.Path = "/transfers/" + id + "/resume"
+	if r := s.mock(ctx, request); r.Status != 200 {
+		t.Fatal(r)
+	}
+	request.Path = "/transfers"
+	if r := s.mock(ctx, request); r.Status != 200 {
+		t.Fatal(r)
+	}
+	if err := s.StepMock(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var state string
+	if err := db.QueryRow(ctx, "SELECT status FROM mock_interbank WHERE id=$1", id).Scan(&state); err != nil || state != "ACCEPTED" {
+		t.Fatal(state, err)
+	}
+}

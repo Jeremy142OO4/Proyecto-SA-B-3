@@ -24,6 +24,9 @@ func (k KYC) Handle(ctx context.Context, raw json.RawMessage) bankrpc.Response {
 	if id, e := uuid.Parse(r.Customer); e != nil || id == uuid.Nil {
 		return bankrpc.Reply(400, nil)
 	}
+	if id, e := uuid.Parse(r.ID); e != nil || id == uuid.Nil {
+		return bankrpc.Reply(400, nil)
+	}
 	ctx = telemetry.WithCorrelation(ctx, r.ID)
 	ctx, finish := telemetry.Database(ctx, "InterbankValidateKYC")
 	defer finish()
