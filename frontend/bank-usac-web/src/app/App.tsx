@@ -5,7 +5,7 @@ import { PaginaCrearCuentaCliente } from '../features/accounts/pages/PaginaCrear
 import { PaginaDetalleCuenta } from '../features/accounts/pages/PaginaDetalleCuenta';
 import { PaginaAdministracionCuentas } from '../features/admin/pages/PaginaAdministracionCuentas';
 import { PaginaAdministracionClientes } from '../features/admin/pages/PaginaAdministracionClientes';
-import { PaginaPruebasInterbancarias } from '../features/admin/pages/PaginaPruebasInterbancarias';
+import { PaginaPagoInterbancario } from '../features/payments/pages/PaginaPagoInterbancario';
 import { PaginaAuditoria } from '../features/audit/pages/PaginaAuditoria';
 import { PaginaEventos } from '../features/audit/pages/PaginaEventos';
 import { RutaProtegida } from '../features/auth/components/RutaProtegida';
@@ -34,6 +34,7 @@ export function App() {
 
     <Route element={<RutaProtegida rolesPermitidos={['CLIENTE']} />}><Route element={<DisenoPrincipal />}>
       <Route path="/cuentas" element={<PaginaCuentas />} /><Route path="/cuentas/:idCuenta" element={<PaginaDetalleCuenta />} />
+      <Route path="/pagos/interbancario" element={<PaginaPagoInterbancario />} /><Route path="/pagos/escenarios" element={<PaginaPagoInterbancario simulacion />} />
       <Route path="/pagos" element={<PaginaPagos />} /><Route path="/pagos/nuevo" element={<PaginaNuevoPago />} />
       <Route path="/transferencias" element={<PaginaTransferencias />} /><Route path="/transferencias/nueva" element={<PaginaNuevaTransferenciaProtegida />} />
       <Route path="/transferencias/estado/:idOperacion" element={<PaginaEstadoTransferencia />} /><Route path="/transferencias/:idTransferencia" element={<PaginaDetalleTransferencia />} />
@@ -44,7 +45,6 @@ export function App() {
     </Route></Route>
 
     <Route element={<RutaProtegida rolesPermitidos={['ADMIN']} />}><Route element={<DisenoPrincipal />}>
-      <Route path="/administracion/pruebas-interbancarias" element={<PaginaPruebasInterbancarias />} />
       <Route path="/administracion/cuentas" element={<PaginaAdministracionCuentas />} /><Route path="/administracion/clientes" element={<PaginaAdministracionClientes />} /><Route path="/eventos" element={<PaginaEventos />} /><Route path="/auditoria" element={<PaginaAuditoria />} />
     </Route></Route>
     <Route path="*" element={<Navigate to="/" replace />} />
