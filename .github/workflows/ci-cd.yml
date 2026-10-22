@@ -1128,6 +1128,7 @@ jobs:
           BACKEND_HOST="${BACKEND_HOST#https://}"
           BACKEND_HOST="${BACKEND_HOST%%/*}"
           IMAGEN_FRONTEND="$(python3 infrastructure/scripts/image-digest.py "${REGISTRY}/${IMAGE_NAMESPACE}/bank-usac-frontend:${IMAGE_TAG}")"
+          # Mantener origen Docker Hub y verificar el mismo digest en Artifact Registry.
           IMAGEN_FRONTEND="$(python3 infrastructure/scripts/cloud-run-image.py "$IMAGEN_FRONTEND" "$GCP_PROJECT_ID" "$IMAGE_TAG")"
           gcloud run deploy bank-usac-frontend-dev \
             --image "$IMAGEN_FRONTEND" \
@@ -1382,6 +1383,7 @@ jobs:
           BACKEND_HOST="${BACKEND_HOST#https://}"
           BACKEND_HOST="${BACKEND_HOST%%/*}"
           IMAGEN_FRONTEND="$(python3 infrastructure/scripts/image-digest.py "${REGISTRY}/${IMAGE_NAMESPACE}/bank-usac-frontend:${IMAGE_TAG}")"
+          # Mantener origen Docker Hub y verificar el mismo digest en Artifact Registry.
           IMAGEN_FRONTEND="$(python3 infrastructure/scripts/cloud-run-image.py "$IMAGEN_FRONTEND" "$GCP_PROJECT_ID" "$IMAGE_TAG")"
           gcloud run deploy bank-usac-frontend-prod \
             --image "$IMAGEN_FRONTEND" \

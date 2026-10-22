@@ -100,12 +100,11 @@ func serve(ctx context.Context, url, queue string, handler Handler) error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.CloseDeadline(time.Now().Add(time.Second)) }()
 	ch, err := conn.Channel()
 	if err != nil {
 		return err
 	}
-	defer ch.Close()
 	if _, err = ch.QueueDeclare(queue, true, false, false, false, nil); err != nil {
 		return err
 	}
