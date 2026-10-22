@@ -124,6 +124,42 @@ entre mediciones; el throughput y los contadores históricos permiten verificar 
 `up{job="bank-infra"}=1` solo prueba el scrape del Collector; también se verificó la
 presencia de las métricas específicas de RabbitMQ y sus valores contra el broker.
 
+### Prueba controlada de cambios en las colas
+
+El 21 de octubre de 2026 se ejecutó una prueba real en la cola temporal
+`observabilidad.verificacion.70d9a00c`. No se enlazó a exchanges de negocio ni se
+detuvieron consumidores del banco. Se usó un mensaje de preparación para establecer
+los contadores, y después 12 mensajes de texto de prueba, sin datos bancarios.
+
+Prometheus confirmó las siguientes fases (hora UTC−6):
+
+| Hora | Fase | Ready | Unacked | Consumidores | ACK acumulados |
+|---|---|---:|---:|---:|---:|
+| 22:25:49 | Preparación completada | 0 | 0 | 0 | 0 |
+| 22:26:18 | 12 mensajes esperando | 12 | 0 | 0 | 0 |
+| 22:26:49 | Consumidor con prefetch=1, sin confirmar todavía | 11 | 1 | 1 | 0 |
+| 22:27:19 | Los 12 mensajes confirmados | 0 | 0 | 1 | 12 |
+
+En la tercera fase, el promedio ready/consumidor fue 11. Al terminar se canceló
+solo el consumidor temporal y se eliminó solo su cola. Los datos de esta cola
+permanecen en el histórico de Prometheus hasta su retención normal; no son operaciones
+del banco. Una primera cola de preparación (`observabilidad.verificacion.4871d6c8`)
+también fue eliminada: únicamente estableció contadores, sin transacciones de negocio.
+
+Se identificó un problema de presentación: con pocas muestras gráficas en rangos
+de varias horas, una consulta instantánea puede omitir picos cortos que sí quedaron
+almacenados. Los cuatro gráficos de estado ahora conservan el máximo observado
+por intervalo (`max_over_time`) y lo indican en el título/descripción; las leyendas
+muestran último intervalo y máximo del rango. El promedio por consumidor se calcula
+antes de obtener su pico. No se inventa el estado entre recolecciones ni se rellenan
+ausencias con cero. El contador de colas bloqueadas continúa siendo instantáneo.
+
+El throughput por cola está agrupado dentro de RabbitMQ para distinguir actividad
+de acumulación. Quince escenarios de PromQL verifican colas vacías, bloqueadas,
+ausencia de telemetría y conservación de picos cuando el intervalo de gráfica es
+mayor que la duración de un pico. La prueba de mensajes se realizó contra los servicios
+reales; las pruebas de regresión del CI utilizan series sintéticas.
+
 ### Bootstrap de permisos del Collector
 
 La identidad CI puede desplegar workloads, pero no necesariamente modificar Roles.

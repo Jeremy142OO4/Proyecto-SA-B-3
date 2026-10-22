@@ -32,6 +32,24 @@ def rabbitmq_dashboard_cases():
         cases.append({'name': 'RabbitMQ dashboard: ' + name, 'interval': '1m', 'input_series': inputs,
                       'promql_expr_test': [{'expr': expression, 'eval_time': '5m',
                                            'exp_samples': [] if expected is None else [{'labels': '{}', 'value': expected}]}]})
+    # A graph evaluated every five minutes must preserve a collected one-minute spike.
+    peak_panels = [(p, expected) for p in system_dashboard.dashboard()['panels'] for fragment, expected in
+                   [('pico de ready', 12), ('pico de unacked', 1), ('máximo observado', 2), ('pico del promedio', 12)]
+                   if fragment in p['title']]
+    inputs = [
+        {'series': 'rabbitmq_message_current{' + attributes + ',state="ready"}', 'values': '0 0 12 0 0 0'},
+        {'series': 'rabbitmq_message_current{' + attributes + ',state="unacknowledged"}', 'values': '0 0 1 0 0 0'},
+        {'series': 'rabbitmq_consumer_count{' + attributes + '}', 'values': '1 1 2 1 1 1'},
+    ]
+    for panel, expected in peak_panels:
+        # Keep the ratio test's single consumer while the backlog peaks.
+        series = inputs if 'pico del promedio' not in panel['title'] else [*inputs[:2],
+            {'series': 'rabbitmq_consumer_count{' + attributes + '}', 'values': '1+0x10'}]
+        query = 'sum(' + panel['targets'][0]['expr'].replace('$__interval', '5m') + ')'
+        for name, samples, result in [('retains brief peak', series, [{'labels': '{}', 'value': expected}]),
+                                       ('missing data stays absent', [], [])]:
+            cases.append({'name': 'RabbitMQ ' + panel['title'] + ': ' + name, 'interval': '1m', 'input_series': samples,
+                          'promql_expr_test': [{'expr': query, 'eval_time': '5m', 'exp_samples': result}]})
     return cases
 
 

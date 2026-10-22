@@ -86,20 +86,34 @@ def dashboard():
     panel('Throughput · eventos por segundo por routing key',
           [('sum by(service,event_type,action)(rate(bank_messages_total{environment="dev"}[$__rate_interval]))', '{{service}} · {{event_type}} · {{action}}')], 'ops', x=12,
           description='event_type es la routing key del catálogo permitido. Claves no reconocidas se agrupan en other para limitar cardinalidad.')
-    panel('Throughput RabbitMQ · por cola',
+    row('03 / RabbitMQ · actividad, pendientes y consumidores')
+    broker_throughput = panel('Throughput RabbitMQ · por cola',
           [(f'sum by(rabbitmq_queue_name)(rate(rabbitmq_message_{metric}_total{{job="bank-infra"}}[$__rate_interval]))', '{{rabbitmq_queue_name}} · ' + label)
            for metric, label in [('published', 'publicados'), ('delivered', 'entregados'), ('acknowledged', 'confirmados')]], 'ops', width=24,
           description='Contadores del management API del broker; los reintentos son entregas adicionales. Colas RPC temporales excluidas del almacenamiento.')
+    broker_throughput['options']['legend']['calcs'] = ['lastNotNull', 'max']
 
-    row('03 / RabbitMQ · pendientes y consumidores')
     queue = 'rabbitmq_message_current{job="bank-infra",state="ready"}'
     consumers = 'rabbitmq_consumer_count{job="bank-infra"}'
-    panel('Mensajes pendientes por cola · ready', [(queue, '{{rabbitmq_queue_name}}')], description='Backlog real de RabbitMQ, compartido por los consumidores de cada cola. No es lag por partición de Kafka.')
-    panel('Mensajes entregados sin confirmar · unacked', [('rabbitmq_message_current{job="bank-infra",state="unacknowledged"}', '{{rabbitmq_queue_name}}')], x=12)
-    panel('Consumidores activos por cola', [(consumers, '{{rabbitmq_queue_name}}')])
-    panel('Pendientes por consumidor activo · promedio',
-          [(f'{queue} / on(rabbitmq_queue_name,rabbitmq_vhost_name,rabbitmq_node_name) ({consumers} > 0)', '{{rabbitmq_queue_name}}')], x=12,
-          description='ready / consumidores activos. Es un promedio por cola; RabbitMQ no asigna mensajes ready a un consumidor individual. Las colas sin consumidor se muestran en el panel siguiente.')
+    queue_panels = [
+        panel('Mensajes pendientes por cola · pico de ready',
+              [(f'max_over_time({queue}[$__interval])', '{{rabbitmq_queue_name}}')],
+              description='Máximo observado de ready por intervalo de la gráfica. Conserva picos breves al ampliar el rango; no es el valor instantáneo actual. No puede detectar mensajes que entran y salen entre recolecciones de 30 s.'),
+        panel('Mensajes sin confirmar · pico de unacked',
+              [('max_over_time(rabbitmq_message_current{job="bank-infra",state="unacknowledged"}[$__interval])', '{{rabbitmq_queue_name}}')], x=12,
+              description='Máximo observado de mensajes entregados sin ACK por intervalo. Al confirmar todos, las muestras nuevas vuelven a cero; el pico previo permanece en su intervalo.'),
+        panel('Consumidores activos por cola · máximo observado',
+              [(f'max_over_time({consumers}[$__interval])', '{{rabbitmq_queue_name}}')],
+              description='Máximo de consumidores conectados por intervalo; permite observar cambios breves durante un despliegue.'),
+        panel('Pendientes por consumidor activo · pico del promedio',
+              [(f'max_over_time(({queue} / on(rabbitmq_queue_name,rabbitmq_vhost_name,rabbitmq_node_name) ({consumers} > 0))[$__interval:15s])', '{{rabbitmq_queue_name}}')], x=12,
+              description='Primero calcula ready / consumidores activos y luego conserva su máximo por intervalo. Es un promedio por cola, no mensajes asignados a cada consumidor. No divide entre cero; las colas sin consumidores se cuentan aparte.'),
+    ]
+    for queue_panel in queue_panels:
+        queue_panel['interval'] = '30s'
+        queue_panel['fieldConfig']['defaults'].update(min=0, decimals=0)
+        queue_panel['fieldConfig']['defaults']['custom']['lineInterpolation'] = 'stepAfter'
+        queue_panel['options']['legend']['calcs'] = ['lastNotNull', 'max']
     blocked_queues = panel('Colas con pendientes y sin consumidores',
           [(f'(count(({queue} > 0) and on(rabbitmq_queue_name,rabbitmq_vhost_name,rabbitmq_node_name) ({consumers} == 0)) or (0 * count({queue}))) and on() (count({consumers}) > 0) and on() (up{{job="bank-infra"}} == 1)', 'Colas afectadas')],
           kind='stat', width=24, height=5,
@@ -176,7 +190,7 @@ def dashboard():
             else:
                 defaults['custom']['thresholdsStyle'] = dict(mode='line')
 
-    return dict(uid='bank-system-metrics', title='Métricas sistema', schemaVersion=39, version=2, editable=False,
+    return dict(uid='bank-system-metrics', title='Métricas sistema', schemaVersion=39, version=3, editable=False,
                 timezone='browser', refresh='30s', time=dict(**{'from':'now-6h','to':'now'}), tags=['bank-usac','SLI','SLO','dev'],
                 description='SLI base y SLO medibles con datos reales de dev. Sin muestras no se presume éxito. Despliegues nuevos se detectan por cambios de revisión Kubernetes.',
                 links=[dict(title='Servicios y búsqueda de logs',type='link',url='/d/bank-usac-prueba1'),

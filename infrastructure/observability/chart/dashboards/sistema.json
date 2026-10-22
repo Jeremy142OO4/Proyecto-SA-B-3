@@ -2,7 +2,7 @@
   "uid": "bank-system-metrics",
   "title": "Métricas sistema",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "editable": false,
   "timezone": "browser",
   "refresh": "30s",
@@ -653,12 +653,25 @@
     },
     {
       "id": 13,
+      "type": "row",
+      "title": "03 / RabbitMQ · actividad, pendientes y consumidores",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 39,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 14,
       "title": "Throughput RabbitMQ · por cola",
       "description": "Contadores del management API del broker; los reintentos son entregas adicionales. Colas RPC temporales excluidas del almacenamiento.",
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 39,
+        "y": 40,
         "w": 24,
         "h": 8
       },
@@ -713,32 +726,20 @@
           "displayMode": "table",
           "placement": "bottom",
           "calcs": [
-            "lastNotNull"
+            "lastNotNull",
+            "max"
           ]
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
-      }
-    },
-    {
-      "id": 14,
-      "type": "row",
-      "title": "03 / RabbitMQ · pendientes y consumidores",
-      "collapsed": false,
-      "panels": [],
-      "gridPos": {
-        "x": 0,
-        "y": 47,
-        "w": 24,
-        "h": 1
       }
     },
     {
       "id": 15,
-      "title": "Mensajes pendientes por cola · ready",
-      "description": "Backlog real de RabbitMQ, compartido por los consumidores de cada cola. No es lag por partición de Kafka.",
+      "title": "Mensajes pendientes por cola · pico de ready",
+      "description": "Máximo observado de ready por intervalo de la gráfica. Conserva picos breves al ampliar el rango; no es el valor instantáneo actual. No puede detectar mensajes que entran y salen entre recolecciones de 30 s.",
       "type": "timeseries",
       "gridPos": {
         "x": 0,
@@ -753,7 +754,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rabbitmq_message_current{job=\"bank-infra\",state=\"ready\"}",
+          "expr": "max_over_time(rabbitmq_message_current{job=\"bank-infra\",state=\"ready\"}[$__interval])",
           "legendFormat": "{{rabbitmq_queue_name}}",
           "instant": false,
           "range": true
@@ -768,12 +769,14 @@
           },
           "custom": {
             "drawStyle": "line",
-            "lineInterpolation": "linear",
+            "lineInterpolation": "stepAfter",
             "lineWidth": 2,
             "fillOpacity": 8,
             "showPoints": "auto",
             "spanNulls": false
-          }
+          },
+          "min": 0,
+          "decimals": 0
         },
         "overrides": []
       },
@@ -783,19 +786,21 @@
           "displayMode": "table",
           "placement": "bottom",
           "calcs": [
-            "lastNotNull"
+            "lastNotNull",
+            "max"
           ]
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
-      }
+      },
+      "interval": "30s"
     },
     {
       "id": 16,
-      "title": "Mensajes entregados sin confirmar · unacked",
-      "description": "",
+      "title": "Mensajes sin confirmar · pico de unacked",
+      "description": "Máximo observado de mensajes entregados sin ACK por intervalo. Al confirmar todos, las muestras nuevas vuelven a cero; el pico previo permanece en su intervalo.",
       "type": "timeseries",
       "gridPos": {
         "x": 12,
@@ -810,7 +815,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rabbitmq_message_current{job=\"bank-infra\",state=\"unacknowledged\"}",
+          "expr": "max_over_time(rabbitmq_message_current{job=\"bank-infra\",state=\"unacknowledged\"}[$__interval])",
           "legendFormat": "{{rabbitmq_queue_name}}",
           "instant": false,
           "range": true
@@ -825,12 +830,14 @@
           },
           "custom": {
             "drawStyle": "line",
-            "lineInterpolation": "linear",
+            "lineInterpolation": "stepAfter",
             "lineWidth": 2,
             "fillOpacity": 8,
             "showPoints": "auto",
             "spanNulls": false
-          }
+          },
+          "min": 0,
+          "decimals": 0
         },
         "overrides": []
       },
@@ -840,19 +847,21 @@
           "displayMode": "table",
           "placement": "bottom",
           "calcs": [
-            "lastNotNull"
+            "lastNotNull",
+            "max"
           ]
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
-      }
+      },
+      "interval": "30s"
     },
     {
       "id": 17,
-      "title": "Consumidores activos por cola",
-      "description": "",
+      "title": "Consumidores activos por cola · máximo observado",
+      "description": "Máximo de consumidores conectados por intervalo; permite observar cambios breves durante un despliegue.",
       "type": "timeseries",
       "gridPos": {
         "x": 0,
@@ -867,7 +876,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rabbitmq_consumer_count{job=\"bank-infra\"}",
+          "expr": "max_over_time(rabbitmq_consumer_count{job=\"bank-infra\"}[$__interval])",
           "legendFormat": "{{rabbitmq_queue_name}}",
           "instant": false,
           "range": true
@@ -882,12 +891,14 @@
           },
           "custom": {
             "drawStyle": "line",
-            "lineInterpolation": "linear",
+            "lineInterpolation": "stepAfter",
             "lineWidth": 2,
             "fillOpacity": 8,
             "showPoints": "auto",
             "spanNulls": false
-          }
+          },
+          "min": 0,
+          "decimals": 0
         },
         "overrides": []
       },
@@ -897,19 +908,21 @@
           "displayMode": "table",
           "placement": "bottom",
           "calcs": [
-            "lastNotNull"
+            "lastNotNull",
+            "max"
           ]
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
-      }
+      },
+      "interval": "30s"
     },
     {
       "id": 18,
-      "title": "Pendientes por consumidor activo · promedio",
-      "description": "ready / consumidores activos. Es un promedio por cola; RabbitMQ no asigna mensajes ready a un consumidor individual. Las colas sin consumidor se muestran en el panel siguiente.",
+      "title": "Pendientes por consumidor activo · pico del promedio",
+      "description": "Primero calcula ready / consumidores activos y luego conserva su máximo por intervalo. Es un promedio por cola, no mensajes asignados a cada consumidor. No divide entre cero; las colas sin consumidores se cuentan aparte.",
       "type": "timeseries",
       "gridPos": {
         "x": 12,
@@ -924,7 +937,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rabbitmq_message_current{job=\"bank-infra\",state=\"ready\"} / on(rabbitmq_queue_name,rabbitmq_vhost_name,rabbitmq_node_name) (rabbitmq_consumer_count{job=\"bank-infra\"} > 0)",
+          "expr": "max_over_time((rabbitmq_message_current{job=\"bank-infra\",state=\"ready\"} / on(rabbitmq_queue_name,rabbitmq_vhost_name,rabbitmq_node_name) (rabbitmq_consumer_count{job=\"bank-infra\"} > 0))[$__interval:15s])",
           "legendFormat": "{{rabbitmq_queue_name}}",
           "instant": false,
           "range": true
@@ -939,12 +952,14 @@
           },
           "custom": {
             "drawStyle": "line",
-            "lineInterpolation": "linear",
+            "lineInterpolation": "stepAfter",
             "lineWidth": 2,
             "fillOpacity": 8,
             "showPoints": "auto",
             "spanNulls": false
-          }
+          },
+          "min": 0,
+          "decimals": 0
         },
         "overrides": []
       },
@@ -954,14 +969,16 @@
           "displayMode": "table",
           "placement": "bottom",
           "calcs": [
-            "lastNotNull"
+            "lastNotNull",
+            "max"
           ]
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
-      }
+      },
+      "interval": "30s"
     },
     {
       "id": 19,
