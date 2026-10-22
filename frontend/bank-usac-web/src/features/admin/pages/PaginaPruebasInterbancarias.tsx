@@ -6,7 +6,6 @@ type Escenario = 'accept' | 'reject' | 'unavailable' | 'no_callback' | 'delayed'
 interface Estado { enabled: boolean; target: string; environment?: string; scenario?: Escenario; delaySeconds?: number; accounts?: string[]; updatedAt?: string; callbackConfigured?: boolean; grafanaUrl?: string; mensaje?: string }
 const ruta = '/administracion/pruebas-interbancarias/';
 const escenarios: { id: Escenario; titulo: string; detalle: string; verificar: string }[] = [
-  { id: 'accept', titulo: 'Operación normal', detalle: 'Acepta el depósito y envía su resultado.', verificar: 'Confirmar ACCEPTED y un único débito.' },
   { id: 'reject', titulo: 'Rechazo', detalle: 'Devuelve REJECTED / PROCESSING_ERROR.', verificar: 'Confirmar liberación de la reserva, sin débito.' },
   { id: 'unavailable', titulo: 'Error 503', detalle: 'Las nuevas solicitudes reciben SERVICE_UNAVAILABLE.', verificar: 'Observar reintentos con el mismo ID y recuperación.' },
   { id: 'no_callback', titulo: 'Sin callback', detalle: 'Procesa el depósito, pero no envía el resultado.', verificar: 'Verificar recuperación por reintento idempotente o consulta tras TIMEOUT, sin duplicar el débito.' },
@@ -101,21 +100,16 @@ export function PaginaPruebasInterbancarias() {
   return <div className="pruebas-banco">
     <header className="pruebas-titulo"><div><p>BANK03 / CENTRO DE DEMOSTRACIÓN</p><h2>Simulador de escenarios</h2><span>Provocá un fallo controlado y comprobá cómo se recupera el banco.</span></div>
       <button type="button" onClick={consultar} disabled={ocupado}>Consultar entorno</button></header>
-    <div className="pruebas-pasos"><span><b>1</b> Elegí el escenario</span><span><b>2</b> Enviá una prueba</span><span><b>3</b> Observá la recuperación</span></div>
     <section className={`pruebas-entorno ${estado?.enabled ? 'aislado' : ''}`} aria-live="polite">
       <strong>{estado?.enabled ? `Laboratorio conectado · ${estado.environment || 'Entorno aislado'}` : 'Verificando disponibilidad del laboratorio'}</strong>
-      <p>{estado?.enabled ? 'Este panel usa un mock del banco externo y una cuenta ficticia independiente. No modifica BANK14 ni el dinero de las cuentas del portal. Los depósitos que el mock ya recibió conservan su escenario original.' : estado?.mensaje ?? 'Los controles se habilitan cuando el laboratorio está disponible. No se cambiará la conexión con el banco pareja.'}</p>
-      {estado?.enabled && <><p>Cuenta ficticia de destino: <code>{estado.accounts?.join(', ')}</code></p><p>Callbacks: {estado.callbackConfigured ? 'configurados' : 'NO configurados: la aceptación se resolverá por consulta, no por callback'}</p></>}
     </section>
     {error && <p className="pruebas-error" role="alert">{error}</p>}
     {exito && <p className="pruebas-exito" role="status">{exito}</p>}
-    <h3 className="pruebas-seccion">1. ¿Qué querés demostrar?</h3>
     <div className="pruebas-escenarios">{escenarios.map(e => <article key={e.id} className={estado?.enabled && estado.scenario === e.id ? 'seleccionado' : ''}>
       <span className="pruebas-etiqueta">{estado?.enabled && estado.scenario === e.id ? 'ACTIVO' : 'ESCENARIO'}</span><h3>{e.titulo}</h3><p>{e.detalle}</p><small>{e.verificar}</small>
       <button type="button" aria-pressed={estado?.enabled && estado.scenario === e.id} disabled={!estado?.enabled || ocupado || estado.scenario === e.id} onClick={() => cambiar(e.id)}>{estado?.scenario === e.id ? '✓ Escenario seleccionado' : 'Usar este escenario'}</button>
     </article>)}</div>
-    <section className="pruebas-guion"><h3>Cómo mostrar cada prueba al auxiliar</h3><ol><li>Seleccioná el escenario y esperá la confirmación.</li><li>Enviá un depósito desde el formulario de abajo.</li><li>Mostrá su ID, estado y reserva. No repitas un envío pendiente.</li><li>Para el error 503: mientras el depósito sigue pendiente, pulsá «Restablecer comportamiento normal» y observá el reintento del mismo depósito.</li><li>En Grafana buscá el ID y el entorno <code>interbank-cloud-tests</code> para distinguir estas pruebas del tráfico del banco real.</li></ol>
-      <p>Cambiar un escenario no crea depósitos, no reinicia servicios y no cambia URLs de integración.</p>
+    <section className="pruebas-guion">
       <div className="pruebas-acciones"><button type="button" disabled={!estado?.enabled || ocupado} onClick={() => cambiar('accept')}>Restablecer comportamiento normal del mock</button>
         {estado?.enabled && estado.grafanaUrl && <a href={estado.grafanaUrl} target="_blank" rel="noopener noreferrer">Abrir Grafana ↗</a>}</div>
       {estado?.enabled && !estado.grafanaUrl && <p>El enlace de observabilidad todavía no está configurado para este entorno.</p>}

@@ -30,8 +30,8 @@ for pod in get('pods'):
         values=container.get('resources',{}).get('requests',{})
         request[0]=max(request[0],cpu(values.get('cpu','0')));request[1]=max(request[1],memory(values.get('memory','0')))
     free[name][0]-=request[0];free[name][1]-=request[1]
-required_cpu=Decimal('0.065')+len(nodes)*Decimal('0.005')
-required_memory=(640+32*len(nodes))*1024**2
+required_cpu=Decimal('0.070')+len(nodes)*Decimal('0.005')
+required_memory=(672+32*len(nodes))*1024**2
 available_cpu=sum(v[0] for v in free.values());available_memory=sum(v[1] for v in free.values())
 assert nodes,'No schedulable nodes'
 assert all(v[0]>=Decimal('0.005') and v[1]>=32*1024**2 for v in free.values()),'No room for log agent on a node; refusing to increase cluster'

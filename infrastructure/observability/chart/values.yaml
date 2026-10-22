@@ -66,3 +66,6 @@ agent:
   image: otel/opentelemetry-collector-contrib:0.163.1
   memoryRequest: 32Mi
   memoryLimit: 128Mi
+
+systemMetrics:
+  image: python:3.13-alpine

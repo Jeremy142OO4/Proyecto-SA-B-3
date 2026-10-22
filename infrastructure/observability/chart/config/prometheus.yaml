@@ -12,6 +12,9 @@ scrape_configs:
       - source_labels: [rabbitmq_queue_name]
         regex: 'amq[.]gen-.*'
         action: drop
+  - job_name: bank-system
+    static_configs:
+      - targets: [otel-collector:9466]
   - job_name: bank-otel
     static_configs:
       - targets: [otel-collector:9464]

@@ -76,6 +76,13 @@ Los receivers existentes del Collector recogen despliegues/HPA del namespace dev
 
 ## Verificación
 
+<a id="bank-system-source"></a>
+### Consumo de recursos o revisiones sin medición
+
+- Condición: fuente resources/deployments con `bank_system_source_up=0`, scrape bank-system caído o ausente durante 5 min.
+- Revisar el sidecar system-metrics del Collector, Metrics Server y el Role del namespace: solo requiere get/list de pods en metrics.k8s.io y lectura de deployments en apps. No ampliar a administrador ni leer Secrets.
+- Confirmar `bank_system_source_up=1` y muestras recientes. Un fallo no se presenta como consumo CPU/memoria cero. Las anotaciones necesitan observar un cambio real de revisión; no ejecutar un despliegue financiero solo para provocar una marca.
+
 `python infrastructure/observability/alerting.py --check` valida que los artefactos generados coincidan con su fuente. `validate.py` valida Helm, seguridad, componentes y regresiones antes del despliegue.
 Cambios en reglas/dashboard se realizan en `alerting.py`, regenerando sus JSON; las modificaciones desde la UI no son la fuente de verdad.
 Tras desplegar: comprobar estado y consultas de cada regla, paneles, datos de RabbitMQ/HPA y enviar una prueba del contacto al correo técnico. Confirmar recepción con el equipo; aceptación SMTP por sí sola no prueba que el mensaje llegó a la bandeja.

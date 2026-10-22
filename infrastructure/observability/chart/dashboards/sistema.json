@@ -1,0 +1,1974 @@
+{
+  "uid": "bank-system-metrics",
+  "title": "Métricas sistema",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "tags": [
+    "bank-usac",
+    "SLI",
+    "SLO",
+    "dev"
+  ],
+  "description": "SLI base y SLO medibles con datos reales de dev. Sin muestras no se presume éxito. Despliegues nuevos se detectan por cambios de revisión Kubernetes.",
+  "links": [
+    {
+      "title": "Servicios y búsqueda de logs",
+      "type": "link",
+      "url": "/d/bank-usac-prueba1"
+    },
+    {
+      "title": "Alertas y runbooks",
+      "type": "link",
+      "url": "/alerting/list"
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "name": "Despliegues Kubernetes",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(109,179,185,1)",
+        "expr": "changes(bank_deployment_revision{namespace=\"bank-usac-dev\",environment=\"dev\"}[1m]) > 0",
+        "step": "30s",
+        "titleFormat": "Despliegue {{deployment}}",
+        "textFormat": "Cambio de revisión observado en {{deployment}}",
+        "tagKeys": "deployment",
+        "useValueForTime": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "01 / Estado del sistema",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 2,
+      "title": "Disponibilidad Gateway · 30 días · objetivo 99.5%",
+      "description": "Respuestas no 5xx; incluye 4xx. Excluye salud/readiness/métricas. Sin tráfico: sin datos. Ventana móvil con la historia disponible.",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 8,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (((sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30d])) - (sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\",status_class=\"5xx\"}[30d])) or (0 * sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30d]))))) / (sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30d])))) and ((sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30d]))) > 0))",
+          "legendFormat": "No 5xx",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 99.5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 3,
+      "title": "Error budget restante · SLO 99.5%",
+      "description": "100% = presupuesto intacto; 0% = agotado; puede ser negativo. Fallos permitidos = 0.005 × solicitudes observadas.",
+      "type": "stat",
+      "gridPos": {
+        "x": 8,
+        "y": 1,
+        "w": 8,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (1 - ((((sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\",status_class=\"5xx\"}[30d])) or (0 * sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30d]))))) / (0.005 * sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30d])))) and ((0.005 * sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30d]))) > 0)))",
+          "legendFormat": "Presupuesto restante",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 4,
+      "title": "Recolección de métricas",
+      "description": "1 = scrape disponible; no acredita disponibilidad de operaciones bancarias.",
+      "type": "stat",
+      "gridPos": {
+        "x": 16,
+        "y": 1,
+        "w": 8,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=~\"bank-otel|bank-infra|bank-system\"}",
+          "legendFormat": "{{job}}",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 5,
+      "title": "Réplicas disponibles por despliegue",
+      "description": "",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "k8s_deployment_available{job=\"bank-infra\",k8s_namespace_name=\"bank-usac-dev\"}",
+          "legendFormat": "{{k8s_deployment_name}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Solicitudes elegibles y errores · 30 días",
+      "description": "Prometheus estima incrementos entre scrapes; no es un registro contable exacto. No certifica cobertura completa de 30 días.",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 6,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30d]))",
+          "legendFormat": "Solicitudes observadas",
+          "instant": true,
+          "range": false
+        },
+        {
+          "refId": "B",
+          "expr": "(sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\",status_class=\"5xx\"}[30d])) or (0 * sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30d]))))",
+          "legendFormat": "Respuestas 5xx",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 7,
+      "type": "row",
+      "title": "02 / SLI · latencia, errores y throughput",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 8,
+      "title": "Latencia de transferencias · p50, p95 y p99",
+      "description": "Histograma desde creación hasta resultado terminal de la transferencia, incluidas esperas y compensaciones. No es promedio. Sin resultados recientes no hay percentil.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.5,sum by(le)(rate(bank_transfer_flow_duration_seconds_bucket{service=\"transaction-service\",environment=\"dev\"}[$__rate_interval])))",
+          "legendFormat": "p50",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95,sum by(le)(rate(bank_transfer_flow_duration_seconds_bucket{service=\"transaction-service\",environment=\"dev\"}[$__rate_interval])))",
+          "legendFormat": "p95",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99,sum by(le)(rate(bank_transfer_flow_duration_seconds_bucket{service=\"transaction-service\",environment=\"dev\"}[$__rate_interval])))",
+          "legendFormat": "p99",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Errores HTTP del Gateway · 5xx",
+      "description": "",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * ((((sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\",status_class=\"5xx\"}[5m])) or (0 * sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[5m]))))) / (sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[5m])))) and ((sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[5m]))) > 0))",
+          "legendFormat": "Errores técnicos HTTP (%)",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "Resultados de transferencias · éxito y fallo",
+      "description": "Resultados de negocio terminales; un rechazo o una compensación no equivale necesariamente a error técnico ni incumplimiento del SLO.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 23,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * ((((sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"dev\",outcome=\"success\"}[$__rate_interval])) or (0 * sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"dev\"}[$__rate_interval]))))) / (sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"dev\"}[$__rate_interval])))) and ((sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"dev\"}[$__rate_interval]))) > 0))",
+          "legendFormat": "Completadas",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "100 * ((((sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"dev\",outcome=\"failure\"}[$__rate_interval])) or (0 * sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"dev\"}[$__rate_interval]))))) / (sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"dev\"}[$__rate_interval])))) and ((sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"dev\"}[$__rate_interval]))) > 0))",
+          "legendFormat": "Fallidas / compensadas",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "title": "Throughput · eventos por segundo por servicio",
+      "description": "Intentos de publicación/procesamiento. Se separan por acción: no sumar productor y consumidor como eventos únicos.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(service,action)(rate(bank_messages_total{environment=\"dev\"}[$__rate_interval]))",
+          "legendFormat": "{{service}} · {{action}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "title": "Throughput · eventos por segundo por routing key",
+      "description": "event_type es la routing key del catálogo permitido. Claves no reconocidas se agrupan en other para limitar cardinalidad.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 31,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(service,event_type,action)(rate(bank_messages_total{environment=\"dev\"}[$__rate_interval]))",
+          "legendFormat": "{{service}} · {{event_type}} · {{action}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 13,
+      "title": "Throughput RabbitMQ · por cola",
+      "description": "Contadores del management API del broker; los reintentos son entregas adicionales. Colas RPC temporales excluidas del almacenamiento.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 39,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(rabbitmq_queue_name)(rate(rabbitmq_message_published_total{job=\"bank-infra\"}[$__rate_interval]))",
+          "legendFormat": "{{rabbitmq_queue_name}} · publicados",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "sum by(rabbitmq_queue_name)(rate(rabbitmq_message_delivered_total{job=\"bank-infra\"}[$__rate_interval]))",
+          "legendFormat": "{{rabbitmq_queue_name}} · entregados",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "C",
+          "expr": "sum by(rabbitmq_queue_name)(rate(rabbitmq_message_acknowledged_total{job=\"bank-infra\"}[$__rate_interval]))",
+          "legendFormat": "{{rabbitmq_queue_name}} · confirmados",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": "row",
+      "title": "03 / RabbitMQ · pendientes y consumidores",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 47,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 15,
+      "title": "Mensajes pendientes por cola · ready",
+      "description": "Backlog real de RabbitMQ, compartido por los consumidores de cada cola. No es lag por partición de Kafka.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rabbitmq_message_current{job=\"bank-infra\",state=\"ready\"}",
+          "legendFormat": "{{rabbitmq_queue_name}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 16,
+      "title": "Mensajes entregados sin confirmar · unacked",
+      "description": "",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 48,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rabbitmq_message_current{job=\"bank-infra\",state=\"unacknowledged\"}",
+          "legendFormat": "{{rabbitmq_queue_name}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 17,
+      "title": "Consumidores activos por cola",
+      "description": "",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 56,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rabbitmq_consumer_count{job=\"bank-infra\"}",
+          "legendFormat": "{{rabbitmq_queue_name}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 18,
+      "title": "Pendientes por consumidor activo · promedio",
+      "description": "ready / consumidores activos. Es un promedio por cola; RabbitMQ no asigna mensajes ready a un consumidor individual. Las colas sin consumidor se muestran en el panel siguiente.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 56,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rabbitmq_message_current{job=\"bank-infra\",state=\"ready\"} / on(rabbitmq_queue_name,rabbitmq_vhost_name,rabbitmq_node_name) (rabbitmq_consumer_count{job=\"bank-infra\"} > 0)",
+          "legendFormat": "{{rabbitmq_queue_name}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 19,
+      "title": "Colas con pendientes y sin consumidores",
+      "description": "Sin series significa que ninguna cola observada cumple la condición; comprobar también la recolección del broker.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 64,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(rabbitmq_message_current{job=\"bank-infra\",state=\"ready\"} > 0) and on(rabbitmq_queue_name,rabbitmq_vhost_name,rabbitmq_node_name) (rabbitmq_consumer_count{job=\"bank-infra\"} == 0)",
+          "legendFormat": "{{rabbitmq_queue_name}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "04 / SLO y error budget · ventana móvil de 30 días",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 72,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 21,
+      "title": "SLO-01 · errores permitidos y presupuesto restante",
+      "description": "",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 73,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "0.005 * sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30d]))",
+          "legendFormat": "Fallos permitidos",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "0.005 * sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30d])) - (sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\",status_class=\"5xx\"}[30d])) or (0 * sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30d]))))",
+          "legendFormat": "Fallos restantes",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 22,
+      "title": "SLO-02 · disponibilidad Ready · objetivo 98.5%",
+      "description": "Proporción de minutos observados con al menos una réplica disponible; proxy de disponibilidad del servicio. Intervalos sin telemetría no se convierten en éxitos.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 81,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * avg_over_time((k8s_deployment_available{job=\"bank-infra\",k8s_namespace_name=\"bank-usac-dev\"} > bool 0)[30d:1m])",
+          "legendFormat": "{{k8s_deployment_name}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 98.5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 23,
+      "title": "SLO-02 · presupuesto restante por despliegue",
+      "description": "",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 81,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (1 - (1 - avg_over_time((k8s_deployment_available{job=\"bank-infra\",k8s_namespace_name=\"bank-usac-dev\"} > bool 0)[30d:1m])) / 0.015)",
+          "legendFormat": "{{k8s_deployment_name}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1e-06
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 24,
+      "title": "SLO-03 · p95 HTTP · objetivo ≤ 500 ms",
+      "description": "",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 89,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95,sum by(le)(increase(bank_http_duration_seconds_bucket{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30d])))",
+          "legendFormat": "p95 HTTP",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.500001
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 25,
+      "title": "SLO-03 · presupuesto de solicitudes lentas",
+      "description": "p95 ≤ 500 ms equivale a permitir hasta 5% de respuestas por encima de 500 ms. Presupuesto negativo = incumplimiento observado.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 89,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (1 - (((sum(increase(bank_http_duration_seconds_count{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30d])) - sum(increase(bank_http_duration_seconds_bucket{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\",le=\"0.5\"}[30d]))) / (0.05 * sum(increase(bank_http_duration_seconds_count{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30d])))) and ((0.05 * sum(increase(bank_http_duration_seconds_count{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30d]))) > 0)))",
+          "legendFormat": "Presupuesto restante",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1e-06
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 26,
+      "title": "Burn rate · SLO-01 · objetivo sostenible = 1",
+      "description": "",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 97,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "((((sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\",status_class=\"5xx\"}[5m])) or (0 * sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[5m]))))) / (sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[5m])))) and ((sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[5m]))) > 0)) / 0.005",
+          "legendFormat": "5m",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "((((sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\",status_class=\"5xx\"}[1h])) or (0 * sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[1h]))))) / (sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[1h])))) and ((sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[1h]))) > 0)) / 0.005",
+          "legendFormat": "1h",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "C",
+          "expr": "((((sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\",status_class=\"5xx\"}[6h])) or (0 * sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[6h]))))) / (sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[6h])))) and ((sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[6h]))) > 0)) / 0.005",
+          "legendFormat": "6h",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 27,
+      "title": "Cobertura de medición · muestras HTTP y minutos Ready",
+      "description": "Una ventana parcial no demuestra cumplimiento mensual. Retención máxima 30 días o 2 GB; revisar huecos y despliegues antes de certificar.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 105,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(bank_http_duration_seconds_count{service=\"api-gateway\",environment=\"dev\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[30d]))",
+          "legendFormat": "Respuestas del histograma HTTP",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "count_over_time((k8s_deployment_available{job=\"bank-infra\",k8s_namespace_name=\"bank-usac-dev\"} > bool 0)[30d:1m])",
+          "legendFormat": "{{k8s_deployment_name}} · minutos observados",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 28,
+      "type": "text",
+      "title": "Alcance de los SLO medidos",
+      "gridPos": {
+        "x": 0,
+        "y": 113,
+        "w": 24,
+        "h": 5
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "SLO-01, SLO-02 y SLO-03 muestran medición y presupuesto con las fuentes actuales. **Los restantes SLO no se declaran cumplidos:** requieren denominadores de operaciones iniciadas, distinción de fallo técnico, deduplicación, entrega/DLQ, trazas completas y notificaciones enviadas. El p95 del consumidor no sustituye la duración completa del negocio. Consulte la matriz de cobertura versionada en `Documentacion/observabilidad/metricas-sistema.md`."
+      }
+    },
+    {
+      "id": 29,
+      "type": "alertlist",
+      "title": "Alertas del sistema",
+      "gridPos": {
+        "x": 0,
+        "y": 118,
+        "w": 24,
+        "h": 6
+      },
+      "options": {
+        "viewMode": "list",
+        "groupMode": "default",
+        "maxItems": 12,
+        "sortOrder": 1,
+        "dashboardAlerts": false,
+        "alertName": "",
+        "alertInstanceLabelFilter": "{team=\"bank-usac\",environment=\"dev\"}",
+        "stateFilter": {
+          "firing": true,
+          "pending": true,
+          "error": true,
+          "noData": true,
+          "normal": true
+        }
+      }
+    },
+    {
+      "id": 30,
+      "type": "row",
+      "title": "05 / Kubernetes · consumo real y HPA",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 124,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 31,
+      "title": "CPU utilizada por pod",
+      "description": "Consumo real informado por Metrics Server; no son requests ni límites.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 125,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(pod)(bank_pod_cpu_usage_cores{namespace=\"bank-usac-dev\",environment=\"dev\"})",
+          "legendFormat": "{{pod}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cores",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 32,
+      "title": "Memoria utilizada por pod",
+      "description": "Working set de Metrics Server. Muestras con antigüedad superior a 120 s se omiten.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 125,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(pod)(bank_pod_memory_usage_bytes{namespace=\"bank-usac-dev\",environment=\"dev\"})",
+          "legendFormat": "{{pod}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 33,
+      "title": "HPA · réplicas actuales y deseadas",
+      "description": "",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 133,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{__name__=~\"k8s_hpa_(current|desired)_replicas\",job=\"bank-infra\",k8s_namespace_name=\"bank-usac-dev\"}",
+          "legendFormat": "{{k8s_hpa_name}} · {{__name__}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 34,
+      "title": "Número de pods observados por fase",
+      "description": "Fases del receiver: 1 Pending, 2 Running, 3 Succeeded, 4 Failed, 5 Unknown. No equivale a Ready.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 133,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count_values(\"fase\",k8s_pod_phase{job=\"bank-infra\",k8s_namespace_name=\"bank-usac-dev\"})",
+          "legendFormat": "Fase {{fase}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 35,
+      "title": "Fuentes de uso de recursos y revisiones",
+      "description": "1 disponible, 0 error de API/permisos. Si resources=0 revisar Metrics Server y el permiso list sobre metrics.k8s.io/pods en el namespace.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 141,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "bank_system_source_up{namespace=\"bank-usac-dev\",environment=\"dev\"}",
+          "legendFormat": "{{source}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 36,
+      "type": "row",
+      "title": "06 / Errores en tiempo real y trazas distribuidas",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "x": 0,
+        "y": 149,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 37,
+      "title": "Errores y advertencias del sistema",
+      "description": "JSON original preservado. Expandir un log para consultar correlationId y abrir TraceID mediante el enlace de la fuente Loki.",
+      "type": "logs",
+      "gridPos": {
+        "x": 0,
+        "y": 150,
+        "w": 24,
+        "h": 10
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "range",
+          "expr": "{deployment_environment_name=\"dev\",service_name=~\"api-gateway|customer-service|account-service|transaction-service|payment-service|notification-audit-service\"} | json | level=~\"ERROR|WARN|WARNING\"",
+          "maxLines": 300
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": false,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none"
+      }
+    },
+    {
+      "id": 38,
+      "title": "Trazas del sistema · solicitudes de negocio",
+      "description": "",
+      "type": "table",
+      "gridPos": {
+        "x": 0,
+        "y": 160,
+        "w": 24,
+        "h": 10
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceql",
+          "query": "{ resource.service.name = \"api-gateway\" && resource.deployment.environment.name = \"dev\" && kind = server && span.http.route =~ \"/api/.*\" }",
+          "tableType": "traces",
+          "limit": 30,
+          "spss": 5
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Sin datos",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "maxDataPoints": 300,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    }
+  ]
+}

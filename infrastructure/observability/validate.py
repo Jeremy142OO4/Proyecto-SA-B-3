@@ -9,6 +9,8 @@ import yaml
 
 directory=Path(__file__).resolve().parent
 subprocess.run([sys.executable,str(directory/'alerting.py'),'--check'],check=True)
+subprocess.run([sys.executable,str(directory/'system_dashboard.py'),'--check'],check=True)
+subprocess.run([sys.executable,str(directory/'test_system_dashboard.py')],check=True)
 subprocess.run([sys.executable,str(directory/'test_alerting.py')],check=True)
 subprocess.run([sys.executable,str(directory/'test_promql.py')],check=True)
 subprocess.run([sys.executable,str(directory/'test_grafana.py')],check=True)
