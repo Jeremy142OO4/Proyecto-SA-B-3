@@ -19,7 +19,7 @@ En la **Fase 2**, el sistema evoluciona desde un entorno local de prueba (Miniku
    - Provisionamiento automatizado, declarativo y versionado en GCP de la red VPC, subredes, clúster administrado Google Kubernetes Engine (GKE) con Node Pools autoescalables y cinco instancias independientes de **Cloud SQL (PostgreSQL 16)** administradas.
 
 3. **Orquestación en Kubernetes (GKE):**
-   - Despliegue de microservicios y RabbitMQ en dos namespaces aislados (`dev` y `prod`).
+   - Despliegue de microservicios y RabbitMQ en namespaces aislados (`bank-usac-dev`, `bank-usac` y `bank-usac-observability`).
    - Autoescalado horizontal de Pods (**HPA**) con umbral de escalado al 80 % de uso de CPU para microservicios de alta demanda transaccional (`transaction-service` y `payment-service`).
    - Estrategia de despliegue `RollingUpdate` con cero tiempo de inactividad (`maxUnavailable: 0`, `maxSurge: 1`).
 
@@ -32,6 +32,14 @@ En la **Fase 2**, el sistema evoluciona desde un entorno local de prueba (Miniku
 
 6. **Prácticas SRE (Site Reliability Engineering):**
    - Definición formal de indicadores (SLI), objetivos (SLO) y acuerdos (SLA) de nivel de servicio para cada componente, con cálculo de presupuesto de error (*Error Budget*) y protocolos de respuesta ante incidentes.
+
+En la **Fase 3**, el sistema se extiende sobre la misma infraestructura con cuatro frentes nuevos:
+
+7. **Integración interbancaria con BANK14:** envío y recepción de transferencias entre bancos por HTTPS a través de `/interbank/v1`, con un proxy HTTPS publicado en Cloud Run como punto de entrada para las llamadas de BANK14.
+8. **Observabilidad operativa:** stack desplegado en el namespace `bank-usac-observability` (OpenTelemetry Collector, Prometheus, Tempo, Loki y Grafana), con dashboards como código, reglas de alerta y runbooks asociados.
+9. **Laboratorio de escenarios aislado:** entorno separado dentro de GKE con su propio Gateway, RabbitMQ, servicios y datos, más un mock de BANK14 en un pod aislado, para reproducir fallos controlados sin afectar producción.
+10. **Gestión de incidentes y evidencia:** postmortems sin culpables de los fallos controlados, matriz de cumplimiento de requerimientos, pruebas de carga y capturas de dashboards como evidencia.
+
 
 ---
 
@@ -62,7 +70,7 @@ En la **Fase 2**, el sistema evoluciona desde un entorno local de prueba (Miniku
 │       ├── base/                         # Manifiestos comunes (Deployments, Services, ConfigMaps)
 │       ├── overlays/
 │       │   ├── dev/                      # Namespace bank-usac-dev, 1 réplica, imágenes dev-SHA
-│       │   └── prod/                     # Namespace bank-usac-prod, réplicas productivas + HPA
+│       │   └── prod/                     # Namespace bank-usac, réplicas productivas + HPA
 │       ├── hpa/                          # HorizontalPodAutoscaler (target CPU 80%)
 │       ├── deploy.sh                     # Script de despliegue local (Minikube)
 │       └── deploy-gke.sh                 # Script de despliegue en Google Cloud GKE
@@ -72,10 +80,25 @@ En la **Fase 2**, el sistema evoluciona desde un entorno local de prueba (Miniku
 │       ├── cd-dev.yml                    # CI + Docker Build + Deploy dev en merge a develop
 │       ├── release.yml                   # Versionado semántico + Push Docker Hub en release/*
 │       └── cd-prod.yml                   # CD: Rolling Update prod + Smoke Tests en merge a main
+│   └── observability/                    # Stack de observabilidad (Fase 3)
+│       ├── otel-collector/               # Configuración del OpenTelemetry Collector
+│       ├── prometheus/                   # Recolección y retención de métricas
+│       ├── loki/                         # Configuración de logs
+│       ├── tempo/                        # Configuración de trazas
+│       ├── grafana/                      # Provisioning de datasources y dashboards
+│       ├── dashboards/
+│       │   ├── slo.json                  # Dashboard como código (paneles de SLO)
+│       │   └── bank.json                 # Dashboard operativo y reglas de alerta
+│       └── alerts/                       # Reglas de alerta con anotación runbook_url
 ├── Documentacion/                        # Documentación técnica, arquitectónica y SRE
 │   ├── arquitectura/                     # Diagramas C4 (Contexto, Contenedores, Componentes)
 │   ├── despliegue/                       # Diagrama y especificación de despliegue
-│   ├── sre/                              # sre-sla-slo-sli.md (SLI, SLO, SLA y Error Budgets)
+│   ├── observabilidad/                   # contrato-telemetria.md y catálogo de métricas
+│   ├── arquitectura/                     # Diagramas C4 (Contexto, Contenedores, Componentes)
+│   ├── despliegue/                       # Diagrama y especificación de despliegue
+│   ├── sre/                              # slo.md, sli.md, sre-sla-slo-sli.md, alertas.md,
+│   │                                     # evidencia-dashboards.md, pruebas-carga.md
+│   ├── postmortems/                      # postmortem-01 a postmortem-04
 │   ├── eventos/                          # Catálogo y contratos de eventos AMQP
 │   └── manuales/                         # manual-tecnico.md y manual-usuario.md
 ├── docker-compose.yml                    # Entorno local auxiliar para RabbitMQ y PostgreSQL
@@ -111,7 +134,9 @@ Account Service soporta ahora múltiples clasificaciones de cuenta con reglas fi
 
 Transaction Service mantiene el control del flujo de transferencias y la orquestación de la Saga coreografiada, extendiéndose con:
 - **Trazabilidad por estados:**
-  Cada transferencia transita de forma estricta por los estados: `PENDING` → `VALIDANDO_KYC` → `VALIDANDO_CUENTAS` → `DEBITANDO` → `ACREDITANDO` → `APPROVED` (o `FAILED` / `COMPENSADA` en caso de error).
+  Cada transferencia transita de forma estricta por los estados definidos en el código, con nomenclatura en español: `VALIDANDO_KYC` → `VALIDANDO_CUENTAS` → `DEBITANDO` → `ACREDITANDO` → estado terminal (`COMPLETADA` o `RECHAZADA`), con compensación cuando corresponde. La lista completa de estados y sus transiciones debe confirmarse contra el código del dominio; este manual no la reproduce exhaustivamente.
+- **Persistencia:**
+  Las tablas del servicio son `transferencias` (estado actual de cada transferencia) e `historial_estados_transferencia` (bitácora de transiciones).
 - **Historial completo de auditoría:**
   Persistencia en tabla dedicada de historial que permite consultas filtradas por:
   - Número o identificador de cuenta (origen o destino).
@@ -134,7 +159,7 @@ El servicio se suscribe a todos los intercambios de eventos del sistema mediante
 - `WARNING`: Eventos de negocio anómalos o bloqueos no fatales (cliente rechazado por KYC, transferencias canceladas por saldo insuficiente, reintentos).
 - `ERROR`: Fallos críticos del sistema, excepciones técnicas, timeouts de pasarela o activaciones de compensación en la Saga.
 
-Los eventos se persisten de forma estructurada en la tabla `audit_events` asociando timestamp, microservicio de origen, `correlationId`, nivel de severidad y payload del evento.
+Los eventos se persisten de forma estructurada en la tabla de auditoría del servicio, asociando timestamp, microservicio de origen, `correlationId`, nivel de severidad y payload del evento.
 
 ### 3.6. Principios transversales obligatorios
 
@@ -196,8 +221,16 @@ terraform output -json database_urls
 
 ### 5.1. Separación de entornos por namespaces
 
-- `bank-usac-dev`: Namespace destinado a pruebas continuas e integración. Despliega los microservicios con 1 réplica por pod y recibe imágenes etiquetadas con el commit SHA (`:dev-<SHA>`).
-- `bank-usac-prod`: Namespace productivo de alta disponibilidad. Despliega réplicas redundantes (mínimo 2 réplicas por servicio) y se nutre de imágenes etiquetadas con versiones semánticas aprobadas (`:vX.X.X`).
+El clúster administrado se llama `bank-usac-gke` y agrupa los siguientes namespaces:
+
+| Namespace | Propósito | Imágenes / configuración |
+|---|---|---|
+| `bank-usac-dev` | Integración y pruebas continuas | 1 réplica por servicio; imágenes `:dev-<SHA>` |
+| `bank-usac` | Producción | Réplicas redundantes; imágenes `:vX.X.X` |
+| `bank-usac-observability` | Stack de observabilidad | Manifiestos / Helm del stack |
+| Namespace del laboratorio | Escenarios de fallo aislados | Gateway, RabbitMQ, servicios y datos propios |
+
+> El nombre exacto del namespace del laboratorio debe tomarse de los manifiestos desplegados; este manual no lo fija para no documentar un valor no verificado.
 
 ### 5.2. Autoescalado horizontal de Pods (HPA)
 
@@ -208,7 +241,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: transaction-service-hpa
-  namespace: bank-usac-prod
+  namespace: bank-usac
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -254,7 +287,7 @@ El ciclo de vida del software está 100 % automatizado sin despliegues manuales 
 1. **Fase CI en `feature/*`:** Compilación del código Go y frontend React, ejecución de pruebas unitarias (`go test -v ./...`), validación de sintaxis y convenciones. Si una prueba falla, el pipeline aborta de inmediato.
 2. **Fase Dev en `develop`:** Tras la aprobación del Pull Request, se construyen las imágenes de contenedor etiquetadas con `:dev-<GITHUB_SHA>`, se publican en Docker Hub y se actualizan los Deployments en el namespace `bank-usac-dev`.
 3. **Fase Release en `release/v*`:** Se ejecuta el análisis estático de seguridad con **Trivy**, se genera el tag de versión semántica formal (ej. `v2.1.0`) y se construyen las imágenes definitivas publicadas en el registro. **Está terminantemente prohibido el uso de la etiqueta `latest`.**
-4. **Fase CD en `main`:** Al fusionar en `main`, el pipeline aplica los manifiestos al namespace `bank-usac-prod` ejecutando un `kubectl rollout status`. Al finalizar se disparan **Smoke Tests** sobre los endpoints de salud. Si los Smoke Tests fallan, se ejecuta automáticamente un `kubectl rollout undo` para revertir al estado estable anterior.
+4. **Fase CD en `main`:** Al fusionar en `main`, el pipeline aplica los manifiestos al namespace `bank-usac` ejecutando un `kubectl rollout status`. Al finalizar se disparan **Smoke Tests** sobre los endpoints de salud. Si los Smoke Tests fallan, se ejecuta automáticamente un `kubectl rollout undo` para revertir al estado estable anterior.
 
 ---
 
@@ -266,7 +299,7 @@ En conformidad con las especificaciones de entrega de la Fase 2 (que prohíben a
 - La imagen se despliega en **Google Cloud Run** como servicio completamente administrado y serverless, contando con:
   - Certificado SSL/TLS administrado de forma nativa sobre HTTPS.
   - Escalado automático a cero cuando no hay demanda y escalado horizontal ante picos de tráfico.
-  - Conexión segura hacia los servicios del clúster GKE mediante Serverless VPC Access o el punto de entrada seguro del Gateway.
+  - Acceso al backend a través del proxy/frontend publicado en GKE y, desde ahí, comunicación HTTP interna hacia el API Gateway. **No es HTTPS de extremo a extremo** en todo el recorrido.
 
 Comando de despliegue automatizado por el pipeline:
 ```bash
@@ -275,37 +308,139 @@ gcloud run deploy bank-usac-frontend   --image docker.io/<ORGANIZACION>/bank-usa
 
 ---
 
-## 8. Ingeniería de Confiabilidad del Sitio (SRE)
+## 8. Observabilidad (Fase 3)
+
+El stack de observabilidad se despliega en el namespace `bank-usac-observability`, separado del namespace productivo `bank-usac`. El diseño de instrumentación se documenta en `observabilidad/contrato-telemetria.md` y el catálogo de métricas en `observabilidad/`.
+
+| Componente | Función | Retención |
+|---|---|---|
+| Agente de logs | Recolecta los logs de los pods del clúster | — |
+| OpenTelemetry Collector | Recibe métricas, trazas y logs; los reenvía a los backends | — |
+| Prometheus | Métricas | Hasta 30 días, limitado a 2 GB |
+| Tempo | Trazas distribuidas | 48 h |
+| Loki | Logs | 48 h |
+| Grafana | Dashboards y evaluación de reglas de alerta | — |
+
+**Ruta de logs:** Agente de logs → OpenTelemetry Collector → Loki. El agente **no** escribe directamente en Loki; cualquier diagrama o procedimiento que muestre ese salto directo está desactualizado.
+
+**Acceso a Grafana:** mediante un proxy HTTPS publicado en Cloud Run hacia el acceso privado de Grafana. No se documenta `kubectl port-forward` como mecanismo de acceso operativo.
+
+### 8.1. Dashboards y alertas como código
+
+| Archivo | Contenido |
+|---|---|
+| `dashboards/slo.json` | Dashboard de SLO con 22 paneles (disponibilidad, presupuesto de error, latencia, mensajes por segundo) |
+| `dashboards/bank.json` | Dashboard operativo y 8 reglas de alerta de Grafana |
+| `alerts/` | Reglas de alerta con anotación `runbook_url` que apunta a los runbooks de `sre/alertas.md` |
+
+### 8.2. Evidencia y limitaciones conocidas
+
+La evidencia visual se concentra en `sre/evidencia-dashboards.md`, con diez capturas identificadas como E-GRAF-01 a E-GRAF-10. Limitaciones que deben declararse junto con la evidencia:
+
+- La historia de métricas disponible al momento de la captura era de **4 días**, frente a ventanas de SLO de 30 días móviles. Los valores de «30 días» son parciales.
+- El **p95 de latencia del Gateway** observado (≈ 1.8 s) está por encima del objetivo de 500 ms indicado en el dashboard. El SLO de latencia no se cumple con los datos actuales.
+- El HPA muestra **1 réplica** por servicio, por lo que las capturas no evidencian escalamiento. Esa evidencia debe provenir de las pruebas de carga.
+- El dashboard no incluye paneles de Loki ni de Tempo; la consulta de logs y trazas se hace desde Grafana Explore.
+
+---
+
+## 9. Integración interbancaria con BANK14 (Fase 3)
+
+Bank USAC intercambia transferencias con el banco socio BANK14.
+
+| Dirección | Recorrido |
+|---|---|
+| Entrada (BANK14 → Bank USAC) | BANK14 → proxy HTTPS en Cloud Run → API Gateway (`/interbank/v1`) → servicios del clúster |
+| Salida (Bank USAC → BANK14) | Transaction Service → BANK14 por HTTPS |
+
+- La entrada interbancaria **no** se procesa en el frontend: el proxy HTTPS de Cloud Run es el punto de entrada.
+- El API Gateway valida la solicitud y la enruta; no contiene reglas de negocio interbancarias.
+- **Account Service es dependencia crítica:** la reserva, el débito y la liberación de fondos se solicitan por RPC sobre RabbitMQ. Transaction Service no modifica saldos directamente.
+- Respuestas de BANK14 contempladas: rechazo (`REJECTED`) y tiempo de espera agotado (`TIMEOUT`). Ambos casos activan la compensación, que libera los fondos reservados.
+- **Brecha de detección conocida:** no existe todavía una alerta específica para rechazos o timeouts interbancarios, ni para transferencias que permanecen en estado de procesamiento más allá del umbral esperado. Está registrada como pendiente en `sre/alertas.md`.
+
+---
+
+## 10. Laboratorio de escenarios y fallos controlados (Fase 3)
+
+El laboratorio es un entorno **aislado** dentro de GKE, con su propio Gateway, RabbitMQ, servicios y datos. El mock de BANK14 se ejecuta en un pod aislado y el Transaction Service del laboratorio lo invoca por **HTTP en loopback**.
+
+- El mock **no es una alternativa de BANK14** ni un destino configurable del Transaction Service productivo: el servicio de producción no alterna entre BANK14 y el mock.
+- Ninguna conexión une el laboratorio con los servicios ni con los datos de producción.
+- Los fallos se reproducen en el laboratorio; no se interviene el entorno productivo para generarlos.
+
+### 10.1. Escenarios y postmortems
+
+| Escenario | Documento | Origen del fallo | Estado |
+|---|---|---|---|
+| PM-01 | `postmortem-01-rechazo-interbancario-bank14.md` | Rechazo de BANK14 (`ACCOUNT_NOT_FOUND` por UUID de destino malformado) | Ejecutado el 2026-10-20; requiere re-ejecución para demostrar la liberación de fondos reservados |
+| PM-02 | `postmortem-03-fallo-infraestructura-interna.md` | Fallo de infraestructura interna (eliminación de pod / RabbitMQ caído) | Pendiente de ejecución en el clúster |
+| PM-03 | `postmortem-04-contrato-interbancario-discrepante.md` | Contrato interbancario faltante o discrepante con BANK14 | Documentado con brecha de evidencia: la captura de logs no muestra la columna de mensaje y la zona horaria está por verificar |
+
+
+---
+
+## 11. Ingeniería de Confiabilidad del Sitio (SRE)
 
 > Actualización fase 3: la referencia vigente es [SLO](sre/slo.md) y [SLI](sre/sli.md), con disponibilidad de 99.5 % en 30 días móviles. Las tablas históricas de esta sección no sustituyen esos objetivos. El diseño de instrumentación está en el [contrato de telemetría](observabilidad/contrato-telemetria.md); su definición no implica que esté desplegado ni que los objetivos se cumplan.
 
 Para asegurar la observabilidad y calidad del sistema en producción, se establecen los marcos de SRE documentados formalmente en `sre-sla-slo-sli.md`:
 
-### 8.1. Métricas e indicadores (SLI / SLO)
+### 11.1. Métricas e indicadores (SLI / SLO)
 
 | Servicio | SLI (Qué se mide) | SLO (Objetivo interno) | SLA Propuesto (Compromiso) |
 |---|---|---|---|
 | **Frontend (Cloud Run)** | Ratio de solicitudes HTTPS exitosas (HTTP 2xx/3xx) | ≥ 99.5 % mensual; Latencia p95 ≤ 2.0 s | ≥ 99.0 % mensual |
 | **Customer Service** | Ratio de validaciones KYC procesadas exitosamente | ≥ 99.5 % mensual; Resolución ≤ 5.0 s (p95) | ≥ 99.0 % mensual |
 | **Account Service** | Operaciones de débito/crédito y validación de reglas | ≥ 99.5 % mensual; Tiempo de proceso ≤ 5.0 s (p95) | ≥ 99.0 % mensual |
-| **Transaction Service** | Transferencias que alcanzan estado terminal (`APPROVED`/`FAILED`) | ≥ 99.5 % mensual; Tiempo Saga ≤ 30.0 s | ≥ 99.0 % mensual |
+| **Transaction Service** | Transferencias que alcanzan estado terminal (`COMPLETADA`/`RECHAZADA`) | ≥ 99.5 % mensual; Tiempo Saga ≤ 30.0 s | ≥ 99.0 % mensual |
 | **Payment Service** | Respuestas consistentes y resolución de timeout simulado | ≥ 99.5 % mensual; Tiempo de respuesta ≤ 30.0 s | ≥ 99.0 % mensual |
 | **Notification & Audit** | Eventos capturados, clasificados y persistidos en base | ≥ 99.5 % mensual; Persistencia ≤ 10.0 s (p95) | ≥ 99.0 % mensual |
 
-### 8.2. Error Budget y protocolo de rollback
+### 11.2. Error Budget y protocolo de rollback
 
 Para un SLO del 99.5 % mensual (en un mes de 30 días = 43,200 minutos), el presupuesto de error (*Error Budget*) admisible es de:
-$$43200	ext{ min} 	imes 0.005 = 216	ext{ minutos de degradación/indisponibilidad}$$
+$$43200 \text{ min} \times 0.005 = 216 \text{ minutos de degradación/indisponibilidad}$$
+
+> El presupuesto anterior es **teórico y basado en tiempo**. El dashboard calcula el presupuesto sobre el **volumen de solicitudes observado** (por ejemplo, 507 fallos permitidos en la ventana mostrada), por lo que ambas cifras responden a definiciones distintas y no deben compararse directamente.
 
 - **Política de consumo del presupuesto:** Si incidentes recurrentes agotan más del 50 % del presupuesto de error en los primeros 10 días, se congelan los despliegues de nuevas funcionalidades en `main` y el equipo se enfoca exclusivamente en estabilidad, refactorización de confiabilidad y cobertura de pruebas.
 - **Rollback automatizado:** Ante cualquier alerta crítica disparada durante el despliegue o falla de los Smoke Tests en CD, se dispara la reversión inmediata:
   ```bash
-  kubectl -n bank-usac-prod rollout undo deployment/<service-name>
+  kubectl -n bank-usac rollout undo deployment/<service-name>
   ```
+
+
+### 11.3. Alertas y runbooks
+
+Las reglas de alerta viven en `dashboards/bank.json` (8 reglas) y cada una declara una anotación `runbook_url` que apunta a un ancla de la sección de runbooks de `sre/alertas.md`.
+
+- Los runbooks describen síntoma, verificación, mitigación y escalamiento, con comandos concretos.
+- **Estado de verificación:** los comandos de los runbooks aún no se ejecutan en el clúster; los nombres de namespace, pods, ServiceAccounts y etiquetas de Loki deben confirmarse contra el entorno real.
+- **Brechas de detección:** no hay alerta para rechazos o timeouts interbancarios (`REJECTED` / `TIMEOUT`) ni para transferencias atascadas en procesamiento. Ambas están pendientes de implementación.
+
+### 11.4. Gestión de incidentes
+
+Los incidentes de la fase se documentan como postmortems sin culpables (ver sección 10.1). Cada postmortem incluye línea de tiempo, impacto, causa raíz, detección, acciones correctivas y acciones preventivas con responsable y fecha.
+
+### 11.5. Pruebas de carga
+
+Las pruebas de carga se ejecutan con k6 y se documentan en `sre/pruebas-carga.md`. La evidencia requerida incluye:
+
+- Escenario, número de usuarios virtuales, duración y umbrales definidos.
+- Resultados de latencia (p50, p95, p99) y tasa de error.
+- Capturas de CPU y memoria por pod durante la prueba.
+- Captura del HPA mostrando el incremento de réplicas al superar el 80 % de CPU.
+
+> Al momento de esta versión, `pruebas-carga.md` está pendiente de generación y ejecución. Las capturas de dashboards existentes no sustituyen esta evidencia.
+
+### 11.6. Matriz de cumplimiento
+
+El cumplimiento de los requerimientos de la fase se rastrea en `matriz-cumplimiento-fase3.md`, con 36 requerimientos (R01 a R36). La columna de estado se completa únicamente cuando existe evidencia verificable; los estados posibles son Cumplido, Parcial y Pendiente.
 
 ---
 
-## 9. Catálogo de API y contratos de endpoints
+## 12. Catálogo de API y contratos de endpoints
 
 Todas las solicitudes pasan por el API Gateway y requieren el header `Authorization: Bearer <JWT>` (a excepción de login y activación).
 
@@ -323,50 +458,52 @@ Todas las solicitudes pasan por el API Gateway y requieren el header `Authorizat
 | GET | `/api/transferencias/historial` | CLIENTE, ADMIN | **(Nuevo Fase 2)** Consultar historial de transferencias con filtros |
 | POST | `/api/pagos` | CLIENTE | **(Nuevo Fase 2)** Procesar pago simulando `resultadoSimulado` |
 | GET | `/api/auditoria/eventos` | ADMIN | **(Nuevo Fase 2)** Consultar bitácora clasificada (`INFO`, `WARNING`, `ERROR`) |
+| POST | `/interbank/v1/*` | BANK14 (servicio) | **(Nuevo Fase 3)** Recepción de transferencias interbancarias; rutas exactas por confirmar en el código |
+| GET | `/interbank/v1/*` | BANK14 (servicio) | **(Nuevo Fase 3)** Consultas de estado interbancario; rutas exactas por confirmar en el código |
 
 ---
 
-## 10. Procedimiento de verificación y diagnóstico
+## 13. Procedimiento de verificación y diagnóstico
 
-### 10.1. Verificación técnica de salud del sistema
+### 13.1. Verificación técnica de salud del sistema
 
 ```bash
 # 1. Comprobar pods activos en ambos namespaces
 kubectl get pods -n bank-usac-dev
-kubectl get pods -n bank-usac-prod -o wide
+kubectl get pods -n bank-usac -o wide
 
 # 2. Verificar estado de los HPA en producción
-kubectl get hpa -n bank-usac-prod
+kubectl get hpa -n bank-usac
 
 # 3. Comprobar estado de las colas e intercambios en RabbitMQ
-kubectl -n bank-usac-prod exec -it rabbitmq-0 -- rabbitmqctl list_queues name messages_ready messages_unacknowledged
+kubectl -n bank-usac exec -it rabbitmq-0
 
 # 4. Verificar conectividad a Cloud SQL desde un pod
-kubectl -n bank-usac-prod exec -it deploy/transaction-service -- nc -zv <IP_PRIVADA_CLOUD_SQL> 5432
+kubectl -n bank-usac exec -it deploy/transaction-service
 ```
 
-### 10.2. Diagnóstico de incidentes comunes
+### 13.2. Diagnóstico de incidentes comunes
 
-- **El Pod se queda en `CrashLoopBackOff`:** Inspeccionar logs con `kubectl logs -n bank-usac-prod deploy/<nombre-servicio>`. Generalmente indica falta de una variable en el Secret o que la instancia de Cloud SQL aún no acepta conexiones en el puerto 5432.
+kubectl logs -n bank-usac deploy/<nombre-servicio>
 - **Mensajes acumulados en RabbitMQ sin consumir:** Verificar que las credenciales AMQP en el ConfigMap/Secret coincidan con las del StatefulSet de RabbitMQ y comprobar la existencia de la cola `DLQ` (*Dead Letter Queue*).
-- **El HPA no escala los Pods:** Verificar que el clúster tenga instalado y operativo el `metrics-server` (`kubectl top pods -n bank-usac-prod`). Si los Pods no definen `resources.requests.cpu`, el HPA no podrá calcular el porcentaje de utilización.
+kubectl top pods -n bank-usac
 - **Rollout fallido en GitHub Actions:** Revisar la salida del paso *Smoke Tests* en el Action. Para forzar una reversión manual en caso de emergencia:
   ```bash
-  kubectl rollout undo deployment/payment-service -n bank-usac-prod
+kubectl rollout undo deployment/payment-service -n bank-usac
   ```
 
 ---
 
-## 11. Comparativa arquitectónica entre Fase 1 y Fase 2
+## 14. Comparativa arquitectónica entre Fase 1, Fase 2 y Fase 3
 
-| Parámetro | Fase 1 | Fase 2 |
-|---|---|---|
-| **Entorno de ejecución** | Minikube (local en una máquina) | Google Cloud Platform (GKE + Cloud Run) |
-| **Aprovisionamiento** | Manual o mediante scripts Docker Compose | Infraestructura como Código (IaC) reproducible con **Terraform** |
-| **Bases de datos** | Contenedores en host local | 5 instancias aisladas de **Cloud SQL (PostgreSQL 16)** |
-| **Pipeline de integración** | Sin automatización completa | **CI/CD con GitHub Actions** en 4 ramas (`feature`, `develop`, `release`, `main`) |
-| **Versionamiento de imágenes** | `latest` o local | Versionado semántico (`vX.X.X`) escaneado con **Trivy** en Docker Hub |
-| **Autoescalado** | Ninguno (estático) | **HPA** configurado al 80 % de CPU en servicios críticos |
-| **Frontend** | Contenedor local en Minikube | Servicio serverless en **Google Cloud Run** sobre HTTPS |
-| **SRE y Confiabilidad** | Sin métricas formales | Definición y monitorización formal de **SLI, SLO, SLA y Error Budget** |
-| **Lógica de negocio** | Transferencias simples | KYC (`VERIFIED`), tipos de cuenta (`AHORRO`/`CORRIENTE`), simulación de pagos externos y auditoría con severidad |
+| Parámetro | Fase 1 | Fase 2 | Fase 3 |
+|---|---|---|---|
+| **Entorno de ejecución** | Minikube (local en una máquina) | Google Cloud Platform (GKE + Cloud Run) | Mismo clúster `bank-usac-gke`; Cloud Run aloja el frontend y los proxies HTTPS |
+| **Aprovisionamiento** | Manual o mediante scripts Docker Compose | Infraestructura como Código (IaC) reproducible con **Terraform** | Sin cambios |
+| **Bases de datos** | Contenedores en host local | 5 instancias aisladas de **Cloud SQL (PostgreSQL 16)** | Sin cambios |
+| **Pipeline de integración** | Sin automatización completa | **CI/CD con GitHub Actions** en 4 ramas (`feature`, `develop`, `release`, `main`) | Sin cambios |
+| **Versionamiento de imágenes** | `latest` o local | Versionado semántico (`vX.X.X`) escaneado con **Trivy** en Docker Hub | Sin cambios |
+| **Autoescalado** | Ninguno (estático) | **HPA** configurado al 80 % de CPU en servicios críticos | Configuración sin cambios; la evidencia de escalamiento queda pendiente de las pruebas de carga |
+| **Frontend** | Contenedor local en Minikube | Servicio serverless en **Google Cloud Run** sobre HTTPS | Sin cambios |
+| **SRE y Confiabilidad** | Sin métricas formales | Definición y monitorización formal de **SLI, SLO, SLA y Error Budget** | Stack de observabilidad desplegado, 8 alertas con runbooks, postmortems y evidencia de dashboards |
+| **Lógica de negocio** | Transferencias simples | KYC (`VERIFIED`), tipos de cuenta (`AHORRO`/`CORRIENTE`), simulación de pagos externos y auditoría con severidad | Transferencias interbancarias con BANK14, observabilidad con alertas y runbooks, laboratorio aislado de fallos controlados |
