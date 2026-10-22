@@ -639,6 +639,7 @@ jobs:
           bash -n infrastructure/scripts/prepare-telemetry-schema.sh
           python3 infrastructure/scripts/test-feature-schema.py
           python3 infrastructure/scripts/test-interbank-config.py
+          python3 infrastructure/scripts/test-cloud-run.py
 
       - name: Validar configuracion de Compose
         run: docker compose config --quiet
@@ -1035,10 +1036,8 @@ jobs:
         id: estado-anterior-dev
         shell: bash
         run: |
-          REVISION_CLOUD_RUN="$(gcloud run services describe bank-usac-frontend-dev \
-            --region us-central1 \
-            --format='value(status.latestReadyRevisionName)' 2>/dev/null || true)"
-          echo "revision_cloud_run=$REVISION_CLOUD_RUN" >> "$GITHUB_OUTPUT"
+          python3 infrastructure/scripts/cloud-run-rollback.py capture \
+            --service bank-usac-frontend-dev --region us-central1 --state /tmp/cloud-run-dev.json
 
           : > /tmp/revisiones-kubernetes.txt
           : > /tmp/imagenes-kubernetes.txt
@@ -1119,8 +1118,9 @@ jobs:
           BACKEND_HOST="${PUBLIC_HOST#http://}"
           BACKEND_HOST="${BACKEND_HOST#https://}"
           BACKEND_HOST="${BACKEND_HOST%%/*}"
+          IMAGEN_FRONTEND="$(python3 infrastructure/scripts/image-digest.py "${REGISTRY}/${IMAGE_NAMESPACE}/bank-usac-frontend:${IMAGE_TAG}")"
           gcloud run deploy bank-usac-frontend-dev \
-            --image "${REGISTRY}/${IMAGE_NAMESPACE}/bank-usac-frontend:${IMAGE_TAG}" \
+            --image "$IMAGEN_FRONTEND" \
             --region us-central1 \
             --platform managed \
             --allow-unauthenticated \
@@ -1135,6 +1135,7 @@ jobs:
           echo "url=$FRONTEND_URL" >> "$GITHUB_OUTPUT"
 
       - name: Aplicar manifiestos dev con rolling update
+        id: manifiestos-dev
         env:
           PUBLIC_HOST: ${{ secrets.PUBLIC_HOST }}
           FRONTEND_URL: ${{ steps.frontend-cloud-run.outputs.url }}
@@ -1205,13 +1206,14 @@ jobs:
       - name: Rollback automatico de desarrollo
         if: failure()
         env:
-          REVISION_CLOUD_RUN: ${{ steps.estado-anterior-dev.outputs.revision_cloud_run }}
+          FRONTEND_OUTCOME: ${{ steps.frontend-cloud-run.outcome }}
+          KUBERNETES_OUTCOME: ${{ steps.manifiestos-dev.outcome }}
         shell: bash
         run: |
           set +e
           resultado=0
 
-          if [ -s /tmp/revisiones-kubernetes.txt ]; then
+          if [[ "$KUBERNETES_OUTCOME" == "success" || "$KUBERNETES_OUTCOME" == "failure" ]] && [ -s /tmp/revisiones-kubernetes.txt ]; then
             while read -r despliegue revision; do
               echo "Restaurando $despliegue a la revision $revision"
               kubectl -n "$KUBE_NAMESPACE" rollout undo "deployment/$despliegue" --to-revision="$revision" || resultado=1
@@ -1222,12 +1224,9 @@ jobs:
             done < /tmp/revisiones-kubernetes.txt
           fi
 
-          if [ -n "$REVISION_CLOUD_RUN" ]; then
-            echo "Restaurando Cloud Run a $REVISION_CLOUD_RUN"
-            gcloud run services update-traffic bank-usac-frontend-dev \
-              --region us-central1 \
-              --to-revisions "$REVISION_CLOUD_RUN=100" \
-              --quiet || resultado=1
+          if [[ "$FRONTEND_OUTCOME" == "success" || "$FRONTEND_OUTCOME" == "failure" ]]; then
+            python3 infrastructure/scripts/cloud-run-rollback.py restore \
+              --service bank-usac-frontend-dev --region us-central1 --state /tmp/cloud-run-dev.json || resultado=1
           fi
 
           exit "$resultado"
@@ -1290,10 +1289,8 @@ jobs:
         id: estado-anterior-prod
         shell: bash
         run: |
-          REVISION_CLOUD_RUN="$(gcloud run services describe bank-usac-frontend-prod \
-            --region us-central1 \
-            --format='value(status.latestReadyRevisionName)' 2>/dev/null || true)"
-          echo "revision_cloud_run=$REVISION_CLOUD_RUN" >> "$GITHUB_OUTPUT"
+          python3 infrastructure/scripts/cloud-run-rollback.py capture \
+            --service bank-usac-frontend-prod --region us-central1 --state /tmp/cloud-run-prod.json
 
           : > /tmp/revisiones-kubernetes.txt
           for despliegue in rabbitmq api-gateway customer-service account-service payment-service transaction-service notification-audit-service frontend; do
@@ -1374,8 +1371,9 @@ jobs:
           BACKEND_HOST="${PUBLIC_HOST#http://}"
           BACKEND_HOST="${BACKEND_HOST#https://}"
           BACKEND_HOST="${BACKEND_HOST%%/*}"
+          IMAGEN_FRONTEND="$(python3 infrastructure/scripts/image-digest.py "${REGISTRY}/${IMAGE_NAMESPACE}/bank-usac-frontend:${IMAGE_TAG}")"
           gcloud run deploy bank-usac-frontend-prod \
-            --image "${REGISTRY}/${IMAGE_NAMESPACE}/bank-usac-frontend:${IMAGE_TAG}" \
+            --image "$IMAGEN_FRONTEND" \
             --region us-central1 \
             --platform managed \
             --allow-unauthenticated \
@@ -1390,6 +1388,7 @@ jobs:
           echo "url=$FRONTEND_URL" >> "$GITHUB_OUTPUT"
 
       - name: Aplicar imagen publicada y rolling update
+        id: manifiestos-prod
         env:
           PUBLIC_HOST: ${{ secrets.PUBLIC_HOST }}
           IMAGE_TAG: ${{ steps.version.outputs.tag }}
@@ -1415,13 +1414,14 @@ jobs:
       - name: Rollback automatico de produccion
         if: failure()
         env:
-          REVISION_CLOUD_RUN: ${{ steps.estado-anterior-prod.outputs.revision_cloud_run }}
+          FRONTEND_OUTCOME: ${{ steps.frontend-cloud-run.outcome }}
+          KUBERNETES_OUTCOME: ${{ steps.manifiestos-prod.outcome }}
         shell: bash
         run: |
           set +e
           resultado=0
 
-          if [ -s /tmp/revisiones-kubernetes.txt ]; then
+          if [[ "$KUBERNETES_OUTCOME" == "success" || "$KUBERNETES_OUTCOME" == "failure" ]] && [ -s /tmp/revisiones-kubernetes.txt ]; then
             while read -r despliegue revision; do
               echo "Restaurando $despliegue a la revision $revision"
               kubectl -n "$KUBE_NAMESPACE" rollout undo "deployment/$despliegue" --to-revision="$revision" || resultado=1
@@ -1432,12 +1432,9 @@ jobs:
             done < /tmp/revisiones-kubernetes.txt
           fi
 
-          if [ -n "$REVISION_CLOUD_RUN" ]; then
-            echo "Restaurando Cloud Run a $REVISION_CLOUD_RUN"
-            gcloud run services update-traffic bank-usac-frontend-prod \
-              --region us-central1 \
-              --to-revisions "$REVISION_CLOUD_RUN=100" \
-              --quiet || resultado=1
+          if [[ "$FRONTEND_OUTCOME" == "success" || "$FRONTEND_OUTCOME" == "failure" ]]; then
+            python3 infrastructure/scripts/cloud-run-rollback.py restore \
+              --service bank-usac-frontend-prod --region us-central1 --state /tmp/cloud-run-prod.json || resultado=1
           fi
 
           exit "$resultado"
