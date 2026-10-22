@@ -32,7 +32,7 @@ func main() {
 	}
 	defer publicador.Cerrar()
 	app := fiber.New(fiber.Config{DisableStartupMessage: true, ErrorHandler: responderErrorHTTP})
-	app.Use(telemetry.HTTP(), cors.New(cors.Config{AllowOrigins: cfg.OrigenesCORS, AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Correlation-ID, traceparent, tracestate"}))
+	app.Use(telemetry.HTTP(), cors.New(cors.Config{AllowOrigins: cfg.OrigenesCORS, AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Correlation-ID, Idempotency-Key, traceparent, tracestate"}))
 	solicitante := messaging.NuevoSolicitante(publicador, gestorRespuestas, cfg.TiempoPublicacion)
 	gateway := controllers.NuevoGateway(publicador, store, gestorRespuestas, cfg.TiempoPublicacion, solicitante)
 	controladorClientes := controllers.NuevoControladorClientes(solicitante)

@@ -99,7 +99,7 @@ func (p *Transport) Handle(ctx context.Context, raw json.RawMessage) bankrpc.Res
 		return bankrpc.Reply(400, map[string]string{"error": "invalid interbank transport command"})
 	}
 	if r.Scenario != "" {
-		if os.Getenv("ENTORNO") != "dev" || p.Mock == nil {
+		if (os.Getenv("ENTORNO") != "dev" && os.Getenv("ENTORNO") != "desarrollo") || p.Mock == nil {
 			return bankrpc.Reply(403, nil)
 		}
 		switch r.Scenario {

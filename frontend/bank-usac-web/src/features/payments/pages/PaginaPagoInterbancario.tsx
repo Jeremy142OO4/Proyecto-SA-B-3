@@ -5,6 +5,7 @@ import { servicioCuentas } from '../../accounts/services/servicioCuentas';
 import type { Cuenta } from '../../accounts/types/cuenta';
 import type { Usuario } from '../../auth/types/auth';
 import { servicioInterbancario, type DepositoInterbancario } from '../services/servicioInterbancario';
+import { ErrorApi } from '../../../services/clienteApi';
 import './interbancario.css';
 
 const terminales = ['ACCEPTED', 'REJECTED', 'REVERSED', 'CANCELLED'];
@@ -79,7 +80,10 @@ export function PaginaPagoInterbancario({ simulacion = false }: { simulacion?: b
       navegar('/pagos');
       if (terminales.includes(resultado.status)) sessionStorage.removeItem(storageKey);
     } catch (e) {
-      if (id) {
+      if (id && e instanceof ErrorApi && [400,401,403,409,422].includes(e.estado)) {
+        sessionStorage.removeItem(storageKey);setDeposito(undefined);
+        setError(`El servidor rechazó la solicitud (HTTP ${e.estado}). ${e.message}`);
+      } else if (id) {
         // An uncertain POST is never retried automatically with a new deposit ID.
         setDeposito({ interbankTransferId: id, status: 'RESPUESTA_INCIERTA' });
         setError(`No se confirmó el envío. ID: ${id}. Consulta su estado en el historial de pagos antes de reenviar.`);

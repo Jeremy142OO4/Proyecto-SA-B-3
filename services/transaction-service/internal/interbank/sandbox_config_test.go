@@ -18,3 +18,18 @@ func TestSandboxPartnerRequiresExplicitIsolatedLoopback(t *testing.T) {
 		t.Fatal("dev must remain HTTPS-only")
 	}
 }
+
+func TestDevelopmentScenarioEnvironmentAliases(t *testing.T) {
+	for _, env := range []string{"dev", "desarrollo"} {
+		t.Setenv("ENTORNO", env)
+		if !simulationEnabled() {
+			t.Fatal(env)
+		}
+	}
+	for _, env := range []string{"prod", "produccion", "kubernetes", ""} {
+		t.Setenv("ENTORNO", env)
+		if simulationEnabled() {
+			t.Fatal(env)
+		}
+	}
+}

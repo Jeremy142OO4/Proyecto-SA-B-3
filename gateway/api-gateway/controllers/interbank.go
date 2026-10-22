@@ -87,7 +87,7 @@ func (g InterbankGateway) forward(action string, peer bool) fiber.Handler {
 		}
 		scenario := ""
 		if action == "simulate" {
-			if os.Getenv("ENTORNO") != "dev" {
+			if os.Getenv("ENTORNO") != "dev" && os.Getenv("ENTORNO") != "desarrollo" {
 				return bankError(c, 403, "SIMULATION_DISABLED")
 			}
 			var data map[string]json.RawMessage

@@ -9,7 +9,7 @@ import (
 )
 
 func simulationEnabled() bool {
-	return os.Getenv("ENTORNO") == "dev" || os.Getenv("ENTORNO") == "interbank-sandbox"
+	return (os.Getenv("ENTORNO") == "dev" || os.Getenv("ENTORNO") == "desarrollo") || os.Getenv("ENTORNO") == "interbank-sandbox"
 }
 func (s *Service) verifyKYC(ctx context.Context, id, customer string) (bool, error) {
 	if s.KYC != nil {
