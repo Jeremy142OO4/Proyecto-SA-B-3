@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bank-usac/service-customer/internal/bankrpc"
+	"bank-usac/service-customer/internal/interbank"
 	"bank-usac/service-customer/internal/telemetry"
 	"context"
 	"log"
@@ -52,6 +54,7 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	go bankrpc.Run(ctx, cfg.RabbitMQURL, "clientes.interbancarias.kyc", interbank.KYC{DB: db}.Handle)
 	rabbit.StartOutboxWorker(ctx, 1*time.Second)
 
 	// 4. Servidor HTTP Fiber

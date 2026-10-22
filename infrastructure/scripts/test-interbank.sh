@@ -4,6 +4,7 @@ set -euo pipefail
 component="${1:?account-service, transaction-service payment-service or api-gateway required}"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 case "$component" in
+  payment-db) module="$root/services/payment-service"; image=postgres:17-alpine ;;
   account-service|transaction-service) module="$root/services/$component"; image=postgres:17-alpine ;;
   api-gateway) module="$root/gateway/api-gateway"; image=rabbitmq:3.13-alpine ;;
   payment-service) module="$root/services/payment-service"; image=rabbitmq:3.13-alpine ;;

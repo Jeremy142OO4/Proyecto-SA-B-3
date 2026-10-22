@@ -9,14 +9,14 @@ const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.Comm
 const account={idCuenta:'account-1',idCliente:'client-1',numeroCuenta:'123456789',estado:'ACTIVA',saldoCentavos:20000};
 const profile={clienteId:'client-1',estado:'ACTIVO',kycStatus:'VERIFIED'};
 function setup({simulation=false,latest=profile,fail=false}={}){
- const values=[[account],profile,false,'',false,false,undefined,'','account-1','accept'];let index=0;
+ const values=[[account],profile,false,'',false,undefined,'account-1','reject'];let index=0;
  const writes=new Map(),storage=new Map(),calls=[];
  const react={useState:initial=>{const i=index++;return [values[i]??initial,v=>writes.set(i,v)];},useCallback:f=>f,useEffect:()=>{},useRef:v=>({current:v})};
  const service={perfil:async()=>latest,enviar:async(id,payload)=>{calls.push({id,payload});if(fail)throw new Error('network');return{interbankTransferId:id,status:'PROCESSING'};}};
  const jsx=(type,props)=>({type,props});const exports={};
  runInNewContext(code,{exports,require:name=>{
   if(name==='react')return react;if(name==='react/jsx-runtime')return{jsx,jsxs:jsx};
-  if(name==='react-router-dom')return{Link:'a'};
+  if(name==='react-router-dom')return{Link:'a',useNavigate:()=>()=>{}};
   if(name.includes('ContextoAutenticacion'))return{useAutenticacion:()=>({usuario:profile})};
   if(name.includes('servicioCuentas'))return{servicioCuentas:{buscar:async()=>account}};
   if(name.includes('servicioInterbancario'))return{servicioInterbancario:service};
@@ -32,12 +32,12 @@ function setup({simulation=false,latest=profile,fail=false}={}){
 test('Un KYC que dejó de estar verificado bloquea el POST aunque la sesión lo mostrara aprobado',async()=>{
  const s=setup({latest:{...profile,kycStatus:'REJECTED'}});await s.send();assert.equal(s.calls.length,0);assert.equal(s.storage.size,0);assert.match(s.writes.get(3),/KYC verificado/);
 });
-test('Escenarios no envía saldo real al endpoint del banco pareja',async()=>{
- const s=setup({simulation:true});await s.send();assert.equal(s.calls.length,0);
+test('Escenarios envía la selección al mock con la cuenta del cliente',async()=>{
+ const s=setup({simulation:true});await s.send();assert.equal(s.calls.length,1);assert.equal(s.calls[0].payload.scenario,'reject');
 });
 test('Doble envío concurrente produce un único depósito con la cuenta numérica del cliente',async()=>{
  const s=setup();await Promise.all([s.send(),s.send()]);assert.equal(s.calls.length,1);assert.equal(s.calls[0].payload.originAccount,'123456789');assert.equal(s.calls[0].payload.destinationAccount,'OTHER-123');assert.equal(s.calls[0].payload.amount,'10.50');
 });
 test('Un POST incierto conserva su identificador y no genera reintentos automáticos',async()=>{
- const s=setup({fail:true});await s.send();assert.equal(s.calls.length,1);assert.equal([...s.storage.values()][0],s.calls[0].id);assert.equal(s.writes.get(6).status,'RESPUESTA_INCIERTA');
+ const s=setup({fail:true});await s.send();assert.equal(s.calls.length,1);assert.equal([...s.storage.values()][0],s.calls[0].id);assert.equal(s.writes.get(5).status,'RESPUESTA_INCIERTA');
 });

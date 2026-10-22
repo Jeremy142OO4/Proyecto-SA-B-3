@@ -44,6 +44,8 @@ func main() {
 			slog.Error("configuracion interbancaria invalida")
 			os.Exit(1)
 		}
+		transport.Mock = &interbank.Service{DB: bd, Rabbit: cfg.URLRabbitMQ, PartnerBank: os.Getenv("INTERBANK_PARTNER_BANK_CODE")}
+		go transport.Mock.RunMock(ctx)
 		go bankrpc.Run(ctx, cfg.URLRabbitMQ, interbank.Queue, transport.Handle)
 	}
 	mensajeriaFin := make(chan struct{})

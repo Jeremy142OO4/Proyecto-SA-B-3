@@ -115,6 +115,11 @@ func (s *Service) Step(parent context.Context) (worked bool, failureErr error) {
 			_, _ = s.DB.Exec(retryctx, `UPDATE depositos_interbancarios SET proximo=clock_timestamp()+interval '5 seconds' WHERE id=$1 AND intentos=$2`, row.Transfer.ID, row.Attempts)
 		}
 	}()
+	if row.Scenario != "" {
+		local := *s
+		local.Partner = &BrokerPartner{Config: s.Config, Scenario: row.Scenario, Call: bankrpc.Call}
+		s = &local
+	}
 	t := row.Transfer
 	n, _ := Cents(t.Amount)
 	cmd := AccountCommand{ID: t.ID, Cents: n, Expires: t.Expires}
@@ -212,6 +217,17 @@ func (s *Service) Step(parent context.Context) (worked bool, failureErr error) {
 			// or release existing holds via timeout recovery for this reason.
 			delay = time.Minute
 		case row.State == "PENDING_RESERVATION":
+			if row.RefundOf == "" {
+				verified, err := s.verifyKYC(ctx, t.ID, row.Customer)
+				if err != nil {
+					return true, err
+				}
+				if !verified {
+					row.State = "REJECTED"
+					row.Reason = "KYC_NOT_VERIFIED"
+					break
+				}
+			}
 			cmd.Action = "reserve"
 			if row.RefundOf != "" {
 				cmd.Action = "refund_reserve"

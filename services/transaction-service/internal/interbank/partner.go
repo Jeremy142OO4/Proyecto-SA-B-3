@@ -10,10 +10,12 @@ import (
 
 // Partner transport is exclusively AMQP. Payment owns the external HTTP client.
 type BrokerPartner struct {
-	Config Config
-	Call   func(context.Context, string, string, any) (bankrpc.Response, error)
+	Config   Config
+	Scenario string
+	Call     func(context.Context, string, string, any) (bankrpc.Response, error)
 }
 type transportRequest struct {
+	Scenario    string          `json:"scenario,omitempty"`
 	Correlation string          `json:"idCorrelacion,omitempty"`
 	Method      string          `json:"method"`
 	Path        string          `json:"path"`
@@ -28,7 +30,7 @@ type transportResult struct {
 
 func NewPartner(c Config) *BrokerPartner { return &BrokerPartner{Config: c, Call: bankrpc.Call} }
 func (p *BrokerPartner) Ready() bool {
-	return p.Config.PartnerURL != "" && len(p.Config.PartnerKey) >= 16
+	return p.Scenario != "" || p.Config.PartnerURL != "" && len(p.Config.PartnerKey) >= 16
 }
 func (p *BrokerPartner) Post(ctx context.Context, path, key string, body any) (int, []byte, error) {
 	b, err := json.Marshal(body)
@@ -41,6 +43,7 @@ func (p *BrokerPartner) Get(ctx context.Context, path string) (int, []byte, erro
 	return p.request(ctx, transportRequest{Method: "GET", Path: path})
 }
 func (p *BrokerPartner) request(ctx context.Context, request transportRequest) (int, []byte, error) {
+	request.Scenario = p.Scenario
 	request.Correlation = telemetry.Correlation(ctx)
 	if !p.Ready() {
 		return 0, nil, ErrPartnerNotConfigured

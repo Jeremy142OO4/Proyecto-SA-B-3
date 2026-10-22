@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS mock_interbank (
+ id UUID PRIMARY KEY, body JSONB NOT NULL, scenario TEXT NOT NULL,
+ status TEXT NOT NULL DEFAULT 'PROCESSING', reason TEXT NOT NULL DEFAULT '',
+ due TIMESTAMPTZ NOT NULL, expires TIMESTAMPTZ NOT NULL, trace_context TEXT NOT NULL,
+ updated TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(), callback_delivered BOOLEAN NOT NULL DEFAULT false
+);

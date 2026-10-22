@@ -25,6 +25,7 @@ import (
 const Queue = "pagos.interbancarios.salida"
 
 type Request struct {
+	Scenario    string          `json:"scenario,omitempty"`
 	Correlation string          `json:"idCorrelacion,omitempty"`
 	Method      string          `json:"method"`
 	Path        string          `json:"path"`
@@ -39,6 +40,7 @@ type Result struct {
 type Transport struct {
 	BaseURL, Key string
 	Client       *http.Client
+	Mock         *Service
 }
 
 func New() (*Transport, error) {
@@ -95,6 +97,18 @@ func (p *Transport) Handle(ctx context.Context, raw json.RawMessage) bankrpc.Res
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(&r) != nil || decoder.Decode(new(any)) != io.EOF || !valid(r) {
 		return bankrpc.Reply(400, map[string]string{"error": "invalid interbank transport command"})
+	}
+	if r.Scenario != "" {
+		if os.Getenv("ENTORNO") != "dev" || p.Mock == nil {
+			return bankrpc.Reply(403, nil)
+		}
+		switch r.Scenario {
+		case "reject", "unavailable", "no_callback", "delayed":
+		default:
+			return bankrpc.Reply(400, nil)
+		}
+		response := p.Mock.mock(ctx, r)
+		return bankrpc.Reply(200, Result{Status: response.Status, Body: response.Body})
 	}
 	if p.BaseURL == "" || len(p.Key) < 16 {
 		return bankrpc.Reply(200, Result{Error: "not_configured"})

@@ -126,6 +126,7 @@ func (r Result) Valid() bool {
 // Request is an internal RPC envelope. Peer/customer identity is assigned only
 // by the Gateway after API-key/JWT validation, never from an external JSON body.
 type Request struct {
+	Scenario string          `json:"scenario,omitempty"`
 	Action   string          `json:"action"`
 	ID       string          `json:"id,omitempty"`
 	Key      string          `json:"key,omitempty"`

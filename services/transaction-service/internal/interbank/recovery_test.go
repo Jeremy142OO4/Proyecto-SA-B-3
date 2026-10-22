@@ -33,7 +33,7 @@ func response(status int, body any) (int, []byte, error) {
 func TestCancellationTombstoneAndOrphanCreditDatabase(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
-	s := &Service{DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}}
+	s := &Service{KYC: func(context.Context, string, string) (bool, error) { return true, nil }, DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}}
 	tr := sample()
 	c, _ := json.Marshal(Cancel{Origin: "BANK14", Reason: "TIMEOUT"})
 	request := Request{Action: "cancel", ID: tr.ID, Peer: "BANK14", Body: c}
@@ -96,7 +96,7 @@ func TestTimeoutProtocolDatabase(t *testing.T) {
 			tr := sample()
 			tr.Origin = "BANK03"
 			tr.Destination = "BANK14"
-			s := &Service{DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Now: func() time.Time { return now }, Account: func(ctx context.Context, c AccountCommand) (AccountResult, error) {
+			s := &Service{KYC: func(context.Context, string, string) (bool, error) { return true, nil }, DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Now: func() time.Time { return now }, Account: func(ctx context.Context, c AccountCommand) (AccountResult, error) {
 				state := "RESERVED"
 				if c.Action == "settle" {
 					state = "DEBITED"
@@ -145,7 +145,7 @@ func TestTimeoutProtocolDatabase(t *testing.T) {
 func TestLateCallbackCreatesOneReversalDatabase(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
-	s := &Service{DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}}
+	s := &Service{KYC: func(context.Context, string, string) (bool, error) { return true, nil }, DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}}
 	tr := sample()
 	tr.Origin = "BANK03"
 	tr.Destination = "BANK14"

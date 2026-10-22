@@ -15,7 +15,7 @@ func TestRequestedRefundNormalTransferDatabase(t *testing.T) {
 			ctx := context.Background()
 			effects := map[string]int{}
 			receipts := map[string]string{}
-			s := &Service{DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Account: func(ctx context.Context, c AccountCommand) (AccountResult, error) {
+			s := &Service{KYC: func(context.Context, string, string) (bool, error) { return true, nil }, DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Account: func(ctx context.Context, c AccountCommand) (AccountResult, error) {
 				state := receipts[c.ID]
 				switch c.Action {
 				case "credit":
@@ -117,7 +117,7 @@ func TestExpectedRefundIsSettlementNotSecondClientCreditDatabase(t *testing.T) {
 	ctx := context.Background()
 	refundID := uuid.NewString()
 	effects := map[string]int{}
-	s := &Service{DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Account: func(ctx context.Context, c AccountCommand) (AccountResult, error) {
+	s := &Service{KYC: func(context.Context, string, string) (bool, error) { return true, nil }, DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Account: func(ctx context.Context, c AccountCommand) (AccountResult, error) {
 		effects[c.Action]++
 		return AccountResult{State: "CREDITED", Processed: time.Now().UTC()}, nil
 	}}

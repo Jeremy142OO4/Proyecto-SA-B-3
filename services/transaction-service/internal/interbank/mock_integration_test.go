@@ -29,7 +29,7 @@ func TestPythonContractMockDatabase(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
 	calls := map[string]int{}
-	s := &Service{DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Account: func(ctx context.Context, c AccountCommand) (AccountResult, error) {
+	s := &Service{KYC: func(context.Context, string, string) (bool, error) { return true, nil }, DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Account: func(ctx context.Context, c AccountCommand) (AccountResult, error) {
 		calls[c.Action]++
 		state := "RESERVED"
 		if c.Action == "settle" {

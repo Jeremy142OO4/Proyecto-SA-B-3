@@ -1,21 +1,11 @@
-# Interbancaria desde Pagos
+# Pagos interbancarios y escenarios
 
-El portal de clientes ofrece «Realizar pago interbancario» y «Escenarios» junto a «Realizar pago». Se retiró el acceso de Administración a las pruebas aisladas. Las rutas de API administrativas existentes no se cambiaron ni se abrieron a clientes.
+Pagos muestra depósitos reales y escenarios desde el historial del servidor, filtrado por cliente (últimos 50, actualización cada cinco segundos). El formulario redirige al historial tras el envío y no muestra tarjeta de seguimiento ni botón de actualización manual de KYC.
 
-## Banco pareja
+Escenarios ofrece cuatro casillas de selección única: rechazo, 503, sin callback y respuesta lenta. Usa cuenta y saldo reales con una respuesta externa simulada. Solo está habilitado en entorno dev. No se cambia la URL ni el escenario global del banco pareja.
 
-`/pagos/interbancario` consulta las cuentas del cliente y su perfil actual. Antes de enviar vuelve a comprobar cuenta activa, titularidad y KYC VERIFIED. Esta comprobación del navegador es de usabilidad: no sustituye la autorización y validación KYC obligatoria dentro de la Saga del servidor.
+La Saga persiste el escenario, reserva mediante Account y consulta el KYC actual en Customer antes de reservar; si Customer no responde se reintenta sin reservar. Payment mantiene un mock durable por depósito, emite la respuesta de callback por el broker, permite consultar/cancelar y conserva el resultado idempotente. Una respuesta sin callback puede recuperarse consultando al mock: no implica necesariamente fracaso. Una demora de 181 segundos vence la ventana de 180 segundos y permite cancelar antes de liberar la reserva. Los reintentos mantienen ID y escenario.
 
-Envía `POST /api/interbancarias/` con `Idempotency-Key` igual al UUID `interbankTransferId`, cuenta de origen numérica, cuenta destino del banco pareja, monto con dos decimales y moneda GTQ. Los códigos de banco y fechas los asigna el servidor; no se modificó el contrato OpenAPI del banco pareja.
+Migraciones nuevas: Transaction 000008_interbank_scenario y Payment 000006_mock_interbank, incluidas en prepare-telemetry-schema.sh. El contrato OpenAPI entre bancos no cambia. Los UUID permanecen en trazas/logs, no en etiquetas de métricas.
 
-El último ID se conserva en sessionStorage por cliente. Un envío incierto no se reintenta automáticamente. Se consulta `GET /api/interbancarias/{id}` cada cinco segundos mientras la página está visible; también se puede introducir manualmente un ID anterior. Los estados terminales permiten iniciar otro depósito. Se muestra el saldo total, sin presentarlo como saldo disponible.
-
-## Escenarios con saldo real: pendiente de backend
-
-`/pagos/escenarios` muestra aceptación, rechazo, 503, ausencia de callback y demora. La ejecución permanece deshabilitada: el backend actual solo ofrece un mock ADMIN sobre cuenta ficticia en el laboratorio aislado. Ningún escenario se redirige al banco pareja, usa la cuenta de laboratorio como si fuera la del cliente ni simula un éxito en el navegador.
-
-Para ejecutar escenarios con saldo real se necesita un endpoint CLIENTE con KYC dentro de la Saga, selección de mock por operación persistida y aislada de otros clientes, reservas/reintentos/callbacks/compensaciones y autorización de consulta por titular. Este cambio es exclusivamente de frontend y no afirma haber implementado ese backend.
-
-## Verificación
-
-TypeScript y compilación Vite; pruebas del portal más regresiones de bloqueo por cambio de KYC, doble envío concurrente, conservación del ID ante POST incierto y bloqueo de envíos desde Escenarios. La vista previa usa cuentas ficticias y no realiza operaciones bancarias.
+Validación local: TypeScript, build Vite y pruebas Go/Node. Las pruebas con PostgreSQL se ejecutan en CI con una base desechable; no se realizaron pagos reales desde el agente.

@@ -20,6 +20,7 @@ type Service struct {
 	Account func(context.Context, AccountCommand) (AccountResult, error)
 	Partner Partner
 	Now     func() time.Time
+	KYC     func(context.Context, string, string) (bool, error)
 }
 
 func (s *Service) now() time.Time {
@@ -52,11 +53,23 @@ func (s *Service) Handle(ctx context.Context, raw json.RawMessage) bankrpc.Respo
 			return failure(400, "VALIDATION_ERROR")
 		}
 		return s.create(ctx, t, "IN", "")
-	case "send":
+	case "send", "simulate":
+		if r.Action == "simulate" {
+			if !simulationEnabled() {
+				return failure(403, "SIMULATION_DISABLED")
+			}
+			switch r.Scenario {
+			case "reject", "unavailable", "no_callback", "delayed":
+			default:
+				return failure(400, "VALIDATION_ERROR")
+			}
+		} else if r.Scenario != "" {
+			return failure(400, "VALIDATION_ERROR")
+		}
 		if _, e := uuid.Parse(r.Customer); e != nil {
 			return failure(401, "UNAUTHORIZED")
 		}
-		if !s.partnerReady() {
+		if r.Action != "simulate" && !s.partnerReady() {
 			return failure(503, "PARTNER_NOT_CONFIGURED")
 		}
 		var t Transfer
@@ -76,13 +89,15 @@ func (s *Service) Handle(ctx context.Context, raw json.RawMessage) bankrpc.Respo
 		if n < 1 || n > 1000000 {
 			return failure(400, "VALIDATION_ERROR")
 		}
-		return s.create(ctx, t, "OUT", r.Customer)
+		return s.createScenario(ctx, t, "OUT", r.Customer, r.Scenario)
 	case "result":
 		var result Result
 		if strict(r.Body, &result) != nil || !result.Valid() || result.ID != r.ID || result.Destination != s.Config.Partner || r.Peer != s.Config.Partner {
 			return failure(400, "VALIDATION_ERROR")
 		}
 		return s.callback(ctx, result)
+	case "client_list":
+		return s.listClient(ctx, r)
 	case "get", "client_get":
 		return s.lookup(ctx, r)
 	default:
@@ -97,12 +112,13 @@ type record struct {
 	Received, Updated                         time.Time
 	Attempts                                  int
 	RefundOf                                  string
+	Scenario                                  string
 }
 
 func scan(row pgx.Row) (record, error) {
 	var r record
 	var body, result []byte
-	e := row.Scan(&body, &r.Direction, &r.Customer, &r.State, &r.Reason, &result, &r.Trace, &r.Received, &r.Updated, &r.Attempts, &r.RefundOf)
+	e := row.Scan(&body, &r.Direction, &r.Customer, &r.State, &r.Reason, &result, &r.Trace, &r.Received, &r.Updated, &r.Attempts, &r.RefundOf, &r.Scenario)
 	if e != nil {
 		return r, e
 	}
@@ -113,9 +129,12 @@ func scan(row pgx.Row) (record, error) {
 	return r, e
 }
 
-const columns = `solicitud,direccion,cliente,estado,motivo,resultado,trace_context,recibido,actualizado,intentos,COALESCE(refund_of::text,'')`
+const columns = `solicitud,direccion,cliente,estado,motivo,resultado,trace_context,recibido,actualizado,intentos,COALESCE(refund_of::text,''),scenario`
 
 func (s *Service) create(ctx context.Context, t Transfer, direction, customer string) bankrpc.Response {
+	return s.createScenario(ctx, t, direction, customer, "")
+}
+func (s *Service) createScenario(ctx context.Context, t Transfer, direction, customer, scenario string) bankrpc.Response {
 	ctx, finishTrace := telemetry.StartTransfer(ctx, t.ID, t.ID)
 	defer finishTrace()
 	// Timestamp normalization permits different ISO8601 offsets for the same instant.
@@ -140,7 +159,7 @@ func (s *Service) create(ctx context.Context, t Transfer, direction, customer st
 		}
 		ab, _ := json.Marshal(a)
 		bb, _ := json.Marshal(b)
-		if string(ab) != string(bb) || existing.Customer != customer || existing.Direction != direction {
+		if string(ab) != string(bb) || existing.Customer != customer || existing.Direction != direction || existing.Scenario != scenario {
 			return failure(409, "IDEMPOTENCY_CONFLICT")
 		}
 		return bankrpc.Reply(200, status(existing))
@@ -173,7 +192,7 @@ func (s *Service) create(ctx context.Context, t Transfer, direction, customer st
 		state = "PENDING_RESERVATION"
 	}
 	digest := sha256.Sum256(body)
-	_, e = tx.Exec(ctx, `INSERT INTO depositos_interbancarios(id,direccion,cliente,solicitud,huella,estado,trace_context) VALUES($1,$2,$3,$4,$5,$6,$7)`, t.ID, direction, customer, body, hex.EncodeToString(digest[:]), state, telemetry.Serialize(ctx))
+	_, e = tx.Exec(ctx, `INSERT INTO depositos_interbancarios(id,direccion,cliente,solicitud,huella,estado,trace_context,scenario) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, t.ID, direction, customer, body, hex.EncodeToString(digest[:]), state, telemetry.Serialize(ctx), scenario)
 	if e != nil {
 		return failure(503, "SERVICE_UNAVAILABLE")
 	}
@@ -187,6 +206,10 @@ func (s *Service) create(ctx context.Context, t Transfer, direction, customer st
 }
 func status(r record) map[string]any {
 	b := map[string]any{"interbankTransferId": r.Transfer.ID, "status": r.State, "updatedAt": r.Updated.UTC()}
+	b["simulation"] = r.Scenario != ""
+	if r.Scenario != "" {
+		b["scenario"] = r.Scenario
+	}
 	if r.Reason != "" {
 		b["reasonCode"] = r.Reason
 	}
@@ -277,4 +300,31 @@ func (s *Service) callback(ctx context.Context, result Result) bankrpc.Response 
 		return failure(503, "SERVICE_UNAVAILABLE")
 	}
 	return bankrpc.Reply(200, map[string]any{"interbankTransferId": result.ID, "received": true})
+}
+
+func (s *Service) listClient(ctx context.Context, r Request) bankrpc.Response {
+	if id, e := uuid.Parse(r.Customer); e != nil || id == uuid.Nil {
+		return failure(401, "UNAUTHORIZED")
+	}
+	rows, e := s.DB.Query(ctx, `SELECT `+columns+` FROM depositos_interbancarios WHERE direccion='OUT' AND cliente=$1 ORDER BY recibido DESC LIMIT 50`, r.Customer)
+	if e != nil {
+		return failure(503, "SERVICE_UNAVAILABLE")
+	}
+	defer rows.Close()
+	items := make([]map[string]any, 0)
+	for rows.Next() {
+		row, err := scan(rows)
+		if err != nil {
+			return failure(503, "SERVICE_UNAVAILABLE")
+		}
+		item := status(row)
+		item["amount"] = row.Transfer.Amount
+		item["destinationAccount"] = row.Transfer.DestinationAccount
+		item["createdAt"] = row.Received
+		items = append(items, item)
+	}
+	if rows.Err() != nil {
+		return failure(503, "SERVICE_UNAVAILABLE")
+	}
+	return bankrpc.Reply(200, items)
 }
