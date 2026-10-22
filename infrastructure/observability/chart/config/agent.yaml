@@ -13,6 +13,12 @@ receivers:
       - /var/log/pods/{{ .Values.applicationNamespace }}_*/transaction-service/*.log
       - /var/log/pods/{{ .Values.applicationNamespace }}_*/payment-service/*.log
       - /var/log/pods/{{ .Values.applicationNamespace }}_*/notification-audit-service/*.log
+      # The isolated cloud laboratory shares the application's collector, but
+      # labels its records interbank-cloud-tests instead of dev.
+      - /var/log/pods/{{ .Values.applicationNamespace }}_interbank-scenarios-*/gateway/*.log
+      - /var/log/pods/{{ .Values.applicationNamespace }}_interbank-scenarios-*/accounts/*.log
+      - /var/log/pods/{{ .Values.applicationNamespace }}_interbank-scenarios-*/transactions/*.log
+      - /var/log/pods/{{ .Values.applicationNamespace }}_interbank-scenarios-*/payments/*.log
     start_at: end
     include_file_path: true
     max_log_size: 64KiB

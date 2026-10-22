@@ -38,6 +38,10 @@ data:
 {{ .Files.Get "dashboards/slo.json" | indent 4 }}
   prueba1.json: |
 {{ .Files.Get "dashboards/prueba1.json" | indent 4 }}
+  sistema.json: |
+{{ .Files.Get "dashboards/sistema.json" | indent 4 }}
+  scenarios.json: |
+{{ .Files.Get "dashboards/scenarios.json" | indent 4 }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -46,3 +50,12 @@ metadata:
 data:
   bank.json: |
 {{ .Files.Get "alerting/bank.json" | indent 4 }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bank-system-exporter
+data:
+  system_exporter.py: |
+{{ .Files.Get "config/system_exporter.py" | indent 4 }}

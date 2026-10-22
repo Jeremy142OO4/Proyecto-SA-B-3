@@ -29,7 +29,7 @@ func TestPythonContractMockDatabase(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
 	calls := map[string]int{}
-	s := &Service{DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Account: func(ctx context.Context, c AccountCommand) (AccountResult, error) {
+	s := &Service{KYC: func(context.Context, string, string) (bool, error) { return true, nil }, DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Account: func(ctx context.Context, c AccountCommand) (AccountResult, error) {
 		calls[c.Action]++
 		state := "RESERVED"
 		if c.Action == "settle" {
@@ -103,7 +103,7 @@ func TestPythonContractMockDatabase(t *testing.T) {
 	if !ready {
 		t.Fatal("contract mock did not start; verify Python/PyYAML")
 	}
-	s.Partner = NewPartner(Config{PartnerURL: base, PartnerKey: "local-mock-only-test-key"})
+	s.Partner = newHTTPTestPartner(Config{PartnerURL: base, PartnerKey: "local-mock-only-test-key"})
 	tid, _ := trace.TraceIDFromHex(strings.Repeat("a", 32))
 	sid, _ := trace.SpanIDFromHex(strings.Repeat("b", 16))
 	tracectx := trace.ContextWithSpanContext(ctx, trace.NewSpanContext(trace.SpanContextConfig{TraceID: tid, SpanID: sid, TraceFlags: trace.FlagsSampled}))

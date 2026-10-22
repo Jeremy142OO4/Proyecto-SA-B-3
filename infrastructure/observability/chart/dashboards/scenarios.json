@@ -1,0 +1,117 @@
+{
+  "uid": "bank-scenarios",
+  "title": "Bank USAC — Escenarios interbancarios",
+  "schemaVersion": 39,
+  "version": 2,
+  "editable": false,
+  "timezone": "browser",
+  "refresh": "15s",
+  "time": {"from": "now-1h", "to": "now"},
+  "tags": ["BANK03", "escenarios", "laboratorio", "interbank-cloud-tests"],
+  "links": [{"title": "Abrir simulador de escenarios ↗", "type": "link", "url": "https://bank-usac-frontend-dev-116700127937.us-central1.run.app/administracion/pruebas-interbancarias", "targetBlank": true}],
+  "templating": {"list": [{"name": "depositId", "label": "ID del depósito (vacío = todos)", "type": "textbox", "query": "", "current": {"text": "", "value": ""}, "hide": 0}]},
+  "panels": [
+    {
+      "id": 1, "type": "text", "title": "BANK03 / Laboratorio de escenarios en GCP",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 5},
+      "options": {"mode": "markdown", "content": "## Una prueba, un ID, un recorrido\n**1.** Elegí un escenario y enviá Q100 en el simulador. **2.** Pegá aquí arriba su ID. **3.** Revisá los eventos y abrí la traza.\n\nSolo se muestran datos de **interbank-cloud-tests**, separados de BANK14 y del banco normal. Elegí un rango que incluya la prueba; actualización cada 15 s. Los saldos y reservas se consultan en el simulador, no se estiman con logs."}
+    },
+    {
+      "id": 2, "type": "stat", "title": "Eventos ACCEPTED", "description": "Eventos de aceptación registrados en Loki, no cantidad de depósitos únicos ni saldo. Respeta el ID y el rango; un reenvío de logs puede repetir un evento.",
+      "datasource": {"type": "loki", "uid": "loki"}, "gridPos": {"x": 0, "y": 5, "w": 6, "h": 4},
+      "targets": [{"refId": "A", "queryType": "instant", "expr": "sum(count_over_time({service_name=\"transaction-service\",deployment_environment_name=\"interbank-cloud-tests\"} |= \"interbank state changed\" |~ \"${depositId:regex}\" | json estado=\"status\" | __error__=\"\" | estado=\"ACCEPTED\" [$__range])) or vector(0)"}],
+      "fieldConfig": {"defaults": {"decimals": 0, "min": 0, "color": {"mode": "fixed", "fixedColor": "green"}}, "overrides": []},
+      "options": {"colorMode": "value", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}}
+    },
+    {
+      "id": 3, "type": "stat", "title": "Eventos REVERSED", "description": "Eventos de reversión/liberación registrados en Loki. No son depósitos únicos. Comprobar reserva cero y saldo en el simulador.",
+      "datasource": {"type": "loki", "uid": "loki"}, "gridPos": {"x": 6, "y": 5, "w": 6, "h": 4},
+      "targets": [{"refId": "A", "queryType": "instant", "expr": "sum(count_over_time({service_name=\"transaction-service\",deployment_environment_name=\"interbank-cloud-tests\"} |= \"interbank state changed\" |~ \"${depositId:regex}\" | json estado=\"status\" | __error__=\"\" | estado=\"REVERSED\" [$__range])) or vector(0)"}],
+      "fieldConfig": {"defaults": {"decimals": 0, "min": 0, "color": {"mode": "fixed", "fixedColor": "orange"}}, "overrides": []},
+      "options": {"colorMode": "value", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}}
+    },
+    {
+      "id": 4, "type": "stat", "title": "Logs ERROR", "description": "Errores registrados por los servicios del laboratorio. No equivale a depósitos rechazados: un rechazo controlado puede registrarse como INFO.",
+      "datasource": {"type": "loki", "uid": "loki"}, "gridPos": {"x": 12, "y": 5, "w": 6, "h": 4},
+      "targets": [{"refId": "A", "queryType": "instant", "expr": "sum(count_over_time({deployment_environment_name=\"interbank-cloud-tests\"} |~ \"${depositId:regex}\" | json nivel=\"level\" | __error__=\"\" | nivel=\"ERROR\" [$__range])) or vector(0)"}],
+      "fieldConfig": {"defaults": {"decimals": 0, "min": 0, "color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}, "overrides": []},
+      "options": {"colorMode": "value", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}}
+    },
+    {
+      "id": 5, "type": "stat", "title": "Solicitudes HTTP del laboratorio", "description": "Incremento estimado por Prometheus en el rango; incluye consultas del panel y callbacks. No cuenta depósitos únicos y NO se filtra por ID. Excluye sondeos de salud.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"}, "gridPos": {"x": 18, "y": 5, "w": 6, "h": 4},
+      "targets": [{"refId": "A", "instant": true, "expr": "sum(increase(bank_http_requests_total{service=\"api-gateway\",environment=\"interbank-cloud-tests\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[$__range]))"}],
+      "fieldConfig": {"defaults": {"decimals": 0, "min": 0, "color": {"mode": "fixed", "fixedColor": "blue"}}, "overrides": []},
+      "options": {"colorMode": "value", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "values": false}}
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Actividad por estado · eventos por minuto", "description": "Historial de eventos de cambio de estado, agrupados en ventanas de un minuto. No representa el estado actual, depósitos únicos ni dinero reservado. Fuente Loki para no mezclar entornos con la métrica de transiciones pendiente de etiquetar.",
+      "datasource": {"type": "loki", "uid": "loki"}, "gridPos": {"x": 0, "y": 9, "w": 14, "h": 8},
+      "targets": [{"refId": "A", "queryType": "range", "legendFormat": "{{estado}}", "expr": "sum by (estado) (count_over_time({service_name=\"transaction-service\",deployment_environment_name=\"interbank-cloud-tests\"} |= \"interbank state changed\" |~ \"${depositId:regex}\" | json estado=\"status\" | __error__=\"\" | estado!=\"\" [1m]))"}],
+      "fieldConfig": {"defaults": {"min": 0, "decimals": 0, "custom": {"drawStyle": "bars", "fillOpacity": 50, "lineWidth": 1, "spanNulls": false}}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Latencia HTTP p95 · laboratorio", "description": "p95 de solicitudes HTTP al Gateway del laboratorio, en ventanas de cinco minutos. No es el tiempo total del depósito ni los 180 s de vigencia. No se filtra por ID.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"}, "gridPos": {"x": 14, "y": 9, "w": 10, "h": 8},
+      "targets": [{"refId": "A", "legendFormat": "Gateway p95", "expr": "histogram_quantile(0.95,sum by(le)(rate(bank_http_duration_seconds_bucket{service=\"api-gateway\",environment=\"interbank-cloud-tests\",route!~\"/(health(/.*)?|healthz|salud|ready|readyz|metrics)\"}[5m])))"}],
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0, "color": {"mode": "fixed", "fixedColor": "blue"}, "custom": {"lineWidth": 2, "fillOpacity": 12}}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}}
+    },
+    {
+      "id": 8, "type": "logs", "title": "Recorrido del depósito · cambios de estado", "description": "Eventos históricos de Transaction (coordinador); el HTTP externo pertenece a Payment. Expandí una línea para consultar interbankTransferId, status, correlationId y traceId. Para el saldo o estado definitivo usá el simulador.",
+      "datasource": {"type": "loki", "uid": "loki"}, "gridPos": {"x": 0, "y": 17, "w": 24, "h": 9},
+      "targets": [{"refId": "A", "queryType": "range", "expr": "{service_name=\"transaction-service\",deployment_environment_name=\"interbank-cloud-tests\"} |= \"interbank state changed\" |~ \"${depositId:regex}\"", "maxLines": 200}],
+      "options": {"showTime": true, "showLabels": false, "showCommonLabels": false, "wrapLogMessage": true, "prettifyLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Ascending"}
+    },
+    {
+      "id": 9, "type": "table", "title": "Trazas del depósito · abrir Trace ID", "description": "Solo trazas del laboratorio con un span transaction.id. El ID del depósito no es el Trace ID. Abrí la fila para ver el recorrido distribuido. Con ID vacío se muestran hasta 20 trazas de negocio del rango. Transaction coordina; Payment hace HTTP externo con el mismo Trace ID.",
+      "datasource": {"type": "tempo", "uid": "tempo"}, "gridPos": {"x": 0, "y": 26, "w": 24, "h": 8},
+      "targets": [{"refId": "A", "queryType": "traceql", "query": "{ resource.service.name =~ \"transaction-service|payment-service\" && resource.deployment.environment.name = \"interbank-cloud-tests\" && span.transaction.id =~ \".+\" && span.transaction.id =~ \".*${depositId:regex}.*\" }", "limit": 20, "tableType": "traces", "spss": 100}],
+      "fieldConfig": {"defaults": {}, "overrides": []}, "options": {"showHeader": true}
+    },
+    {
+      "id": 10, "type": "logs", "title": "Logs de los servicios · diagnóstico", "description": "Todos los servicios del laboratorio. El filtro por ID solo muestra líneas que contienen ese identificador; no todas las líneas de infraestructura lo incluyen. Máximo 200 líneas.",
+      "datasource": {"type": "loki", "uid": "loki"}, "gridPos": {"x": 0, "y": 34, "w": 24, "h": 9},
+      "targets": [{"refId": "A", "queryType": "range", "expr": "{deployment_environment_name=\"interbank-cloud-tests\"} |~ \"${depositId:regex}\"", "maxLines": 200}],
+      "options": {"showTime": true, "showLabels": false, "wrapLogMessage": true, "prettifyLogMessage": true, "enableLogDetails": true, "sortOrder": "Descending"}
+    },
+    {
+      "id": 11, "type": "text", "title": "Qué demostrar en cada escenario",
+      "gridPos": {"x": 0, "y": 43, "w": 24, "h": 7},
+      "options": {"mode": "markdown", "content": "| Escenario | Resultado esperado en el simulador |\n|---|---|\n| Normal | ACCEPTED, un único débito y reserva Q0. |\n| Rechazo | REVERSED y liberación de la reserva. |\n| Sin callback | Recuperación automática por reintento o consulta, sin duplicar. |\n| Error 503 | Restablecer normal a los 15 s; el mismo depósito se recupera. |\n| Demora | Esperar aproximadamente 3 minutos: REVERSED / EXPIRED, reserva Q0. |\n\n**Límite conocido:** no usamos `bank_interbank_transitions_total` porque aún no tiene etiqueta de entorno. Los indicadores de estados se calculan con logs del laboratorio; no son métricas contables ni depósitos únicos. No se modificaron los dashboards existentes ni el SLO 99.5 %. Si no aparece actividad, ampliá el rango y dejá vacío el filtro de ID."}
+    },
+    {
+      "id": 12,
+      "type": "logs",
+      "title": "Payment · llamadas al banco externo",
+      "description": "HTTP saliente ejecutado por Payment a través de comandos AMQP. Incluye depósitos, callbacks, consultas, cancelaciones y reversos. Un HTTP 202 no significa que el depósito ya terminó: contrastá los estados del coordinador.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 50,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "range",
+          "expr": "{service_name=\"payment-service\",deployment_environment_name=\"interbank-cloud-tests\"} |= \"interbank partner HTTP\" |~ \"${depositId:regex}\"",
+          "maxLines": 200
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "sortOrder": "Ascending"
+      }
+    }
+  ]
+}

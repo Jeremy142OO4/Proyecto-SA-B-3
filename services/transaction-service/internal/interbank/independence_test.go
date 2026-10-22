@@ -60,7 +60,7 @@ func TestReceivingIndependentOfPartnerDatabase(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
 	count := 0
-	s := &Service{DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Partner: NewPartner(Config{}), Account: func(_ context.Context, c AccountCommand) (AccountResult, error) {
+	s := &Service{KYC: func(context.Context, string, string) (bool, error) { return true, nil }, DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Partner: NewPartner(Config{}), Account: func(_ context.Context, c AccountCommand) (AccountResult, error) {
 		count++
 		if c.Action != "credit" {
 			t.Fatalf("unexpected money operation: %s", c.Action)
@@ -106,7 +106,7 @@ func TestMissingLocalConfigurationDoesNotReleaseExistingHoldDatabase(t *testing.
 	db := testDB(t)
 	ctx := context.Background()
 	calls := 0
-	s := &Service{DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Partner: NewPartner(Config{}), Account: func(_ context.Context, c AccountCommand) (AccountResult, error) {
+	s := &Service{KYC: func(context.Context, string, string) (bool, error) { return true, nil }, DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Partner: NewPartner(Config{}), Account: func(_ context.Context, c AccountCommand) (AccountResult, error) {
 		calls++
 		if c.Action != "settle" {
 			t.Fatalf("missing local config triggered %s", c.Action)

@@ -42,7 +42,7 @@ def main():
                    stdout=subprocess.DEVNULL)
     subprocess.run(['kubectl', '-n', os.environ['KUBE_NAMESPACE'], 'set', 'env',
                     'deployment/api-gateway', 'deployment/account-service',
-                    'deployment/transaction-service', *settings], check=True)
+                    'deployment/transaction-service', 'deployment/payment-service', *settings], check=True)
     print('Interbank reception configuration applied; no private values logged')
 
 

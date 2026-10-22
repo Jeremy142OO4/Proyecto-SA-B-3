@@ -8,6 +8,7 @@ if [[ "$KUBE_NAMESPACE" != bank-usac-dev ]]; then
 fi
 directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 python3 "$directory/preflight.py"
+python3 "$directory/rbac_preflight.py"
 kubectl create namespace "$OBSERVABILITY_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 if ! kubectl -n "$OBSERVABILITY_NAMESPACE" get secret observability-grafana >/dev/null 2>&1; then
   kubectl -n "$OBSERVABILITY_NAMESPACE" create secret generic observability-grafana --from-literal="password=$(openssl rand -hex 24)"

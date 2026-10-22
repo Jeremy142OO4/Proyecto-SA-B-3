@@ -80,7 +80,8 @@ async function solicitar<T>(ruta: string, opciones: RequestInit = {}): Promise<T
 
 export const clienteApi = {
   obtener: <T>(ruta: string) => solicitar<T>(ruta),
-  publicar: <T>(ruta: string, datos: unknown) => solicitar<T>(ruta, {
+  publicar: <T>(ruta: string, datos: unknown, headers?: Record<string,string>) => solicitar<T>(ruta, {
+    headers,
     method: 'POST',
     body: JSON.stringify(datos),
   }),

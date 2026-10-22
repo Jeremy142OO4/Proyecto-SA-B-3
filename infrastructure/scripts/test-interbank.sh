@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Disposable local test dependencies only. Never reads application DB secrets.
 set -euo pipefail
-component="${1:?account-service, transaction-service or api-gateway required}"
+component="${1:?account-service, transaction-service payment-service or api-gateway required}"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 case "$component" in
+  payment-db) module="$root/services/payment-service"; image=postgres:17-alpine ;;
   account-service|transaction-service) module="$root/services/$component"; image=postgres:17-alpine ;;
   api-gateway) module="$root/gateway/api-gateway"; image=rabbitmq:3.13-alpine ;;
+  payment-service) module="$root/services/payment-service"; image=rabbitmq:3.13-alpine ;;
   *) echo 'Unknown test component' >&2; exit 1 ;;
 esac
 name="bank-interbank-${component}-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-$$"
@@ -17,7 +19,7 @@ cleanup() {
 }
 trap cleanup EXIT
 unset TEST_DATABASE_URL TEST_AMQP_URL INTERBANK_MOCK_PYTHON
-if [[ "$component" == api-gateway ]]; then
+if [[ "$component" == api-gateway || "$component" == payment-service ]]; then
   # Erlang otherwise sizes server AND diagnostic CLI schedulers from the host
   # CPU count, which can exhaust runner threads before AMQP starts. Keep the
   # container after a failed boot until cleanup has captured its logs.
@@ -34,7 +36,11 @@ if [[ "$component" == api-gateway ]]; then
   port="$(docker port "$name" 5672/tcp | cut -d: -f2)"
   export TEST_AMQP_URL="amqp://interbank_test:local-interbank-only@127.0.0.1:${port}/"
   cd "$module"
-  go test -race -count=1 -v ./internal/bankrpc
+  if [[ "$component" == payment-service ]]; then
+    go test -race -count=1 -v ./internal/interbank
+  else
+    go test -race -count=1 -v ./internal/bankrpc
+  fi
 else
   docker run -d --rm --name "$name" -e POSTGRES_HOST_AUTH_METHOD=trust -p 127.0.0.1::5432 "$image"
   ready=false

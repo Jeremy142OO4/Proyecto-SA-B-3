@@ -209,7 +209,9 @@ func Publish(ctx context.Context, in amqp.Table, body []byte, key string) (conte
 	ctx, span := otel.Tracer("bank-usac").Start(ctx, "amqp publish "+eventName(key), trace.WithSpanKind(trace.SpanKindProducer))
 	correlation, message := envelope(body)
 	ctx = WithCorrelation(ctx, correlation)
-	span.SetAttributes(attribute.String("messageId", message))
+	span.SetAttributes(attribute.String("messageId", message), attribute.String("messaging.message.id", message),
+		attribute.String("messaging.system", "rabbitmq"), attribute.String("messaging.operation.type", "send"),
+		attribute.String("messaging.rabbitmq.destination.routing_key", key))
 	out := amqp.Table{}
 	for k, v := range in {
 		out[k] = v
@@ -237,6 +239,11 @@ func Consume(ctx context.Context, d amqp.Delivery) (context.Context, func(error)
 	correlation, message := envelope(d.Body)
 	ctx = WithCorrelation(ctx, correlation)
 	span.SetAttributes(attribute.String("messageId", message), attribute.Bool("messaging.redelivered", d.Redelivered))
+	span.SetAttributes(attribute.String("messaging.message.id", message), attribute.String("messaging.system", "rabbitmq"),
+		attribute.String("messaging.operation.type", "process"), attribute.String("messaging.rabbitmq.destination.routing_key", d.RoutingKey))
+	if d.Exchange != "" {
+		span.SetAttributes(attribute.String("messaging.destination.name", d.Exchange))
+	}
 	start := time.Now()
 	return ctx, func(err error) {
 		outcome := "processed"
@@ -267,7 +274,7 @@ func HTTP() fiber.Handler {
 		}
 		carrier := propagation.MapCarrier{"traceparent": c.Get("traceparent"), "tracestate": c.Get("tracestate")}
 		ctx := propagator.Extract(c.UserContext(), carrier)
-		ctx, span := otel.Tracer("bank-usac").Start(ctx, "http request", trace.WithSpanKind(trace.SpanKindServer))
+		ctx, span := otel.Tracer("bank-usac").Start(ctx, "http request", portalSpanOptions(path, ctx)...)
 		c.SetUserContext(ctx)
 		defer span.End()
 		response := propagation.MapCarrier{}
@@ -289,7 +296,7 @@ func HTTP() fiber.Handler {
 		}
 		status := c.Response().StatusCode()
 		span.SetName(c.Method() + " " + route)
-		span.SetAttributes(attribute.String("http.route", route), attribute.Int("http.response.status_code", status))
+		span.SetAttributes(attribute.String("http.route", route), attribute.String("http.request.method", c.Method()), attribute.Int("http.response.status_code", status))
 		if status >= 500 {
 			span.SetStatus(codes.Error, "HTTP server error")
 		}
@@ -307,6 +314,18 @@ func HTTP() fiber.Handler {
 		slog.InfoContext(ctx, "http request finished", "method", c.Method(), "route", route, "status", status)
 		return nil
 	}
+}
+
+// Portal API calls begin a bank-owned trace. Proxy-generated external parents
+// are linked rather than inherited: their spans are not exported to our Tempo.
+// Interbank ingress keeps its remote parent to preserve cross-bank propagation.
+func portalSpanOptions(path string, ctx context.Context) []trace.SpanStartOption {
+	opts := []trace.SpanStartOption{trace.WithSpanKind(trace.SpanKindServer)}
+	parent := trace.SpanContextFromContext(ctx)
+	if strings.HasPrefix(path, "/api/") && parent.IsValid() && parent.IsRemote() {
+		opts = append(opts, trace.WithNewRoot(), trace.WithLinks(trace.Link{SpanContext: parent}))
+	}
+	return opts
 }
 
 // JSON handler adds context IDs at emission time, not through mutable global state.

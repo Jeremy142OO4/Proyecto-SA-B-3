@@ -54,6 +54,8 @@ def provisioning():
              '(k8s_deployment_available{job="bank-infra"} == 0) and on(k8s_namespace_name,k8s_deployment_name) (k8s_deployment_desired{job="bank-infra"} > 0)', 'critical', '3m'),
         rule('bank-rabbitmq-backlog', 'RabbitMQ: cola con mensajes pendientes sostenidos',
              'rabbitmq_message_current{job="bank-infra",state="ready"} > 100', 'warning', '5m'),
+        rule('bank-system-source', 'Sistema: consumo de recursos o revisiones sin medición',
+             '(bank_system_source_up{job="bank-system"} == 0) or (up{job="bank-system"} == 0) or absent(up{job="bank-system"})', 'warning', '5m'),
         rule('bank-rabbitmq-telemetry', 'RabbitMQ: sin métricas de colas',
              'absent_over_time(rabbitmq_message_current{job="bank-infra"}[5m])', 'warning', '2m'),
     ]

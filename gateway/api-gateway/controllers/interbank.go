@@ -9,6 +9,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -60,6 +61,13 @@ func (g InterbankGateway) Register(app *fiber.App) {
 	group.Get("/reversals/:id", g.forward("reversal_get", true))
 	group.Get("/reconciliation", g.forward("reconciliation", true))
 	client := app.Group("/api/interbancarias", middleware.Correlacion, middleware.Autenticacion(g.JWT), middleware.AutorizarRoles("CLIENTE"))
+	client.Get("/configuracion", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"bankCode": g.Bank, "partnerBankCode": g.Partner, "enabled": g.Enabled, "simulationEnabled": os.Getenv("ENTORNO") == "dev", "maxAmount": "10000.00"})
+	})
+	client.Get("/", g.forward("client_list", false))
+	client.Get("/historial", g.forward("client_list", false))
+	client.Post("/:id/restablecer", g.forward("resume", false))
+	client.Post("/escenarios", g.forward("simulate", false))
 	client.Post("/", g.forward("send", false))
 	client.Get("/:id", g.forward("client_get", false))
 }
@@ -77,6 +85,19 @@ func (g InterbankGateway) forward(action string, peer bool) fiber.Handler {
 				return bankError(c, 400, "VALIDATION_ERROR")
 			}
 		}
+		scenario := ""
+		if action == "simulate" {
+			if os.Getenv("ENTORNO") != "dev" {
+				return bankError(c, 403, "SIMULATION_DISABLED")
+			}
+			var data map[string]json.RawMessage
+			if json.Unmarshal(c.Body(), &data) != nil || json.Unmarshal(data["scenario"], &scenario) != nil {
+				return bankError(c, 400, "VALIDATION_ERROR")
+			}
+			delete(data, "scenario")
+			clean, _ := json.Marshal(data)
+			c.Request().SetBody(clean)
+		}
 		body := json.RawMessage(append([]byte(nil), c.Body()...))
 		if len(body) > 0 && !json.Valid(body) {
 			return bankError(c, 400, "VALIDATION_ERROR")
@@ -85,13 +106,14 @@ func (g InterbankGateway) forward(action string, peer bool) fiber.Handler {
 			Date     string          `json:"date,omitempty"`
 			Page     int             `json:"page,omitempty"`
 			PageSize int             `json:"pageSize,omitempty"`
+			Scenario string          `json:"scenario,omitempty"`
 			Action   string          `json:"action"`
 			ID       string          `json:"id,omitempty"`
 			Key      string          `json:"key,omitempty"`
 			Customer string          `json:"customer,omitempty"`
 			Peer     string          `json:"peer,omitempty"`
 			Body     json.RawMessage `json:"body,omitempty"`
-		}{Action: action, ID: id, Key: c.Get("Idempotency-Key"), Body: body}
+		}{Scenario: scenario, Action: action, ID: id, Key: c.Get("Idempotency-Key"), Body: body}
 		if action == "reconciliation" {
 			request.Date = c.Query("date")
 			request.Page = 1

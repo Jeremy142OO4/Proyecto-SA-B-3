@@ -49,7 +49,7 @@ func TestReceiveDatabase(t *testing.T) {
 	partner := &fakePartner{}
 	credits := map[string]AccountResult{}
 	creditCount := 0
-	s := &Service{DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Partner: partner, Account: func(ctx context.Context, c AccountCommand) (AccountResult, error) {
+	s := &Service{KYC: func(context.Context, string, string) (bool, error) { return true, nil }, DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Partner: partner, Account: func(ctx context.Context, c AccountCommand) (AccountResult, error) {
 		if r, ok := credits[c.ID]; ok {
 			return r, nil
 		}
@@ -135,7 +135,7 @@ func TestOutgoingDatabase(t *testing.T) {
 	partner := &fakePartner{}
 	states := map[string]string{}
 	effects := map[string]int{}
-	s := &Service{DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Partner: partner, Account: func(ctx context.Context, c AccountCommand) (AccountResult, error) {
+	s := &Service{KYC: func(context.Context, string, string) (bool, error) { return true, nil }, DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Partner: partner, Account: func(ctx context.Context, c AccountCommand) (AccountResult, error) {
 		state := states[c.ID]
 		switch c.Action {
 		case "reserve":
@@ -217,7 +217,7 @@ func TestTimeoutRetainsReservationDatabase(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
 	released := false
-	s := &Service{DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Partner: &fakePartner{fail: true}, Account: func(ctx context.Context, c AccountCommand) (AccountResult, error) {
+	s := &Service{KYC: func(context.Context, string, string) (bool, error) { return true, nil }, DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Partner: &fakePartner{fail: true}, Account: func(ctx context.Context, c AccountCommand) (AccountResult, error) {
 		if c.Action == "release" {
 			released = true
 		}
@@ -251,7 +251,7 @@ func TestCreditReceiptRecoveredAfterExpiryDatabase(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
 	processed := time.Now().UTC()
-	s := &Service{DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Partner: &fakePartner{}, Account: func(context.Context, AccountCommand) (AccountResult, error) {
+	s := &Service{KYC: func(context.Context, string, string) (bool, error) { return true, nil }, DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Partner: &fakePartner{}, Account: func(context.Context, AccountCommand) (AccountResult, error) {
 		return AccountResult{State: "CREDITED", Processed: processed}, nil
 	}}
 	tr := sample()
@@ -287,7 +287,7 @@ func TestHTTPPartnerNoRedirectOrKeyLeak(t *testing.T) {
 		http.Redirect(w, r, target.URL, 307)
 	}))
 	defer server.Close()
-	p := NewPartner(Config{PartnerURL: server.URL, PartnerKey: "local-only-partner-key"})
+	p := newHTTPTestPartner(Config{PartnerURL: server.URL, PartnerKey: "local-only-partner-key"})
 	code, _, e := p.Post(context.Background(), "/transfers", "test", map[string]string{})
 	if e != nil || code != 307 || leaked {
 		t.Fatalf("redirect leaked credentials code=%d err=%v leaked=%v", code, e, leaked)

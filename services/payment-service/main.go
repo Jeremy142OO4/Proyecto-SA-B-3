@@ -4,6 +4,8 @@ import (
 	"context"
 	"github.com/Proyecto-SA-B-3/payment-service/config"
 	"github.com/Proyecto-SA-B-3/payment-service/database"
+	"github.com/Proyecto-SA-B-3/payment-service/internal/bankrpc"
+	"github.com/Proyecto-SA-B-3/payment-service/internal/interbank"
 	"github.com/Proyecto-SA-B-3/payment-service/internal/recovery"
 	"github.com/Proyecto-SA-B-3/payment-service/internal/telemetry"
 	"github.com/Proyecto-SA-B-3/payment-service/messaging"
@@ -36,6 +38,16 @@ func main() {
 		os.Exit(1)
 	}
 	defer bd.Close()
+	if os.Getenv("INTERBANK_ENABLED") == "true" {
+		transport, err := interbank.New()
+		if err != nil {
+			slog.Error("configuracion interbancaria invalida")
+			os.Exit(1)
+		}
+		transport.Mock = &interbank.Service{DB: bd, Rabbit: cfg.URLRabbitMQ, PartnerBank: os.Getenv("INTERBANK_PARTNER_BANK_CODE")}
+		go transport.Mock.RunMock(ctx)
+		go bankrpc.Run(ctx, cfg.URLRabbitMQ, interbank.Queue, transport.Handle)
+	}
 	mensajeriaFin := make(chan struct{})
 	go func() {
 		defer close(mensajeriaFin)

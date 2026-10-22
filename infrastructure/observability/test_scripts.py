@@ -5,6 +5,25 @@ import runpy
 import subprocess
 import unittest
 from unittest.mock import patch
+from rbac_preflight import check_role
+
+
+class RBACTests(unittest.TestCase):
+    def test_matching_role_does_not_require_ci_patch_permission(self):
+        role = {'rules': [{'apiGroups': ['metrics.k8s.io'], 'resources': ['pods'], 'verbs': ['get', 'list']}]}
+        self.assertIn('no RBAC update', check_role(role, role, False))
+
+    def test_different_role_requires_bootstrap_for_limited_ci(self):
+        with self.assertRaisesRegex(RuntimeError, 'administrador'):
+            check_role({'rules': []}, {'rules': [{'resources': ['pods']}]}, False)
+
+    def test_administrator_can_reconcile_role(self):
+        self.assertIn('can patch', check_role({'rules': []}, {'rules': [{}]}, True))
+
+    def test_rule_order_is_reconciled_before_helm(self):
+        with self.assertRaises(RuntimeError):
+            check_role({'rules': [{'resources': ['pods']}, {'resources': ['deployments']}]},
+                       {'rules': [{'resources': ['deployments']}, {'resources': ['pods']}]}, False)
 
 
 class RestartTests(unittest.TestCase):

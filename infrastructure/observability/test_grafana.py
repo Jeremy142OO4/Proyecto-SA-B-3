@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import secrets
 import subprocess
+import tempfile
 import time
 import urllib.request
 import uuid
@@ -15,7 +16,14 @@ def main():
     password = secrets.token_hex(24)
     authorization = 'Basic ' + base64.b64encode(('admin:' + password).encode()).decode()
     directory = Path(__file__).resolve().parent / 'chart'
+    provider_dir = tempfile.TemporaryDirectory(prefix='bank-dashboard-provider-')
+    provider = Path(provider_dir.name) / 'bank.yaml'
+    provider.write_text(json.dumps({'apiVersion': 1, 'providers': [{
+        'name': 'bank-system-test', 'type': 'file', 'options': {'path': '/etc/grafana/bank-dashboards'},
+    }]}), encoding='utf-8')
     command = ['docker', 'run', '-d', '--name', name, '-p', '127.0.0.1::3000',
+               '-v', f'{provider}:/etc/grafana/provisioning/dashboards/bank.yaml:ro,Z',
+               '-v', f'{directory / "dashboards/sistema.json"}:/etc/grafana/bank-dashboards/sistema.json:ro,Z',
                '-v', f'{directory / "alerting/bank.json"}:/etc/grafana/provisioning/alerting/bank.json:ro,Z',
                '-v', f'{directory / "config/datasources.yaml"}:/etc/grafana/provisioning/datasources/bank.yaml:ro,Z']
     environment = {'GF_SECURITY_ADMIN_PASSWORD': password, 'GF_UNIFIED_ALERTING_EXECUTE_ALERTS': 'false',
@@ -45,6 +53,10 @@ def main():
             time.sleep(1)
         rules = get('/api/v1/provisioning/alert-rules')
         assert {r['uid'] for r in rules} == {r['uid'] for r in alerting.provisioning()['groups'][0]['rules']}
+        system_dashboard = get('/api/dashboards/uid/bank-system-metrics')['dashboard']
+        assert system_dashboard['title'] == 'Métricas sistema'
+        assert any(p['title'] == 'CPU utilizada por pod' for p in system_dashboard['panels'])
+        assert any(a.get('expr', '').startswith('changes(bank_deployment_revision') for a in system_dashboard['annotations']['list'])
         contacts = get('/api/v1/provisioning/contact-points')
         assert any(c['uid'] == 'bank-email' and c['settings']['addresses'] == '3141193530501@ingenieria.usac.edu.gt' for c in contacts)
         viewer_password = secrets.token_hex(24)
@@ -67,6 +79,7 @@ def main():
         raise
     finally:
         subprocess.run(['docker', 'rm', '-f', name], capture_output=True)
+        provider_dir.cleanup()
 
 
 if __name__ == '__main__':

@@ -11,7 +11,7 @@ import (
 func TestReconciliationEndpointUTCAndPaginationDatabase(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
-	s := &Service{DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}}
+	s := &Service{KYC: func(context.Context, string, string) (bool, error) { return true, nil }, DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}}
 	day := "2026-10-18"
 	for i := 0; i < 2; i++ {
 		tr := sample()
@@ -46,7 +46,7 @@ func TestDailyReconciliationFindsDiscrepanciesDatabase(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(24 * time.Hour).Add(12 * time.Hour)
 	yesterday := now.Truncate(24 * time.Hour).Add(-24 * time.Hour)
-	s := &Service{DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Now: func() time.Time { return now }}
+	s := &Service{KYC: func(context.Context, string, string) (bool, error) { return true, nil }, DB: db, Config: Config{Bank: "BANK03", Partner: "BANK14"}, Now: func() time.Time { return now }}
 	makeOut := func(state string) Transfer {
 		t.Helper()
 		tr := sample()

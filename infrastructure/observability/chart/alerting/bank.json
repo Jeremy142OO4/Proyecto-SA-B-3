@@ -260,6 +260,42 @@
           ]
         },
         {
+          "uid": "bank-system-source",
+          "title": "Sistema: consumo de recursos o revisiones sin medición",
+          "condition": "A",
+          "for": "5m",
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "annotations": {
+            "summary": "Sistema: consumo de recursos o revisiones sin medición",
+            "description": "Revisar el runbook versionado antes de intervenir. No reiniciar ni compensar transferencias automáticamente.",
+            "runbook_url": "https://github.com/Jeremy142OO4/Proyecto-SA-B-3/blob/develop/Documentacion/observabilidad/alertas.md#bank-system-source"
+          },
+          "labels": {
+            "severity": "warning",
+            "environment": "dev",
+            "team": "bank-usac"
+          },
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "prometheus",
+              "model": {
+                "refId": "A",
+                "expr": "(bank_system_source_up{job=\"bank-system\"} == 0) or (up{job=\"bank-system\"} == 0) or absent(up{job=\"bank-system\"})",
+                "instant": true,
+                "range": false,
+                "intervalMs": 15000,
+                "maxDataPoints": 43200
+              }
+            }
+          ]
+        },
+        {
           "uid": "bank-rabbitmq-telemetry",
           "title": "RabbitMQ: sin métricas de colas",
           "condition": "A",

@@ -33,13 +33,22 @@ func Load(rabbit string) (Config, error) {
 	}
 	// Receiving requests is independent of the partner's outbound configuration.
 	// Missing values are allowed; supplied URLs must still be safe and valid.
-	if c.PartnerURL != "" && !validPartnerURL(c.PartnerURL) {
+	if c.PartnerURL != "" && !validPartnerURL(c.PartnerURL) && !validSandboxPartnerURL(c.PartnerURL) {
 		return c, errors.New("invalid interbank partner HTTPS URL")
 	}
 	if c.PartnerKey != "" && len(c.PartnerKey) < 16 {
 		return c, errors.New("invalid interbank partner secret")
 	}
 	return c, nil
+}
+
+// HTTP is restricted to a loopback mock in the explicitly isolated sandbox.
+// The normal bank configuration remains HTTPS-only.
+func validSandboxPartnerURL(raw string) bool {
+	u, e := url.Parse(raw)
+	return os.Getenv("INTERBANK_TEST_MODE") == "true" && os.Getenv("ENTORNO") == "interbank-sandbox" && e == nil &&
+		u.Scheme == "http" && (u.Hostname() == "127.0.0.1" || u.Hostname() == "localhost" || u.Hostname() == "::1") &&
+		u.User == nil && u.RawQuery == "" && u.Fragment == "" && u.Path == "/interbank/v1"
 }
 
 func validPartnerURL(raw string) bool {
@@ -117,6 +126,7 @@ func (r Result) Valid() bool {
 // Request is an internal RPC envelope. Peer/customer identity is assigned only
 // by the Gateway after API-key/JWT validation, never from an external JSON body.
 type Request struct {
+	Scenario string          `json:"scenario,omitempty"`
 	Action   string          `json:"action"`
 	ID       string          `json:"id,omitempty"`
 	Key      string          `json:"key,omitempty"`

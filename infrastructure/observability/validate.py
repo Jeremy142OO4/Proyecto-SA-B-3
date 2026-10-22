@@ -9,10 +9,13 @@ import yaml
 
 directory=Path(__file__).resolve().parent
 subprocess.run([sys.executable,str(directory/'alerting.py'),'--check'],check=True)
+subprocess.run([sys.executable,str(directory/'system_dashboard.py'),'--check'],check=True)
+subprocess.run([sys.executable,str(directory/'test_system_dashboard.py')],check=True)
 subprocess.run([sys.executable,str(directory/'test_alerting.py')],check=True)
 subprocess.run([sys.executable,str(directory/'test_promql.py')],check=True)
 subprocess.run([sys.executable,str(directory/'test_grafana.py')],check=True)
 subprocess.run([sys.executable,str(directory/'test_scripts.py')],check=True)
+subprocess.run([sys.executable,str(directory/'test_scenarios.py')],check=True)
 subprocess.run(['helm','lint',str(directory/'chart')],check=True)
 rendered=subprocess.check_output(['helm','template','bank-observability',str(directory/'chart'),'--namespace','bank-usac-observability'],text=True)
 objects=list(yaml.safe_load_all(rendered))
@@ -49,6 +52,7 @@ for obj in access_objects:
         assert env['GF_SECURITY_COOKIE_SECURE'] == 'true'
         assert env['GF_SERVER_ROOT_URL'] == 'https://example.run.app/'
 json.loads(configmaps['grafana-dashboards']['overview.json'])
+assert json.loads(configmaps['grafana-dashboards']['scenarios.json'])['uid']=='bank-scenarios'
 datasources=yaml.safe_load(configmaps['grafana-config']['config.yaml'])['datasources']
 matcher=datasources[1]['jsonData']['derivedFields'][0]['matcherRegex']
 assert re.search(matcher,json.dumps({'traceId':'a'*32})),'Log-to-trace link does not match JSON'

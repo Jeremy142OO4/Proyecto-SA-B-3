@@ -26,22 +26,40 @@ El formulario y listado del frontend corresponden al punto 9. Nginx reenvía `/i
 
 ## Configuración
 
-El CI usa `INTERBANK_ENABLED_DEV` y `INTERBANK_ENABLED_PROD` (variables de GitHub, `false` si no están definidas), `INTERBANK_PARTNER_BASE_URL` (variable, opcional) y las claves `INTERBANK_API_KEY` / `INTERBANK_PARTNER_API_KEY` (Secrets). `configure-interbank.py` aplica el Secret sin imprimir claves y guarda indicador/URL en la revisión de los tres Deployments. La recepción solo requiere el indicador, la clave propia y las dependencias locales operativas. La clave y URL salientes pueden completarse después; se mantienen las validaciones HTTPS cuando se proporciona una URL.
+El CI usa `INTERBANK_ENABLED_DEV` y `INTERBANK_ENABLED_PROD` (variables de GitHub, `false` si no están definidas), `INTERBANK_PARTNER_BASE_URL` (variable, opcional) y las claves `INTERBANK_API_KEY` / `INTERBANK_PARTNER_API_KEY` (Secrets). `configure-interbank.py` aplica el Secret sin imprimir claves y guarda indicador/URL en la revisión de los cuatro Deployments. La recepción solo requiere el indicador, la clave propia y las dependencias locales operativas. La clave y URL salientes pueden completarse después; se mantienen las validaciones HTTPS cuando se proporciona una URL.
 
 Sin configuración saliente: `/health`, consultas, recepción, callbacks entrantes y cancelaciones siguen operativos. Los depósitos recibidos se procesan normalmente; el resultado y callback se conservan en base de datos y reintentan dentro de las 24 horas del contrato. Los envíos nuevos de clientes responden `503 PARTNER_NOT_CONFIGURED` antes de crear reservas. Las reservas previas no se liberan por confundir configuración local incompleta con una caída remota. Los reversos y conciliación salientes quedan pendientes; no se inicia un depósito de devolución sin tener destino configurado. Después de configurar URL/clave, el despliegue reinicia los servicios y reanuda los trabajos persistidos dentro de su ventana. Si el callback agotó las 24 horas, requiere revisión/conciliación; no se marca entregado ni se reintenta indefinidamente.
 
-Gateway y Transacciones consumen opcionalmente el Secret separado `bank-usac-interbank`, sin valores reales en Git:
+Gateway, Transacciones y Pagos consumen opcionalmente el Secret separado `bank-usac-interbank`, sin valores reales en Git:
 
 - `INTERBANK_API_KEY`: clave que valida BANK03 en las llamadas entrantes.
 - `INTERBANK_PARTNER_API_KEY`: clave que valida BANK14 en nuestras llamadas salientes.
 
 ConfigMap: `INTERBANK_BANK_CODE=BANK03`, `INTERBANK_PARTNER_BANK_CODE=BANK14`, `INTERBANK_PARTNER_BASE_URL` HTTPS terminada exactamente en `/interbank/v1`, y `INTERBANK_ENABLED`.
 
-Habilitar el indicador en Gateway, Cuentas y Transacciones conjuntamente, con sus migraciones aplicadas previamente. La URL pública de BANK03 se acuerda con BANK14 (`INTERBANK_PUBLIC_BASE_URL` sirve para documentar/validar el acuerdo, no es un destino tomado de solicitudes entrantes). Los callbacks usan la URL fija de la pareja: no aceptar una URL arbitraria del cuerpo. No seguir redirecciones ni desactivar la validación TLS.
+Habilitar el indicador en Gateway, Cuentas, Transacciones y Pagos conjuntamente, con sus migraciones aplicadas previamente. La URL pública de BANK03 se acuerda con BANK14 (`INTERBANK_PUBLIC_BASE_URL` sirve para documentar/validar el acuerdo, no es un destino tomado de solicitudes entrantes). Los callbacks usan la URL fija de la pareja: no aceptar una URL arbitraria del cuerpo. No seguir redirecciones ni desactivar la validación TLS.
+
+## Responsabilidades y salida interbancaria
+
+Transaction conserva la coordinación durable: reservas, estados, reintentos,
+recuperación, reversos y conciliación. No tiene cliente HTTP del banco externo
+en código de producción. Envía comandos por RabbitMQ a
+`pagos.interbancarios.salida`, propagando el contexto W3C y la correlación.
+
+Payment consume esa cola y es el único propietario del cliente HTTPS externo.
+Realiza una llamada por comando, conserva el cuerpo, la clave de idempotencia y
+la respuesta HTTP sin reinterpretar el contrato. No reserva fondos ni inicia
+reintentos propios; la persistencia de Transaction decide cuándo reintentar.
+Esto incluye depósitos, callbacks salientes, consultas, cancelaciones y reversos.
+
+Grafana mantiene estados y resultados en Transaction y observa la salida HTTP
+en Payment. El dashboard separado de escenarios incluye ambas partes de la
+traza y un panel de llamadas externas de Payment; los otros dashboards y el SLO
+99.5 % no cambian.
 
 ## Pruebas reproducibles
 
-El CI ejecuta `infrastructure/scripts/test-interbank.sh` para cada componente afectado: PostgreSQL efímero para reservas/depósitos, mock Python del contrato para aceptación/rechazo y callbacks HTTP reales de loopback, y RabbitMQ efímero para RPC entre réplicas/reinicio del consumidor. Los tests nunca leen las bases o claves reales del proyecto. Localmente se puede usar `TEST_DATABASE_URL` de una instancia desechable y `INTERBANK_MOCK_PYTHON` con PyYAML instalado para ejecutar `go test -count=1 ./internal/interbank` desde cada servicio. Sin esas variables los tests que requieren dependencias externas se omiten explícitamente.
+El CI ejecuta `infrastructure/scripts/test-interbank.sh` para cada componente afectado: PostgreSQL efímero para reservas/depósitos, mock Python del contrato para aceptación/rechazo y callbacks HTTP reales de loopback, y RabbitMQ efímero para RPC entre réplicas/reinicio del consumidor. Los tests nunca leen las bases o claves reales del proyecto. Localmente se puede usar `TEST_DATABASE_URL` de una instancia desechable y `INTERBANK_MOCK_PYTHON` con PyYAML instalado para ejecutar `go test -count=1 ./internal/interbank` desde cada servicio. Para Payment, `TEST_AMQP_URL` habilita la prueba con RabbitMQ aislado y un banco HTTPS de prueba; verifica todos los endpoints y la conservación del Trace ID al pasar de AMQP a HTTP. El CI provisiona ese broker con `test-interbank.sh payment-service`. El adaptador HTTP directo que usan algunas pruebas de coordinación existe solamente en archivos `_test.go`, no en la aplicación desplegada. Sin esas variables los tests que requieren dependencias externas se omiten explícitamente.
 
 Las migraciones aditivas están incluidas en el paso de preparación del despliegue. Se prueban la reejecución y los duplicados concurrentes. Sus migraciones de bajada se niegan a eliminar recibos financieros existentes; el rollback de imágenes no borra reservas ni datos.
 

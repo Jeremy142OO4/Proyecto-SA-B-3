@@ -34,7 +34,9 @@ metadata:
   name: $name
 spec:
   backoffLimit: 0
-  activeDeadlineSeconds: 90
+  # Includes scheduling, autoscaler warm-up and image pull, not only SQL execution.
+  # PostgreSQL connection/statement/lock timeouts remain independently bounded.
+  activeDeadlineSeconds: 300
   ttlSecondsAfterFinished: 300
   template:
     spec:
@@ -71,13 +73,13 @@ EOF
 done <<'SERVICES'
 service-customer URL_BASE_DATOS_CLIENTES 000006_persistir_contexto_traza 000007_customer_lifecycle
 account-service URL_BASE_DATOS_CUENTAS 000005_persistir_contexto_traza 000006_monitoreo_cuentas 000007_reservas_interbancarias 000008_recuperacion_interbancaria
-transaction-service URL_BASE_DATOS_TRANSACCIONES 000004_persistir_contexto_traza 000005_traza_transferencia 000006_interbancaria 000007_recuperacion_interbancaria
-payment-service URL_BASE_DATOS_PAGOS 000004_persistir_contexto_traza 000005_simulacion_avanzada
+transaction-service URL_BASE_DATOS_TRANSACCIONES 000004_persistir_contexto_traza 000005_traza_transferencia 000006_interbancaria 000007_recuperacion_interbancaria 000008_interbank_scenario
+payment-service URL_BASE_DATOS_PAGOS 000004_persistir_contexto_traza 000005_simulacion_avanzada 000006_mock_interbank 000007_mock_recovery
 service-notification-audit URL_BASE_DATOS_AUDITORIA 000002_add_event_severity 000003_nivel_notificaciones 000004_consulta_auditoria_trazas
 SERVICES
 for resource in "${resources[@]}"; do
   if [[ "$resource" == job/* ]]; then
-    if ! kubectl -n "$KUBE_NAMESPACE" wait --for=condition=complete "$resource" --timeout=120s; then
+    if ! kubectl -n "$KUBE_NAMESPACE" wait --for=condition=complete "$resource" --timeout=330s; then
       echo "Migration failed: $resource; rollout stopped" >&2
       kubectl -n "$KUBE_NAMESPACE" logs "$resource" || true
       exit 1

@@ -19,10 +19,15 @@ spec:
       labels: {app.kubernetes.io/name: {{ $name }}}
       annotations:
         checksum/config: {{ tpl ($.Files.Get (printf "config/%s" $component.config)) $ | sha256sum }}
+        {{- if eq $name "otel-collector" }}
+        checksum/system-exporter: {{ $.Files.Get "config/system_exporter.py" | sha256sum }}
+        {{- end }}
         {{- if eq $name "grafana" }}
         checksum/dashboards: {{ $.Files.Get "dashboards/overview.json" | sha256sum }}
+        checksum/sistema: {{ $.Files.Get "dashboards/sistema.json" | sha256sum }}
         checksum/slo: {{ $.Files.Get "dashboards/slo.json" | sha256sum }}
         checksum/prueba1: {{ $.Files.Get "dashboards/prueba1.json" | sha256sum }}
+        checksum/scenarios: {{ $.Files.Get "dashboards/scenarios.json" | sha256sum }}
         checksum/alerting: {{ $.Files.Get "alerting/bank.json" | sha256sum }}
         checksum/access: {{ $.Values.access | toJson | sha256sum }}
         {{- end }}
@@ -112,11 +117,40 @@ spec:
             {{- if eq $name "grafana" }}
             - {name: dashboards, mountPath: /etc/grafana/provisioning/dashboards/bank.yaml, subPath: provider.yaml, readOnly: true}
             - {name: dashboards, mountPath: /etc/grafana/bank-dashboards/overview.json, subPath: overview.json, readOnly: true}
+            - {name: dashboards, mountPath: /etc/grafana/bank-dashboards/sistema.json, subPath: sistema.json, readOnly: true}
             - {name: dashboards, mountPath: /etc/grafana/bank-dashboards/slo.json, subPath: slo.json, readOnly: true}
             - {name: dashboards, mountPath: /etc/grafana/bank-dashboards/prueba1.json, subPath: prueba1.json, readOnly: true}
+            - {name: dashboards, mountPath: /etc/grafana/bank-dashboards/scenarios.json, subPath: scenarios.json, readOnly: true}
             - {name: alerting, mountPath: /etc/grafana/provisioning/alerting/bank.json, subPath: bank.json, readOnly: true}
             {{- end }}
+        {{- if eq $name "otel-collector" }}
+        - name: system-metrics
+          image: {{ $.Values.systemMetrics.image | quote }}
+          command: [python, -B, /etc/bank-system/system_exporter.py]
+          env:
+            - {name: APPLICATION_NAMESPACE, value: {{ $.Values.applicationNamespace | quote }}}
+            - {name: ENVIRONMENT, value: {{ $.Values.environment | quote }}}
+          ports:
+            - {name: system-metrics, containerPort: 9466}
+          resources:
+            requests: {cpu: 5m, memory: 32Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          readinessProbe:
+            httpGet: {path: /health, port: system-metrics}
+          livenessProbe:
+            httpGet: {path: /health, port: system-metrics}
+          volumeMounts:
+            - {name: system-exporter, mountPath: /etc/bank-system, readOnly: true}
+        {{- end }}
       volumes:
+        {{- if eq $name "otel-collector" }}
+        - name: system-exporter
+          configMap: {name: bank-system-exporter}
+        {{- end }}
         - name: config
           configMap: {name: {{ $name }}-config}
         - {name: tmp, emptyDir: {sizeLimit: 64Mi}}
@@ -139,6 +173,9 @@ spec:
   type: ClusterIP
   selector: {app.kubernetes.io/name: {{ $name }}}
   ports:
+    {{- if eq $name "otel-collector" }}
+    - {name: system-metrics, port: 9466, targetPort: system-metrics}
+    {{- end }}
     {{- range $component.ports }}
     - {name: {{ .name }}, port: {{ .port }}, targetPort: {{ .name }}}
     {{- end }}

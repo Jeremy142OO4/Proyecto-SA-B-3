@@ -1,7 +1,6 @@
 package interbank
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,9 +10,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	"io"
 	"log/slog"
-	"net/http"
 	"time"
 )
 
@@ -31,14 +28,7 @@ func (s *Service) get(ctx context.Context, path string) (int, []byte, error) {
 	return 0, nil, errors.New("partner reader unavailable")
 }
 
-type HTTPPartner struct {
-	BaseURL, Key string
-	Client       *http.Client
-}
-
 var ErrPartnerNotConfigured = errors.New("interbank outbound partner not configured")
-
-func (p *HTTPPartner) Ready() bool { return p.BaseURL != "" && len(p.Key) >= 16 }
 
 func (s *Service) partnerReady() bool {
 	if s.Partner == nil {
@@ -47,46 +37,9 @@ func (s *Service) partnerReady() bool {
 	if p, ok := s.Partner.(interface{ Ready() bool }); ok {
 		return p.Ready()
 	}
-	return true // Alternate transports used by isolated tests.
+	return true
 }
 
-func NewPartner(c Config) *HTTPPartner {
-	return &HTTPPartner{BaseURL: c.PartnerURL, Key: c.PartnerKey, Client: &http.Client{Timeout: 5 * time.Second, Transport: telemetry.Transport{}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
-}
-func (p *HTTPPartner) Post(ctx context.Context, path, key string, body any) (int, []byte, error) {
-	b, e := json.Marshal(body)
-	if e != nil {
-		return 0, nil, e
-	}
-	return p.request(ctx, "POST", path, key, b)
-}
-func (p *HTTPPartner) Get(ctx context.Context, path string) (int, []byte, error) {
-	return p.request(ctx, "GET", path, "", nil)
-}
-func (p *HTTPPartner) request(ctx context.Context, method, path, key string, b []byte) (int, []byte, error) {
-	if !p.Ready() {
-		return 0, nil, ErrPartnerNotConfigured
-	}
-	req, e := http.NewRequestWithContext(ctx, method, p.BaseURL+path, bytes.NewReader(b))
-	if e != nil {
-		return 0, nil, e
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Api-Key", p.Key)
-	if key != "" {
-		req.Header.Set("Idempotency-Key", key)
-	}
-	resp, e := p.Client.Do(req)
-	if e != nil {
-		return 0, nil, e
-	}
-	defer resp.Body.Close()
-	data, e := io.ReadAll(io.LimitReader(resp.Body, 65537))
-	if len(data) > 65536 {
-		return 0, nil, errors.New("partner response too large")
-	}
-	return resp.StatusCode, data, e
-}
 func (s *Service) account(ctx context.Context, c AccountCommand) (AccountResult, error) {
 	if s.Account != nil {
 		return s.Account(ctx, c)
@@ -162,6 +115,11 @@ func (s *Service) Step(parent context.Context) (worked bool, failureErr error) {
 			_, _ = s.DB.Exec(retryctx, `UPDATE depositos_interbancarios SET proximo=clock_timestamp()+interval '5 seconds' WHERE id=$1 AND intentos=$2`, row.Transfer.ID, row.Attempts)
 		}
 	}()
+	if row.Scenario != "" {
+		local := *s
+		local.Partner = &BrokerPartner{Config: s.Config, Scenario: row.Scenario, Call: bankrpc.Call}
+		s = &local
+	}
 	t := row.Transfer
 	n, _ := Cents(t.Amount)
 	cmd := AccountCommand{ID: t.ID, Cents: n, Expires: t.Expires}
@@ -259,6 +217,17 @@ func (s *Service) Step(parent context.Context) (worked bool, failureErr error) {
 			// or release existing holds via timeout recovery for this reason.
 			delay = time.Minute
 		case row.State == "PENDING_RESERVATION":
+			if row.RefundOf == "" {
+				verified, err := s.verifyKYC(ctx, t.ID, row.Customer)
+				if err != nil {
+					return true, err
+				}
+				if !verified {
+					row.State = "REJECTED"
+					row.Reason = "KYC_NOT_VERIFIED"
+					break
+				}
+			}
 			cmd.Action = "reserve"
 			if row.RefundOf != "" {
 				cmd.Action = "refund_reserve"
