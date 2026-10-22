@@ -1,113 +1,116 @@
-# C4 — Contenedores (Fase 2)
-
-> **Nota de Fase 2:** Este documento actualiza la vista de contenedores C4 (Nivel 2) para reflejar los cambios introducidos en la segunda fase del proyecto: nuevas capacidades funcionales en los cinco microservicios, despliegue en GKE y bases de datos en VMs de GCP.
-
----
+# C4 - Contenedores (Fases 2 y 3)
 
 ## Propósito
 
-El diagrama de contenedores (C4, nivel 2) descompone el sistema Bank USAC en las aplicaciones y almacenes de datos que colaboran para cumplir los flujos bancarios. A diferencia del diagrama de contexto, aquí se muestran los cinco microservicios, el frontend, el API Gateway, RabbitMQ y las bases de datos independientes, junto con sus nuevas responsabilidades de Fase 2.
+El diagrama de contenedores descompone Bank USAC en las aplicaciones y almacenes de datos que colaboran para cumplir los flujos bancarios: frontend, API Gateway, cinco microservicios, RabbitMQ, instancias de Cloud SQL, el stack de observabilidad y los accesos HTTPS publicados por Cloud Run.
 
 ---
 
 ## Diagrama de contenedores
 
-![Diagrama de contenedores de Bank USAC](../Imagenes/componentesv3.drawio.png)
+![Diagrama de contenedores de Bank USAC](../imgF3/DiagramaContenedores.drawio.png)
 
 
 ## Contenedores de aplicación
 
 ### Frontend (React 18 + Nginx)
 
-- **Responsabilidad:** Interfaz de usuario para tres roles: Administrador, Cajero Receptor y Cliente.
-- **Tecnología:** React 18, Nginx como servidor estático.
-- **Despliegue Fase 2:** Cloud Run (GCP) o VM con Nginx — no en S3 ni almacenamiento estático puro.
-- **Interacción:** Única capa que el usuario final toca; se comunica exclusivamente con el API Gateway vía HTTPS.
+- **Responsabilidad:** interfaz para Administrador, Cajero Receptor y Cliente.
+- **Despliegue:** Cloud Run (GCP), conforme al enunciado.
+- **Interacción:** se comunica con el API Gateway; la ruta de red completa se describe en `despliegue.md`.
 
----
+### Proxy HTTPS interbancario (Cloud Run)  Fase 3
+
+- **Responsabilidad:** punto de entrada HTTPS para las llamadas de BANK14 hacia `/interbank/v1`.
+- **Flujo:** BANK14 → Proxy HTTPS (Cloud Run) → API Gateway. La entrada interbancaria **no** se procesa en el frontend.
 
 ### API Gateway (Go/Fiber)
 
-- **Responsabilidad:** Punto de entrada HTTP único. Valida JWT, roles y propiedad de recursos; publica comandos en RabbitMQ con `correlationId`; devuelve respuestas correlacionadas.
-- **Tecnología:** Go 1.22+, Fiber v2.
-- **Sin lógica de dominio:** No contiene reglas del negocio bancario. Enruta y delega.
-- **Fase 2:** Expone nuevos endpoints para gestión KYC, tipos de cuenta, historial de transacciones filtrado, pagos externos y clasificación de auditoría por severidad.
+- **Responsabilidad:** punto de entrada HTTP del backend. Valida JWT, roles y propiedad de recursos; publica comandos en RabbitMQ con `correlationId` y devuelve respuestas correlacionadas.
+- **Sin lógica de dominio.**
+- **Fase 3:** expone `/interbank/v1` para BANK14 y enruta esas solicitudes al servicio correspondiente.
 
----
+### Customer Service (Go/Fiber) — KYC
 
-### Customer Service (Go/Fiber) ★ KYC
+- **Responsabilidad:** clientes, usuarios, activación por correo y autenticación JWT.
+- **KYC:** solo clientes en estado `VERIFIED` pueden iniciar transferencias.
+- **Base de datos:** `customer_db` en `bank-usac-customer-db` (Cloud SQL).
 
-- **Responsabilidad:** Gestión de clientes, usuarios, activación por correo y autenticación JWT.
-- **Fase 2 — KYC:** Registra y actualiza el estado de validación del cliente: `PENDING → VERIFIED | REJECTED`. Solo clientes en estado `VERIFIED` pueden iniciar transferencias. Publica evento `customer.kyc.updated` al cambiar de estado.
-- **Base de datos:** `customer_db` en `vm-db-customer`.
-- **Comunicación:** Publica eventos vía Outbox → RabbitMQ. Consume: `customer.created`.
+### Account Service (Go/Fiber) — Tipos de cuenta
 
----
+- **Responsabilidad:** cuentas `AHORRO` y `CORRIENTE`, saldos y movimientos. Es el único servicio que **reserva, debita y libera fondos**, atendiendo solicitudes RPC por RabbitMQ.
+- **Base de datos:** `cuentas_db` en `bank-usac-account-db`.
 
-### Account Service (Go/Fiber) ★ Tipos de cuenta
+### Transaction Service (Go/Fiber) — Historial e interbancario
 
-- **Responsabilidad:** Cuentas monetarias y de ahorro, saldos, movimientos, créditos y débitos.
-- **Fase 2 — Tipos de cuenta:** Soporta cuentas de tipo `AHORRO` y `CORRIENTE`. Aplica reglas: saldo mínimo por tipo, comisión por transacción (configurable). Valida límites antes de procesar débitos.
-- **Base de datos:** `cuentas_db` en `vm-db-account`.
-- **Comunicación:** Consume comandos de débito/crédito; publica eventos `account.debited`, `account.credited`, `account.rejected`.
+- **Responsabilidad:** registro y estados de transferencias; coordina la Saga. No controla el dinero directamente: solicita a Account Service la reserva, el débito y la liberación de fondos.
+- **Estados de la Saga:** en español (`VALIDANDO_KYC`, `VALIDANDO_CUENTAS`, … `COMPLETADA`, `RECHAZADA`, con compensaciones).
+- **Fase 3:** módulo interbancario que envía transferencias a BANK14 por HTTPS y procesa las recibidas; estados interbancarios como `REJECTED` y `TIMEOUT`.
+- **Base de datos:** `transacciones_db` en `bank-usac-transaction-db`.
 
----
+### Payment Service (Go/Fiber) — Pagos externos
 
-### Transaction Service (Go/Fiber) ★ Historial
+- **Responsabilidad:** simulación de pagos externos con respuestas `SUCCESS`, `FAILED` y `TIMEOUT`; el timeout activa compensación.
+- **Base de datos:** `pagos_db` en `bank-usac-payment-db`.
 
-- **Responsabilidad:** Registro y estados de transferencias; coordina la Saga de débito, crédito, compensación y rechazo.
-- **Fase 2 — Historial:** Mantiene historial completo con estados intermedios `PENDING → APPROVED | FAILED`. Permite consultar historial por cuenta y filtrar por fecha y estado. Registra eventos sucesivos para trazabilidad.
-- **Base de datos:** `transacciones_db` en `vm-db-transaction`.
-- **Comunicación:** Inicia Saga publicando `transfer.debit.requested`; consume resultados de Account y Payment; publica `transfer.completed` o `transfer.failed`.
+### Notification & Audit Service (Go/Fiber) — Severidad
 
----
-
-### Payment Service (Go/Fiber) ★ Pagos externos
-
-- **Responsabilidad:** Validación y procesamiento de pagos internos o externos.
-- **Fase 2 — Simulación externa:** Simula integración con sistemas externos. Genera respuestas de tres tipos: `SUCCESS`, `FAILED`, `TIMEOUT`. El timeout activa compensación en la Saga. Registra cada intento en `external_provider_log`.
-- **Base de datos:** `pagos_db` en `vm-db-payment`.
-- **Comunicación:** Consume `payment.process.requested`; publica `payment.completed` o `payment.failed`.
-
----
-
-### Notification & Audit Service (Go/Fiber) ★ Severidad
-
-- **Responsabilidad:** Consume todos los eventos del sistema, envía correos de activación vía SMTP y mantiene auditoría e historial completo.
-- **Fase 2 — Clasificación por severidad:** Clasifica cada evento recibido en: `INFO` (operaciones normales), `WARNING` (situaciones atípicas) o `ERROR` (fallos que requieren atención). Genera notificaciones diferenciadas según el tipo. Almacena historial enriquecido con severidad, `correlation_id` y microservicio origen.
-- **Base de datos:** `audit_db` en `vm-db-audit`.
-- **Comunicación:** Suscriptor de todos los exchanges de eventos RabbitMQ. No publica comandos.
-
----
+- **Responsabilidad:** consume los eventos, envía correos SMTP y mantiene la auditoría clasificada en `INFO`, `WARNING` y `ERROR`.
+- **Base de datos:** `auditoria_db` en `bank-usac-notification-audit-db`.
 
 ### RabbitMQ (Broker AMQP)
 
-- **Responsabilidad:** Intermediario de mensajería asíncrona entre todos los microservicios.
-- **Exchanges configurados:**
+- **Responsabilidad:** mensajería asíncrona entre servicios.
 
 | Exchange | Tipo | Propósito |
 |---|---|---|
-| `commands` | Direct | Comandos dirigidos a un servicio específico |
-| `events` | Topic | Eventos de dominio publicados por los servicios |
-| `responses` | Direct | Respuestas correlacionadas al API Gateway |
-| `dead-letter` | Fanout | Mensajes fallidos para reinspección |
+| `commands` | Direct | Comandos a un servicio específico |
+| `events` | Topic | Eventos de dominio |
+| `responses` | Direct | Respuestas correlacionadas al Gateway |
+| `dead-letter` | Fanout | Mensajes fallidos |
 
-- **Cada consumidor** tiene cola durable y DLQ (Dead Letter Queue) independiente.
-- **Despliegue Fase 2:** Pod dedicado en GKE con `PersistentVolumeClaim` para durabilidad de colas.
+- **Despliegue:** pod dedicado en GKE con `PersistentVolumeClaim`.
 
 ---
 
-## Bases de datos (VMs GCP)
+## Bases de datos 
 
-Cada microservicio es propietario de una base PostgreSQL independiente ejecutada en una VM de Compute Engine. No existen consultas directas ni llaves foráneas entre bases de distintos servicios.
+Cada microservicio es propietario de una instancia independiente de Cloud SQL para PostgreSQL. No hay consultas ni llaves foráneas entre bases de distintos servicios. Los backups son los **backups administrados de Cloud SQL**; no se usa un bucket propio.
 
-| Base de datos | VM | Microservicio |
+| Base de datos | Instancia Cloud SQL | Microservicio |
 |---|---|---|
-| `customer_db` | `vm-db-customer` | Customer Service |
-| `cuentas_db` | `vm-db-account` | Account Service |
-| `transacciones_db` | `vm-db-transaction` | Transaction Service |
-| `pagos_db` | `vm-db-payment` | Payment Service |
-| `audit_db` | `vm-db-audit` | Notification & Audit |
+| `customer_db` | `bank-usac-customer-db` | Customer Service |
+| `cuentas_db` | `bank-usac-account-db` | Account Service |
+| `transacciones_db` | `bank-usac-transaction-db` | Transaction Service |
+| `pagos_db` | `bank-usac-payment-db` | Payment Service |
+| `auditoria_db` | `bank-usac-notification-audit-db` | Notification & Audit |
+
+---
+
+## Observabilidad  Fase 3
+
+Namespace `bank-usac-observability`.
+
+| Contenedor | Función | Retención |
+|---|---|---|
+| Agente de logs | Recolecta logs de los pods | — |
+| OpenTelemetry Collector | Recibe telemetría y logs; los reenvía a los backends | — |
+| Prometheus | Métricas | Hasta 30 días o 2 GB |
+| Tempo | Trazas | 48 h |
+| Loki | Logs | 48 h |
+| Grafana | Dashboards y alertas | — |
+
+- **Ruta de logs:** Agente de logs → Collector → Loki (el agente no escribe directamente en Loki).
+- **Acceso a Grafana:** mediante un proxy HTTPS en Cloud Run hacia el acceso privado de Grafana.
+
+---
+
+## Laboratorio de escenarios - Fase 3
+
+Entorno **aislado** en GKE para demostrar escenarios de fallo interbancario. Tiene su propio Gateway, RabbitMQ, servicios y datos, y el mock de BANK14 en un pod aislado donde un Transaction Service de laboratorio lo invoca por **HTTP en loopback**.
+
+- El mock **no es una alternativa de BANK14** ni un destino del Transaction Service normal. El servicio productivo no alterna entre BANK14 y el mock.
+- Ninguna conexión une el laboratorio con los servicios ni con los datos productivos.
 
 ---
 
@@ -115,28 +118,19 @@ Cada microservicio es propietario de una base PostgreSQL independiente ejecutada
 
 | Vista | Documento | Alcance |
 |---|---|---|
-| Contexto | `c4-contexto.md` | Actores externos y sistema como caja negra |
-| **Contenedores** | **este documento** | Microservicios, Gateway, RabbitMQ y bases de datos |
-| Componentes | `c4-componentes.md` | Estructura interna de Transaction Service (Fase 1) y nuevos servicios (Fase 2) |
-| Despliegue | `despliegue.md` | Dónde se ejecutan estos contenedores en GKE/GCP |
+| Contexto | `c4-contexto.md` | Bank USAC como un sistema, usuarios, BANK14 y correo |
+| **Contenedores** | **este documento** | Microservicios, Gateway, RabbitMQ, Cloud SQL, observabilidad y laboratorio |
+| Componentes | `c4-componentes.md` | Estructura interna de Transaction Service |
+| Despliegue | `despliegue.md` | Dónde se ejecutan los contenedores en GCP |
 
 ---
 
-## Recorrido principal (Fase 2 — Transferencia con KYC y Saga)
+## Recorrido principal (transferencia con Saga)
 
-1. El cliente opera desde React. El Gateway valida JWT y KYC (`VERIFIED`) antes de publicar el comando.
-2. Transaction Service inicia la Saga publicando `transfer.debit.requested` con `correlationId`.
-3. Account Service valida tipo de cuenta, saldo mínimo y aplica comisión si corresponde. Publica `account.debited`.
-4. Payment Service procesa el pago externo (simulado). Si hay timeout, publica `payment.failed` y la Saga compensa el débito.
-5. Transaction Service registra el estado final (`APPROVED` o `FAILED`) en el historial.
-6. Notification & Audit clasifica el evento resultante como `INFO` o `ERROR` y registra en `audit_db`.
-7. El Gateway recibe la respuesta correlacionada y la devuelve al frontend.
-
----
-
-## Notas de implementación
-
-- Las **líneas continuas** representan solicitudes HTTPS del frontend al Gateway.
-- Las **líneas discontinuas** representan comandos y eventos AMQP.
-- Las **conexiones a PostgreSQL** son exclusivas del microservicio propietario — nunca compartidas.
-- Todos los microservicios implementan el patrón **Outbox** para garantizar exactly-once en la publicación de eventos.
+1. El cliente opera desde el frontend; el Gateway valida JWT y KYC.
+2. Transaction Service inicia la Saga y solicita a Account Service, por RPC en RabbitMQ, validar cuentas y reservar fondos.
+3. Account Service reserva y debita; Transaction Service avanza los estados.
+4. Si el destino es otro banco, se envía a BANK14 por HTTPS; si responde `REJECTED` o `TIMEOUT`, la Saga compensa liberando fondos.
+5. Transaction Service registra el estado final (`COMPLETADA` o `RECHAZADA`) en el historial.
+6. Notification & Audit clasifica el evento y lo registra en `auditoria_db`.
+7. El Gateway devuelve la respuesta correlacionada al frontend.

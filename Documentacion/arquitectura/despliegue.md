@@ -1,8 +1,8 @@
 # Diagrama de despliegue
 
-El presente documento describe el despliegue de **Bank USAC** durante la Fase 2. La solución utiliza Google Cloud, un clúster administrado de Google Kubernetes Engine (GKE), RabbitMQ para comunicación asíncrona y cinco instancias independientes de Cloud SQL para PostgreSQL.
+El presente documento describe el despliegue de **Bank USAC** hasta la Fase 3. La solución utiliza Google Cloud, el clúster administrado `bank-usac-gke` (GKE), RabbitMQ para comunicación asíncrona, cinco instancias independientes de Cloud SQL para PostgreSQL, un stack de observabilidad, la integración interbancaria con BANK14 y un laboratorio aislado de escenarios.
 
-![Diagrama de despliegue de Bank USAC](../Imagenes/DiagramaDespliegueFinal.drawio.png)
+![Diagrama de despliegue de Bank USAC](../imgF3/Diagrama%20de%20Despliegue.drawio.png)
 
 ## 1. Vista general
 
@@ -12,7 +12,7 @@ El sistema está dividido en tres capas principales:
 2. **Componentes de aplicación**, desplegados dentro de Kubernetes.
 3. **Persistencia**, proporcionada por instancias independientes de Cloud SQL.
 
-El usuario accede al frontend mediante un navegador. El frontend se comunica con el punto de entrada del backend y las operaciones de negocio se procesan mediante los microservicios. La comunicación entre servicios utiliza RabbitMQ y los microservicios acceden exclusivamente a la instancia de base de datos correspondiente a su dominio.
+El usuario accede al frontend (Cloud Run) mediante un navegador. Cloud Run llega al API Gateway pasando por el proxy/frontend de GKE y luego por comunicación HTTP interna (no es HTTPS de extremo a extremo). Las operaciones de negocio se procesan mediante los microservicios. La comunicación entre servicios utiliza RabbitMQ y los microservicios acceden exclusivamente a la instancia de base de datos correspondiente a su dominio.
 
 Las bases de datos no se ejecutan dentro de Kubernetes. Se utiliza Cloud SQL como servicio administrado de PostgreSQL, con una instancia independiente por microservicio.
 
@@ -28,17 +28,22 @@ Las bases de datos no se ejecutan dentro de Kubernetes. Se utiliza Cloud SQL com
 | Mensajería | RabbitMQ | Kubernetes |
 | Bases de datos | Cloud SQL para PostgreSQL | Terraform y Google Cloud |
 | Imágenes | Registry de contenedores | CI/CD |
-| Frontend | React y Nginx | Kubernetes o servicio cloud |
+| Frontend | React y Nginx | Cloud Run |
+| Proxy HTTPS interbancario | Cloud Run | Google Cloud |
+| Proxy HTTPS de Grafana | Cloud Run | Google Cloud |
+| Observabilidad | OTel Collector, Prometheus, Tempo, Loki, Grafana | Kubernetes |
 | Autoescalado | Horizontal Pod Autoscaler | Kubernetes |
 
 ## 3. Entornos de despliegue
 
-Los ambientes se separan mediante namespaces dentro del clúster Kubernetes:
+Los ambientes se separan mediante namespaces dentro del clúster `bank-usac-gke`:
 
 | Namespace | Propósito | Despliegue |
 |---|---|---|
-| `dev` | Integración y validación de funcionalidades | Merge hacia `develop` |
-| `prod` | Ambiente productivo | Merge hacia `main` o `master` |
+| `bank-usac-dev` | Integración y validación de funcionalidades | Merge hacia `develop` |
+| `bank-usac` | Ambiente productivo | Merge hacia `main` o `master` |
+| `bank-usac-observability` | Stack de observabilidad | Manifiestos / Helm |
+| Laboratorio de escenarios | Entorno aislado de pruebas de fallos interbancarios | Ver sección 15.1 |
 
 Las imágenes de producción se generan y publican durante el proceso de release. No se deben utilizar imágenes con la etiqueta `latest`.
 
@@ -145,6 +150,8 @@ Cada instancia se configura con:
 - Un usuario por instancia.
 - Contraseña generada automáticamente.
 
+Los backups son los backups administrados de Cloud SQL; no se utiliza un bucket propio de Cloud Storage porque no está implementado en el Terraform actual.
+
 Cloud SQL se eligió porque permite mantener el aislamiento por microservicio sin administrar manualmente el sistema operativo ni la instalación del motor de base de datos. La infraestructura subyacente es administrada por Google Cloud, mientras Terraform mantiene la configuración reproducible.
 
 ### 6.2. Seguridad de conexión
@@ -230,13 +237,9 @@ No se debe utilizar la etiqueta `latest`.
 
 ## 11. Frontend
 
-El frontend se despliega en una opción permitida por el enunciado:
+El frontend se despliega en **Google Cloud Run**, conforme al enunciado. No se utiliza Amazon S3.
 
-- Dentro de Kubernetes.
-- En una instancia virtual.
-- En un servicio cloud como Google Cloud Run.
-
-No se utiliza Amazon S3 como hosting del frontend.
+Ruta de acceso al backend: Cloud Run → proxy/frontend de GKE → API Gateway, con comunicación HTTP interna en el tramo dentro del clúster.
 
 La documentación definitiva debe indicar la tecnología, URL, variables de entorno, proceso de construcción y proceso de despliegue.
 
@@ -259,7 +262,7 @@ Después del merge hacia `develop` se ejecutan nuevamente las validaciones y pos
 - Construcción de imágenes Docker.
 - Etiquetado de imágenes.
 - Publicación de imágenes.
-- Despliegue en el namespace `dev`.
+- Despliegue en el namespace `bank-usac-dev`.
 
 ### 12.3. Release
 
@@ -290,18 +293,18 @@ El despliegue a producción se realiza después del merge hacia `main` o `master
 
 ## 14. Diferencias con la Fase 1
 
-| Aspecto | Fase 1 | Fase 2 |
-|---|---|---|
-| Kubernetes | Entorno local | Clúster GKE administrado en Google Cloud |
-| Bases de datos | Entorno local | Cinco instancias independientes de Cloud SQL |
-| Ubicación de las bases | Host local o contenedores locales | Fuera de Kubernetes, en Cloud SQL |
-| Entornos | Entorno local | Namespaces `dev` y `prod` |
-| Provisionamiento | Manual o local | Terraform |
-| Despliegue | Manual o semi-manual | Pipeline CI/CD |
-| Autoescalado | No implementado | HPA al 80 % de CPU |
-| Registry | No requerido | Registry con imágenes versionadas |
-| Comunicación | Microservicios | Comunicación asíncrona mediante RabbitMQ |
-| Trazabilidad | Básica | `correlationId`, idempotencia y auditoría |
+| Aspecto | Fase 1 | Fase 2 | Fase 3 |
+|---|---|---|---|
+| Kubernetes | Entorno local | Clúster GKE administrado en Google Cloud | Sin cambios (`bank-usac-gke`) |
+| Bases de datos | Entorno local | Cinco instancias independientes de Cloud SQL | Sin cambios |
+| Ubicación de las bases | Host local o contenedores locales | Fuera de Kubernetes, en Cloud SQL | Sin cambios |
+| Entornos | Entorno local | Namespaces `bank-usac-dev` y `bank-usac` | Se agregan `bank-usac-observability` y el laboratorio aislado |
+| Provisionamiento | Manual o local | Terraform | Sin cambios |
+| Despliegue | Manual o semi-manual | Pipeline CI/CD | Se agrega proxy HTTPS en Cloud Run para BANK14 y Grafana |
+| Autoescalado | No implementado | HPA al 80 % de CPU | Sin cambios |
+| Registry | No requerido | Registry con imágenes versionadas | Sin cambios |
+| Comunicación | Microservicios | Comunicación asíncrona mediante RabbitMQ | Se agrega HTTPS con BANK14 (`/interbank/v1`) |
+| Trazabilidad | Básica | `correlationId`, idempotencia y auditoría | Métricas, trazas, logs y alertas |
 
 ## 15. Resumen de responsabilidades
 
@@ -317,8 +320,10 @@ Terraform
 └── Node pool
 
 Kubernetes
-├── Namespaces dev y prod
-├── Frontend
+├── Namespaces bank-usac-dev, bank-usac y bank-usac-observability
+├── Laboratorio de escenarios (aislado)
+├── Stack de observabilidad
+├── Proxy / frontend de acceso al Gateway
 ├── API Gateway
 ├── RabbitMQ
 ├── Customer Service
@@ -331,6 +336,11 @@ Kubernetes
 ├── HPA
 └── Rolling updates
 
+Cloud Run
+├── Frontend
+├── Proxy HTTPS interbancario
+└── Proxy HTTPS de Grafana
+
 CI/CD
 ├── Build
 ├── Test
@@ -342,11 +352,40 @@ CI/CD
 └── Despliegue automatizado en producción
 ```
 
+### 15.1. Laboratorio de escenarios
+
+Entorno aislado dentro de GKE para demostrar fallos controlados interbancarios. Cuenta con su propio Gateway, RabbitMQ, servicios y datos, y el mock de BANK14 en un pod aislado. Un Transaction Service de laboratorio se comunica con el mock por **HTTP en loopback**.
+
+- No comparte servicios ni datos con producción.
+- El Transaction Service productivo **no alterna** su destino entre BANK14 y el mock; BANK14 se consume por HTTPS.
+
+## 15.2. Observabilidad (Fase 3)
+
+Namespace `bank-usac-observability`. El namespace de producción `bank-usac` no aloja el stack.
+
+| Componente | Función | Retención |
+|---|---|---|
+| Agente de logs | Recolecta logs de los pods | — |
+| OTel Collector | Recibe y reenvía telemetría | — |
+| Prometheus | Métricas | Hasta 30 días, limitado a 2 GB |
+| Tempo | Trazas | 48 h |
+| Loki | Logs | 48 h |
+| Grafana | Dashboards y alertas | — |
+
+- Ruta de logs: Agente de logs → Collector → Loki.
+- Acceso a Grafana: proxy HTTPS en Cloud Run → acceso privado de Grafana (no se usa `kubectl port-forward`).
+- Las alertas se envían por correo.
+
+## 15.3. Integración interbancaria (Fase 3)
+
+- Entrada: BANK14 → Proxy HTTPS interbancario (Cloud Run) → API Gateway (`/interbank/v1`).
+- Salida: Transaction Service → BANK14 por HTTPS.
+
 ## 16. Aclaración arquitectónica final
 
 Terraform provisiona la infraestructura base de Google Cloud, incluyendo la red, el clúster GKE, el node pool y las cinco instancias independientes de Cloud SQL.
 
-Kubernetes administra los componentes de aplicación que se ejecutan dentro del clúster, y el pipeline CI/CD automatiza la construcción, publicación y actualización de las aplicaciones.
+Cloud Run aloja el frontend y los proxies HTTPS. Kubernetes administra los componentes de aplicación que se ejecutan dentro del clúster, y el pipeline CI/CD automatiza la construcción, publicación y actualización de las aplicaciones.
 
 Cloud SQL se utiliza como servicio administrado de PostgreSQL. Por lo tanto, las bases de datos no se ejecutan dentro de Kubernetes ni se utiliza una única base de datos compartida por todos los microservicios.
 
