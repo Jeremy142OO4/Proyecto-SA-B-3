@@ -82,6 +82,26 @@ class RollbackTests(unittest.TestCase):
             self.assertFalse(json.loads(path.read_text())['exists'])
 
 
+class StagedImageTests(unittest.TestCase):
+    def test_copy_preserves_digest_before_returning_cloud_run_reference(self):
+        helper = module('cloud-run-image')
+        target = 'us-central1-docker.pkg.dev/bank-usac/bank-usac-cloud-run/frontend@sha256:' + 'a'*64
+        calls = []
+        def run(args, **kwargs):
+            calls.append(args)
+            return subprocess.CompletedProcess(args, 0, stdout=json.dumps([target]))
+        self.assertEqual(helper.stage(IMAGE, 'bank-usac', 'test', run), target)
+        self.assertTrue(any(c[:2] == ['docker', 'push'] for c in calls))
+        self.assertFalse(any('deploy' in c for c in calls))
+
+    def test_mismatched_copy_stops_before_deployment(self):
+        helper = module('cloud-run-image')
+        def run(args, **kwargs):
+            return subprocess.CompletedProcess(args, 0, stdout='[]')
+        with self.assertRaises(ValueError):
+            helper.stage(IMAGE, 'bank-usac', 'test', run)
+
+
 class ImageTests(unittest.TestCase):
     def response(self, data):
         body = json.dumps(data).encode()

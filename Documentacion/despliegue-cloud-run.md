@@ -56,3 +56,11 @@ Tras desplegar, verificar Ready=True, imagen por digest, revisión servida y res
 del frontend. No se requiere migración SQL por esta corrección.
 
 Referencia: [despliegue por digest y caché de imágenes públicas en Cloud Run](https://docs.cloud.google.com/run/docs/deploying).
+
+## Publicación en Artifact Registry
+
+El pipeline verifica el digest linux/amd64 en Docker Hub y copia ese contenido con Docker al repositorio privado `us-central1-docker.pkg.dev/PROYECTO/bank-usac-cloud-run/frontend`. Antes de modificar Cloud Run comprueba que el RepoDigest publicado coincide con el original. Cloud Run recibe la referencia de Artifact Registry por digest; no depende del mirror público de Docker Hub. Se aplica a dev y prod.
+
+El repositorio `bank-usac-cloud-run` se aprovisiona una vez en us-central1. CI necesita `roles/artifactregistry.writer` limitado a ese repositorio; el workflow no crea repositorios ni modifica IAM. Su asignación requiere autorización administrativa explícita. Las copias conservan etiquetas por commit; su almacenamiento queda sujeto a la política de retención configurada en Artifact Registry.
+
+La prueba `test-cloud-run.py` comprueba también que la copia mantiene el digest y que una discrepancia impide continuar con el despliegue. Publicar un commit nuevo activa el workflow corregido; reintentar un commit anterior usa su workflow antiguo.
