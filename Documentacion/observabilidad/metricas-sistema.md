@@ -95,3 +95,22 @@ pruebas existentes. El despliegue se realiza con el pipeline de observabilidad e
 no requiere migraciones SQL. Luego abrir `/d/bank-system-metrics` y comprobar
 `bank_system_source_up=1`, CPU/memoria, paneles y estados de las nueve reglas.
 Los percentiles/rates necesitan al menos dos muestras y actividad en su ventana.
+
+### Bootstrap de permisos del Collector
+
+La identidad CI puede desplegar workloads, pero no necesariamente modificar Roles.
+El cambio que incorpora lectura de `metrics.k8s.io/pods` requiere una sincronización
+administrativa inicial del Role `bank-observability`, solo en `bank-usac-dev`.
+No requiere conceder `cluster-admin` ni administración de RBAC al pipeline.
+
+El 21 de octubre de 2026 se sincronizaron las reglas del Role existente con el chart,
+incluido su orden, conservando las anotaciones de propiedad de Helm. La única capacidad
+añadida fue `get/list` de métricas de pods. Se debe reintentar el job fallido; el rollout
+anterior fue revertido por `--atomic` y no se considera desplegado.
+
+`rbac_preflight.py` se ejecuta antes de sincronizar Secrets o iniciar Helm: si el Role
+ya coincide, CI no necesita modificarlo. Si cambia y la identidad no puede hacer patch,
+falla con un diagnóstico antes de iniciar el upgrade. Un administrador debe revisar
+y sincronizar el Role desde `chart/templates/rbac.yaml`, manteniendo exactamente las
+reglas lectoras del chart y su propiedad Helm. Los cambios futuros de permisos requieren
+esa misma revisión; no se aplica una ampliación automática de privilegios al CI.
