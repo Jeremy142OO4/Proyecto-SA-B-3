@@ -7,7 +7,7 @@ abre en el portal HTTPS habitual, entrando como ADMIN y seleccionando
 **Pruebas interbancarias**. No requiere laptop encendida, túnel ni login de demo.
 
 - Servicio privado `interbank-scenarios` en GKE, con Gateway, Cuentas,
-  Transacciones, RabbitMQ y mock en un pod. No crea IP pública ni balanceador.
+  Transacciones, Pagos, RabbitMQ y mock en un pod. No crea IP pública ni balanceador.
 - PostgreSQL permanece **fuera de Kubernetes**: usa el servidor existente, con
   esquema y rol `bank_scenarios`, credenciales generadas y almacenadas en Secret.
   Las conexiones de los servicios apuntan únicamente a ese esquema, nunca a `public`.
@@ -20,9 +20,9 @@ abre en el portal HTTPS habitual, entrando como ADMIN y seleccionando
 - El pod recibe telemetría OTLP del proyecto con entorno `interbank-cloud-tests`.
   En Grafana Explore filtrar ese entorno y buscar el ID de la prueba. No usar
   únicamente los paneles filtrados a `dev` para demostrar pruebas del laboratorio.
-- Perfil compacto para demostraciones secuenciales: solicitudes de 30m CPU /
-  304 MiB RAM; límites agregados 1.4 CPU /
-  1,056 MiB RAM. PVC 2 GiB. Revisar capacidad antes de ampliar escenarios.
+- Perfil compacto para demostraciones secuenciales: solicitudes de 35m CPU /
+  352 MiB RAM; límites agregados 1.7 CPU /
+  1,248 MiB RAM. PVC 2 GiB. Revisar capacidad antes de ampliar escenarios.
 - El escenario seleccionado es compartido entre administradores; coordinar la
   demostración para no cambiarlo antes de que el mock reciba una solicitud.
 - No adapta el contrato a las incompatibilidades de BANK14. La conciliación real
@@ -32,10 +32,18 @@ Al seleccionar un escenario **no se envía dinero**. Usar el formulario para env
 una prueba y conservar el ID hasta un resultado definitivo. Para mostrar recuperación
 de un 503, restablecer normal mientras el mismo depósito sigue pendiente.
 
+La comunicación externa pertenece a **Payment Service**: Transaction coordina
+reservas, estados y reintentos persistentes y envía comandos AMQP a
+`pagos.interbancarios.salida`. Payment hace una única llamada HTTPS por comando;
+el mismo transporte cubre depósitos, resultados, consultas, cancelaciones,
+reversos y conciliación. Los estados siguen registrándose en Transaction.
+El dashboard de escenarios agrega un panel de HTTP saliente de Payment y
+permite abrir trazas de ambos servicios.
+
 ## Alternativa de desarrollo local (opcional)
 
 La siguiente configuración local **no cambia BANK14 ni usa las cuentas, secretos, RabbitMQ o bases de GCP**.
-Ejecuta Gateway, Clientes, Cuentas y Transacciones del proyecto, con sus migraciones
+Ejecuta Gateway, Clientes, Cuentas, Transacciones y Pagos del proyecto, con sus migraciones
 y almacenamiento independiente, contra el mock Python del contrato original.
 El mock no sustituye a WireMock si el auxiliar exige específicamente esa herramienta.
 No se modificó `contracts/interbank/openapi.yaml`.

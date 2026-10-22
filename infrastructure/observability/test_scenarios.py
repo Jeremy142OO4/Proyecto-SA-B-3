@@ -33,6 +33,13 @@ class ScenarioDashboardTests(unittest.TestCase):
             self.assertIn('subPath: ' + file, workloads)
         self.assertIn('checksum/scenarios:', workloads)
 
+    def test_payment_egress_and_transaction_coordination(self):
+        panels = {p['id']: p for p in self.dashboard['panels']}
+        self.assertIn('payment-service', panels[12]['targets'][0]['expr'])
+        self.assertIn('interbank partner HTTP', panels[12]['targets'][0]['expr'])
+        self.assertIn('transaction-service', panels[8]['targets'][0]['expr'])
+        self.assertIn('transaction-service|payment-service', panels[9]['targets'][0]['query'])
+
     def test_known_limitations_are_visible(self):
         text = json.dumps(self.dashboard, ensure_ascii=False)
         self.assertIn('no son métricas contables ni depósitos únicos', text)

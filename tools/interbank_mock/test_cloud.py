@@ -38,7 +38,7 @@ class CloudIsolationTests(unittest.TestCase):
         def fake(*args, data=None):
             calls.append(args)
             if args[:3] == ('get','secret','bank-usac-secrets'):
-                values = {'JWT_SECRET':'bank-jwt-secret', 'URL_BASE_DATOS_CUENTAS':'postgres://bank:bank-password@10.1.1.1/accounts', 'URL_BASE_DATOS_TRANSACCIONES':'postgres://bank:bank-password@10.1.1.1/transactions'}
+                values = {'JWT_SECRET':'bank-jwt-secret', 'URL_BASE_DATOS_CUENTAS':'postgres://bank:bank-password@10.1.1.1/accounts', 'URL_BASE_DATOS_TRANSACCIONES':'postgres://bank:bank-password@10.1.1.1/transactions', 'URL_BASE_DATOS_PAGOS':'postgres://bank:bank-password@10.1.1.1/payments'}
                 return json.dumps({'data':{k:base64.b64encode(v.encode()).decode() for k,v in values.items()}})
             if args[:2] == ('get','secret'): return ''
             if args[:2] == ('get','deployment'):
@@ -49,8 +49,12 @@ class CloudIsolationTests(unittest.TestCase):
             cloud.main()
         deployment = next(r for r in applied if r['kind']=='Deployment')
         pod = deployment['spec']['template']['spec']
-        self.assertEqual(len(pod['containers']), 5)
-        self.assertEqual(sum(int(c['resources']['requests']['cpu'][:-1]) for c in pod['containers']),30)
+        self.assertEqual(len(pod['containers']), 6)
+        self.assertEqual(sum(int(c['resources']['requests']['cpu'][:-1]) for c in pod['containers']),35)
+        payments = next(c for c in pod['containers'] if c['name']=='payments')
+        self.assertEqual(payments['image'], 'registry/payment-service:immutable')
+        self.assertIn('URL_BASE_DATOS_PAGOS', json.dumps(payments['env']))
+        self.assertIn('lab-pagos-', json.dumps(applied))
         self.assertFalse(pod['automountServiceAccountToken'])
         self.assertEqual(deployment['spec']['strategy']['type'], 'Recreate')
         self.assertNotIn('database', [c['name'] for c in pod['containers']])

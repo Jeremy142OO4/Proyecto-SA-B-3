@@ -31,7 +31,7 @@ class FilterTests(unittest.TestCase):
 
     def test_contract_only_does_not_build_apps(self):
         self.assertEqual(self.selected(['contracts/interbank/openapi.yaml']), {'interbancaria'})
-        self.assertEqual(self.selected(['tools/interbank_mock/app.py']), {'interbancaria', 'gateway', 'account', 'transaction', 'frontend'})
+        self.assertEqual(self.selected(['tools/interbank_mock/app.py']), {'interbancaria', 'gateway', 'account', 'payment', 'transaction', 'frontend'})
 
     def test_documentation_only(self):
         self.assertEqual(self.selected(['Documentacion/interbancaria/acuerdo-bank03-bank14.md']), set())
@@ -39,7 +39,7 @@ class FilterTests(unittest.TestCase):
 
     def test_service_filter_unchanged(self):
         self.assertEqual(self.selected(['services/account-service/main.go']), {'account'})
-        self.assertEqual(self.selected(['tools/interbank_mock/app.py', 'gateway/api-gateway/main.go']), {'interbancaria', 'gateway', 'account', 'transaction', 'frontend'})
+        self.assertEqual(self.selected(['tools/interbank_mock/app.py', 'gateway/api-gateway/main.go']), {'interbancaria', 'gateway', 'account', 'payment', 'transaction', 'frontend'})
 
     def test_global_and_release_validate_everything(self):
         self.assertEqual(len(self.selected(['.github/workflows/ci-cd.yml'])), 9)

@@ -12,6 +12,8 @@ class SandboxIsolationTests(unittest.TestCase):
         services = config['services']
         self.assertEqual(services['mock']['network_mode'], 'service:gateway')
         self.assertEqual(services['transactions']['network_mode'], 'service:gateway')
+        self.assertEqual(services['payments']['network_mode'], 'service:gateway')
+        self.assertIn('/payments?', services['payments']['environment']['URL_BASE_DATOS'])
         for name, service in services.items():
             if name != 'frontend':
                 self.assertNotIn('ports', service)

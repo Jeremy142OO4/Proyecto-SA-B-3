@@ -287,7 +287,7 @@ func TestHTTPPartnerNoRedirectOrKeyLeak(t *testing.T) {
 		http.Redirect(w, r, target.URL, 307)
 	}))
 	defer server.Close()
-	p := NewPartner(Config{PartnerURL: server.URL, PartnerKey: "local-only-partner-key"})
+	p := newHTTPTestPartner(Config{PartnerURL: server.URL, PartnerKey: "local-only-partner-key"})
 	code, _, e := p.Post(context.Background(), "/transfers", "test", map[string]string{})
 	if e != nil || code != 307 || leaked {
 		t.Fatalf("redirect leaked credentials code=%d err=%v leaked=%v", code, e, leaked)

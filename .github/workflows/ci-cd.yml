@@ -91,6 +91,7 @@ jobs:
                   gateway=true
                   account=true
                   transaction=true
+                  payment=true
                   frontend=true
                   ;;
                 infrastructure/observability/*) observabilidad=true ;;
@@ -500,6 +501,10 @@ jobs:
 
       - name: Validacion estatica
         run: go vet ./...
+
+      - name: Verificar salida interbancaria Payment por AMQP y HTTPS
+        if: env.OMITIR_PRUEBAS != 'true'
+        run: bash ../../infrastructure/scripts/test-interbank.sh payment-service
 
   build-test-notification:
     name: Build y test - Notificaciones y Auditoria

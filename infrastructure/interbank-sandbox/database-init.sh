@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 # Runs once against the new sandbox volume, not against any external database.
-for pair in accounts:account-service transactions:transaction-service customers:service-customer; do
+for pair in accounts:account-service transactions:transaction-service customers:service-customer payments:payment-service; do
   database=${pair%%:*}
   module=${pair#*:}
   psql -v ON_ERROR_STOP=1 -U postgres -c "CREATE DATABASE $database"

@@ -84,12 +84,12 @@ def main():
     for key in ('TEST_DB_PASSWORD', 'MOCK_CONTROL_KEY', 'INTERBANK_API_KEY', 'INTERBANK_PARTNER_API_KEY'):
         values.setdefault(key, secrets.token_hex(24))
     values['JWT_SECRET'] = bank['JWT_SECRET']  # Existing ADMIN login, no new public login.
-    for suffix in ('CUENTAS', 'TRANSACCIONES'):
+    for suffix in ('CUENTAS', 'TRANSACCIONES', 'PAGOS'):
         values['URL_BASE_DATOS_' + suffix] = isolated_url(bank['URL_BASE_DATOS_' + suffix], values['TEST_DB_PASSWORD'])
     apply(resource('Secret', NAME, type='Opaque', stringData=values))
 
     run = os.environ.get('GITHUB_RUN_ID', 'manual-'+secrets.token_hex(4)) + '-' + os.environ.get('GITHUB_RUN_ATTEMPT', '1')
-    for module, key in [('account-service', 'CUENTAS'), ('transaction-service', 'TRANSACCIONES')]:
+    for module, key in [('account-service', 'CUENTAS'), ('transaction-service', 'TRANSACCIONES'), ('payment-service', 'PAGOS')]:
         job = f'lab-{key.lower()}-{run}'
         apply(resource('ConfigMap', job, data={'migration.sql': migration_sql(module)}))
         manifest = resource('Job', job)
@@ -131,7 +131,8 @@ def main():
     gateway = container('gateway', image('api-gateway'), 8080, dict(INTERBANK_MOCK_CONTROL_URL='http://127.0.0.1:8099', INTERBANK_TEST_GRAFANA_URL='https://bank-usac-grafana-2atv2f4ufq-uc.a.run.app/explore'))
     accounts = container('accounts', image('account-service'), 8082)
     transactions = container('transactions', image('transaction-service'), 8083)
-    for c,key in [(accounts,'CUENTAS'),(transactions,'TRANSACCIONES')]:
+    payments = container('payments', image('payment-service'), 8084)
+    for c,key in [(accounts,'CUENTAS'),(transactions,'TRANSACCIONES'),(payments,'PAGOS')]:
         c['env'].append(dict(name='URL_BASE_DATOS', valueFrom=dict(secretKeyRef=dict(name=NAME,key='URL_BASE_DATOS_'+key))))
     mock = dict(name='mock', image=os.environ['MOCK_IMAGE'], envFrom=[dict(secretRef=dict(name=NAME))],
         env=[dict(name='MOCK_API_KEY', valueFrom=dict(secretKeyRef=dict(name=NAME,key='INTERBANK_PARTNER_API_KEY'))),
@@ -151,7 +152,7 @@ def main():
     manifest['spec']=dict(replicas=1,strategy=dict(type='Recreate'),selector=dict(matchLabels=labels),
         template=dict(metadata=dict(labels=labels, annotations={'bank.usac/config-digest':hashlib.sha256(json.dumps(values,sort_keys=True).encode()).hexdigest()}),spec=dict(hostname=NAME,automountServiceAccountToken=False,
             initContainers=[dict(name='volume-permissions',image='busybox:1.37',command=['sh','-ec','mkdir -p /state/mock /state/rabbit; chown 10001:10001 /state/mock; chown 999:999 /state/rabbit'],volumeMounts=[dict(name='state',mountPath='/state')])],
-            containers=[gateway,accounts,transactions,mock,rabbit],volumes=[dict(name='state',persistentVolumeClaim=dict(claimName=NAME))])))
+            containers=[gateway,accounts,transactions,payments,mock,rabbit],volumes=[dict(name='state',persistentVolumeClaim=dict(claimName=NAME))])))
     apply(manifest)
     apply(resource('Service',NAME,spec=dict(selector=labels,ports=[dict(name='http',port=8080,targetPort=8080)])))
     policy=resource('NetworkPolicy',NAME)

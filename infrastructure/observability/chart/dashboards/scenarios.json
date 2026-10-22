@@ -2,7 +2,7 @@
   "uid": "bank-scenarios",
   "title": "Bank USAC — Escenarios interbancarios",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "editable": false,
   "timezone": "browser",
   "refresh": "15s",
@@ -59,15 +59,15 @@
       "options": {"legend": {"displayMode": "list", "placement": "bottom"}}
     },
     {
-      "id": 8, "type": "logs", "title": "Recorrido del depósito · cambios de estado", "description": "Eventos históricos del coordinador. Expandí una línea para consultar interbankTransferId, status, correlationId y traceId. Para el saldo o estado definitivo usá el simulador.",
+      "id": 8, "type": "logs", "title": "Recorrido del depósito · cambios de estado", "description": "Eventos históricos de Transaction (coordinador); el HTTP externo pertenece a Payment. Expandí una línea para consultar interbankTransferId, status, correlationId y traceId. Para el saldo o estado definitivo usá el simulador.",
       "datasource": {"type": "loki", "uid": "loki"}, "gridPos": {"x": 0, "y": 17, "w": 24, "h": 9},
       "targets": [{"refId": "A", "queryType": "range", "expr": "{service_name=\"transaction-service\",deployment_environment_name=\"interbank-cloud-tests\"} |= \"interbank state changed\" |~ \"${depositId:regex}\"", "maxLines": 200}],
       "options": {"showTime": true, "showLabels": false, "showCommonLabels": false, "wrapLogMessage": true, "prettifyLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Ascending"}
     },
     {
-      "id": 9, "type": "table", "title": "Trazas del depósito · abrir Trace ID", "description": "Solo trazas del laboratorio con un span transaction.id. El ID del depósito no es el Trace ID. Abrí la fila para ver el recorrido distribuido. Con ID vacío se muestran hasta 20 trazas de negocio del rango.",
+      "id": 9, "type": "table", "title": "Trazas del depósito · abrir Trace ID", "description": "Solo trazas del laboratorio con un span transaction.id. El ID del depósito no es el Trace ID. Abrí la fila para ver el recorrido distribuido. Con ID vacío se muestran hasta 20 trazas de negocio del rango. Transaction coordina; Payment hace HTTP externo con el mismo Trace ID.",
       "datasource": {"type": "tempo", "uid": "tempo"}, "gridPos": {"x": 0, "y": 26, "w": 24, "h": 8},
-      "targets": [{"refId": "A", "queryType": "traceql", "query": "{ resource.service.name = \"transaction-service\" && resource.deployment.environment.name = \"interbank-cloud-tests\" && span.transaction.id =~ \".+\" && span.transaction.id =~ \".*${depositId:regex}.*\" }", "limit": 20, "tableType": "traces", "spss": 100}],
+      "targets": [{"refId": "A", "queryType": "traceql", "query": "{ resource.service.name =~ \"transaction-service|payment-service\" && resource.deployment.environment.name = \"interbank-cloud-tests\" && span.transaction.id =~ \".+\" && span.transaction.id =~ \".*${depositId:regex}.*\" }", "limit": 20, "tableType": "traces", "spss": 100}],
       "fieldConfig": {"defaults": {}, "overrides": []}, "options": {"showHeader": true}
     },
     {
@@ -80,6 +80,38 @@
       "id": 11, "type": "text", "title": "Qué demostrar en cada escenario",
       "gridPos": {"x": 0, "y": 43, "w": 24, "h": 7},
       "options": {"mode": "markdown", "content": "| Escenario | Resultado esperado en el simulador |\n|---|---|\n| Normal | ACCEPTED, un único débito y reserva Q0. |\n| Rechazo | REVERSED y liberación de la reserva. |\n| Sin callback | Recuperación automática por reintento o consulta, sin duplicar. |\n| Error 503 | Restablecer normal a los 15 s; el mismo depósito se recupera. |\n| Demora | Esperar aproximadamente 3 minutos: REVERSED / EXPIRED, reserva Q0. |\n\n**Límite conocido:** no usamos `bank_interbank_transitions_total` porque aún no tiene etiqueta de entorno. Los indicadores de estados se calculan con logs del laboratorio; no son métricas contables ni depósitos únicos. No se modificaron los dashboards existentes ni el SLO 99.5 %. Si no aparece actividad, ampliá el rango y dejá vacío el filtro de ID."}
+    },
+    {
+      "id": 12,
+      "type": "logs",
+      "title": "Payment · llamadas al banco externo",
+      "description": "HTTP saliente ejecutado por Payment a través de comandos AMQP. Incluye depósitos, callbacks, consultas, cancelaciones y reversos. Un HTTP 202 no significa que el depósito ya terminó: contrastá los estados del coordinador.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 50,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "range",
+          "expr": "{service_name=\"payment-service\",deployment_environment_name=\"interbank-cloud-tests\"} |= \"interbank partner HTTP\" |~ \"${depositId:regex}\"",
+          "maxLines": 200
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "sortOrder": "Ascending"
+      }
     }
   ]
 }
