@@ -4,7 +4,6 @@ import { useAutenticacion } from '../../auth/context/ContextoAutenticacion';
 import { servicioCuentas } from '../../accounts/services/servicioCuentas';
 import type { Cuenta } from '../../accounts/types/cuenta';
 import type { Usuario } from '../../auth/types/auth';
-import { ErrorApi } from '../../../services/clienteApi';
 import { servicioInterbancario, type DepositoInterbancario } from '../services/servicioInterbancario';
 import './interbancario.css';
 
