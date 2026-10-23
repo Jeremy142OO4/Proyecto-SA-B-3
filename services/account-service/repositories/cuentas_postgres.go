@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Proyecto-SA-B-3/account-service/internal/telemetry"
+	"math"
 	"time"
 
 	"github.com/Proyecto-SA-B-3/account-service/events"
@@ -104,6 +105,9 @@ func (r *RepositorioCuentasPostgres) ProcesarMovimiento(ctx context.Context, sol
 		if err != nil {
 			return ResultadoMovimiento{}, err
 		}
+		if solicitud.TipoMovimiento == models.TipoMovimientoCompensacion && movimiento.IDCuenta != solicitud.IDCuenta {
+			return ResultadoMovimiento{}, ErrMovimientoNoEncontrado
+		}
 		if err := transaccion.Commit(ctx); err != nil {
 			return ResultadoMovimiento{}, fmt.Errorf("confirmar lectura de mensaje duplicado: %w", err)
 		}
@@ -116,6 +120,26 @@ func (r *RepositorioCuentasPostgres) ProcesarMovimiento(ctx context.Context, sol
 	}
 	if cuenta.Estado != models.EstadoCuentaActiva && solicitud.TipoMovimiento != models.TipoMovimientoCompensacion {
 		return ResultadoMovimiento{}, ErrCuentaNoActiva
+	}
+	if solicitud.TipoMovimiento == models.TipoMovimientoCompensacion {
+		// A replay can have a different message ID. Serialize on the account and
+		// deduplicate by the financial operation, not only by broker delivery.
+		previo, e := buscarMovimientoPorOperacion(ctx, transaccion, solicitud.IDOperacion, solicitud.TipoMovimiento)
+		if e == nil {
+			if previo.IDCuenta != solicitud.IDCuenta {
+				return ResultadoMovimiento{}, ErrMovimientoNoEncontrado
+			}
+			if e = registrarMensajeProcesado(ctx, transaccion, solicitud, previo.IDMovimiento); e != nil {
+				return ResultadoMovimiento{}, e
+			}
+			if e = transaccion.Commit(ctx); e != nil {
+				return ResultadoMovimiento{}, e
+			}
+			return ResultadoMovimiento{Movimiento: previo, Duplicado: true}, nil
+		}
+		if !errors.Is(e, ErrMovimientoNoEncontrado) {
+			return ResultadoMovimiento{}, e
+		}
 	}
 
 	saldoAnterior := cuenta.SaldoCentavos
@@ -131,6 +155,9 @@ func (r *RepositorioCuentasPostgres) ProcesarMovimiento(ctx context.Context, sol
 	montoMovimiento := solicitud.MontoCentavos
 	if solicitud.TipoMovimiento == models.TipoMovimientoDebito {
 		montoMovimiento += cuenta.ComisionTransaccionCentavos
+	}
+	if solicitud.TipoMovimiento == models.TipoMovimientoCompensacion {
+		montoMovimiento = saldoNuevo - saldoAnterior
 	}
 	movimiento := models.MovimientoCuenta{
 		IDMovimiento:          uuid.New(),
@@ -293,18 +320,22 @@ func calcularSaldoNuevo(ctx context.Context, tx pgx.Tx, cuenta models.Cuenta, so
 	case models.TipoMovimientoCredito:
 		return cuenta.SaldoCentavos + solicitud.MontoCentavos, nil
 	case models.TipoMovimientoCompensacion:
-		var existe bool
-		err := tx.QueryRow(ctx, `SELECT EXISTS(
-			SELECT 1 FROM movimientos_cuenta
-			WHERE id_operacion = $1 AND tipo_movimiento = 'DEBITO'
-		)`, solicitud.IDOperacion).Scan(&existe)
+		// The original movement already includes the commission charged then.
+		// Never reconstruct it from today's configuration or the caller's amount.
+		var debitado int64
+		err := tx.QueryRow(ctx, `SELECT monto_centavos FROM movimientos_cuenta
+			WHERE id_operacion=$1 AND id_cuenta=$2 AND tipo_movimiento='DEBITO'`,
+			solicitud.IDOperacion, solicitud.IDCuenta).Scan(&debitado)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, ErrMovimientoNoEncontrado
+		}
 		if err != nil {
 			return 0, fmt.Errorf("verificar debito original: %w", err)
 		}
-		if !existe {
-			return 0, ErrMovimientoNoEncontrado
+		if debitado <= 0 || cuenta.SaldoCentavos > math.MaxInt64-debitado {
+			return 0, fmt.Errorf("importe de compensacion fuera de rango")
 		}
-		return cuenta.SaldoCentavos + solicitud.MontoCentavos, nil
+		return cuenta.SaldoCentavos + debitado, nil
 	default:
 		return 0, fmt.Errorf("tipo de movimiento no soportado: %s", solicitud.TipoMovimiento)
 	}

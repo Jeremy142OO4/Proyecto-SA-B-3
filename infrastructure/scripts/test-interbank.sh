@@ -58,4 +58,7 @@ else
   fi
   cd "$module"
   go test -race -count=1 -v ./internal/interbank
+  if [[ "$component" == account-service ]]; then
+    go test -race -count=1 -v -run '^TestCompensacion.*Database$' ./repositories
+  fi
 fi
