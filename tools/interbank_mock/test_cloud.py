@@ -47,7 +47,7 @@ class CloudIsolationTests(unittest.TestCase):
         def fake(*args, data=None):
             calls.append(args)
             if args[:3] == ('get','secret','bank-usac-secrets'):
-                values = {'JWT_SECRET':'bank-jwt-secret', 'URL_BASE_DATOS_CUENTAS':'postgres://bank:bank-password@10.1.1.1/accounts', 'URL_BASE_DATOS_TRANSACCIONES':'postgres://bank:bank-password@10.1.1.1/transactions', 'URL_BASE_DATOS_PAGOS':'postgres://bank:bank-password@10.1.1.1/payments'}
+                values = {'JWT_SECRET':'bank-jwt-secret', 'URL_BASE_DATOS_CUENTAS':'postgres://bank:bank-password@10.1.1.1/accounts', 'URL_BASE_DATOS_TRANSACCIONES':'postgres://bank:bank-password@10.1.1.1/transactions', 'URL_BASE_DATOS_PAGOS':'postgres://bank:bank-password@10.1.1.1/payments', 'URL_BASE_DATOS_CLIENTES':'postgres://bank:bank-password@10.1.1.1/customers'}
                 return json.dumps({'data':{k:base64.b64encode(v.encode()).decode() for k,v in values.items()}})
             if args[:2] == ('get','secret'): return ''
             if args[:2] == ('get','deployment'):
@@ -58,8 +58,12 @@ class CloudIsolationTests(unittest.TestCase):
             cloud.main()
         deployment = next(r for r in applied if r['kind']=='Deployment')
         pod = deployment['spec']['template']['spec']
-        self.assertEqual(len(pod['containers']), 6)
-        self.assertEqual(sum(int(c['resources']['requests']['cpu'][:-1]) for c in pod['containers']),35)
+        self.assertEqual(len(pod['containers']), 7)
+        self.assertEqual(sum(int(c['resources']['requests']['cpu'][:-1]) for c in pod['containers']),40)
+        customers = next(c for c in pod['containers'] if c['name']=='customers')
+        self.assertEqual(customers['image'], 'registry/customer-service:immutable')
+        self.assertIn('URL_BASE_DATOS_CLIENTES', json.dumps(customers['env']))
+        self.assertEqual(customers['readinessProbe']['httpGet']['path'], '/health/ready')
         payments = next(c for c in pod['containers'] if c['name']=='payments')
         self.assertEqual(payments['image'], 'registry/payment-service:immutable')
         self.assertIn('URL_BASE_DATOS_PAGOS', json.dumps(payments['env']))
@@ -77,6 +81,14 @@ class CloudIsolationTests(unittest.TestCase):
         ready = calls.index(('rollout','status','deployment/interbank-scenarios','--timeout=240s'))
         enable = calls.index(('set','env','deployment/api-gateway','INTERBANK_CLOUD_TEST_RELAY=true'))
         self.assertLess(ready, enable)
+
+    def test_isolated_customer_fixture_uses_real_kyc_without_bank_customers(self):
+        sql = cloud.migration_sql('service-customer')
+        self.assertIn('SET LOCAL search_path TO bank_scenarios;', sql)
+        self.assertIn('lab-kyc-only', sql)
+        self.assertIn("'ACTIVO','VERIFIED'", sql)
+        self.assertIn('ON CONFLICT DO NOTHING', sql)
+        self.assertNotIn('uuid_generate_v4()', sql)
 
     def test_readme_changes_do_not_trigger_cloud_deployment(self):
         from .test_ci_filters import FilterTests

@@ -27,3 +27,15 @@ no se inventan resultados ni se envían pagos a BANK14 para llenarlos.
 En la primera promoción fallida, el rollback detiene producción antes de restaurar
 dev y su Service, evitando dos conjuntos de consumidores sobre las mismas bases.
 No se hacen ajustes retroactivos de pagos ni se borran las bases de datos.
+
+## Corrección v3.0.1
+
+El laboratorio incorpora Customer Service y un cliente ficticio verificado en su
+propio esquema: Transacciones conserva la validación KYC real mediante el broker.
+La primera comprobación de producción detectó que faltaba esa dependencia.
+No se desactiva KYC ni se copian datos de clientes reales al laboratorio.
+
+Con `DEPLOY_DEV=false` en las variables del repositorio, los pushes a develop
+siguen probándose y publicándose, pero no reactivan dev ni apagan producción.
+La retirada del frontend dev es idempotente y la prueba pública comprueba el
+health JSON interbancario, no el fallback HTML de la aplicación web.

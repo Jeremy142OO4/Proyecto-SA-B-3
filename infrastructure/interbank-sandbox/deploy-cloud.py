@@ -66,6 +66,10 @@ def migration_sql(module):
         sql = path.read_text(encoding='utf-8-sig')
         # pgcrypto is already provisioned by the bank; gen_random_uuid is built in.
         sql = '\n'.join(line for line in sql.splitlines() if not line.strip().startswith('CREATE EXTENSION'))
+        if module == 'service-customer':
+            # Customer's original default uses an extension in public; the lab
+            # deliberately cannot resolve public objects or bank customer rows.
+            sql = sql.replace('uuid_generate_v4()', 'gen_random_uuid()')
         digest = hashlib.sha256(sql.encode()).hexdigest()
         parts += [f"SELECT NOT EXISTS(SELECT 1 FROM lab_migrations WHERE name='{path.name}') AS pending \\gset",
                   '\\if :pending', sql,
@@ -74,6 +78,8 @@ def migration_sql(module):
                   '\\endif']
     if module == 'account-service':
         parts.append("INSERT INTO cuentas(id_cuenta,id_cliente,numero_cuenta,tipo_cuenta,saldo_centavos,moneda,estado) VALUES('00000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000003','900000000003','CORRIENTE',10000000,'GTQ','ACTIVA') ON CONFLICT DO NOTHING;")
+    if module == 'service-customer':
+        parts.append("INSERT INTO customers(customer_id,first_name,last_name,full_name,document_id,email,birth_date,address,username,password_hash,role,status,kyc_status) VALUES('00000000-0000-4000-8000-000000000003','Cliente','Laboratorio','Cliente Laboratorio','LAB-KYC-ONLY','kyc@lab.invalid','1990-01-01','Laboratorio aislado','lab-kyc-only','!login-disabled!','CLIENTE','ACTIVO','VERIFIED') ON CONFLICT DO NOTHING;")
     return '\n'.join(parts)
 
 
@@ -90,12 +96,12 @@ def main():
     for key in ('TEST_DB_PASSWORD', 'MOCK_CONTROL_KEY', 'INTERBANK_API_KEY', 'INTERBANK_PARTNER_API_KEY'):
         values.setdefault(key, secrets.token_hex(24))
     values['JWT_SECRET'] = bank['JWT_SECRET']  # Existing ADMIN login, no new public login.
-    for suffix in ('CUENTAS', 'TRANSACCIONES', 'PAGOS'):
+    for suffix in ('CUENTAS', 'TRANSACCIONES', 'PAGOS', 'CLIENTES'):
         values['URL_BASE_DATOS_' + suffix] = isolated_url(bank['URL_BASE_DATOS_' + suffix], values['TEST_DB_PASSWORD'])
     apply(resource('Secret', NAME, type='Opaque', stringData=values))
 
     run = os.environ.get('GITHUB_RUN_ID', 'manual-'+secrets.token_hex(4)) + '-' + os.environ.get('GITHUB_RUN_ATTEMPT', '1')
-    for module, key in [('account-service', 'CUENTAS'), ('transaction-service', 'TRANSACCIONES'), ('payment-service', 'PAGOS')]:
+    for module, key in [('account-service', 'CUENTAS'), ('transaction-service', 'TRANSACCIONES'), ('payment-service', 'PAGOS'), ('service-customer', 'CLIENTES')]:
         job = f'lab-{key.lower()}-{run}'
         apply(resource('ConfigMap', job, data={'migration.sql': migration_sql(module)}))
         manifest = resource('Job', job)
@@ -138,6 +144,11 @@ def main():
     accounts = container('accounts', image('account-service'), 8082)
     transactions = container('transactions', image('transaction-service'), 8083)
     payments = container('payments', image('payment-service'), 8084)
+    customers = container('customers', image('customer-service'), 8081,
+                          dict(PORT='8081', RABBITMQ_URL=common['URL_RABBITMQ'], ACTIVATION_LINK_BASE='https://lab.invalid/activate'))
+    customers['env'].append(dict(name='DATABASE_URL', valueFrom=dict(secretKeyRef=dict(name=NAME,key='URL_BASE_DATOS_CLIENTES'))))
+    customers['readinessProbe']['httpGet']['path'] = '/health/ready'
+    customers['livenessProbe']['httpGet']['path'] = '/health/live'
     for c,key in [(accounts,'CUENTAS'),(transactions,'TRANSACCIONES'),(payments,'PAGOS')]:
         c['env'].append(dict(name='URL_BASE_DATOS', valueFrom=dict(secretKeyRef=dict(name=NAME,key='URL_BASE_DATOS_'+key))))
     mock = dict(name='mock', image=os.environ['MOCK_IMAGE'], envFrom=[dict(secretRef=dict(name=NAME))],
@@ -158,7 +169,7 @@ def main():
     manifest['spec']=dict(replicas=1,strategy=dict(type='Recreate'),selector=dict(matchLabels=labels),
         template=dict(metadata=dict(labels=labels, annotations={'bank.usac/config-digest':hashlib.sha256(json.dumps(values,sort_keys=True).encode()).hexdigest()}),spec=dict(hostname=NAME,automountServiceAccountToken=False,
             initContainers=[dict(name='volume-permissions',image='busybox:1.37',command=['sh','-ec','mkdir -p /state/mock /state/rabbit; chown 10001:10001 /state/mock; chown 999:999 /state/rabbit'],volumeMounts=[dict(name='state',mountPath='/state')])],
-            containers=[gateway,accounts,transactions,payments,mock,rabbit],volumes=[dict(name='state',persistentVolumeClaim=dict(claimName=NAME))])))
+            containers=[gateway,accounts,transactions,payments,customers,mock,rabbit],volumes=[dict(name='state',persistentVolumeClaim=dict(claimName=NAME))])))
     apply(manifest)
     apply(resource('Service',NAME,spec=dict(selector=labels,ports=[dict(name='http',port=8080,targetPort=8080)])))
     policy=resource('NetworkPolicy',NAME)

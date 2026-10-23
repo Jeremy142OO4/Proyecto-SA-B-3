@@ -25,6 +25,9 @@ class ProductionTests(unittest.TestCase):
         self.assertIn('deployment/interbank-scenarios', shutdown)
         self.assertNotIn('|| true', shutdown)
         self.assertIn('KUBE_NAMESPACE=bank-usac-dev bash infrastructure/observability/deploy.sh', scripts)
+        self.assertIn('"$FRONTEND_URL/interbank/v1/health"', scripts)
+        for name in ('desplegar-desarrollo','desplegar-observabilidad-dev'):
+            self.assertIn("vars.DEPLOY_DEV != 'false'", workflow['jobs'][name]['if'])
 
     def test_prod_exports_telemetry_and_keeps_activation_origin(self):
         directory = ROOT / 'infrastructure/kubernetes/overlays/prod'

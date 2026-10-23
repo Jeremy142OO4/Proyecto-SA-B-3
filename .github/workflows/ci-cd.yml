@@ -222,6 +222,7 @@ jobs:
     needs: [detectar-cambios, validar-observabilidad]
     if: >-
       needs.detectar-cambios.outputs.hay_observabilidad == 'true' &&
+      vars.DEPLOY_DEV != 'false' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
       github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
@@ -1023,6 +1024,7 @@ jobs:
       - publicar-frontend
     if: >-
       always() &&
+      vars.DEPLOY_DEV != 'false' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/develop' &&
       needs.detectar-cambios.outputs.hay_componentes == 'true' &&
@@ -1471,11 +1473,16 @@ jobs:
         env:
           FRONTEND_URL: ${{ steps.frontend-cloud-run.outputs.url }}
         run: |
-          curl --fail --retry 12 --retry-delay 5 --retry-all-errors "$FRONTEND_URL/health/ready"
+          curl --fail --retry 12 --retry-delay 5 --retry-all-errors "$FRONTEND_URL/interbank/v1/health"
           curl --fail --retry 5 --retry-delay 5 "$FRONTEND_URL/swagger/" > /dev/null
 
       - name: Desactivar frontend dev solo tras validar produccion
-        run: gcloud run services delete bank-usac-frontend-dev --region us-central1 --quiet
+        run: |
+          python3 infrastructure/scripts/cloud-run-rollback.py capture \
+            --service bank-usac-frontend-dev --region us-central1 --state /tmp/frontend-dev-retirar.json
+          if jq -e '.exists' /tmp/frontend-dev-retirar.json > /dev/null; then
+            gcloud run services delete bank-usac-frontend-dev --region us-central1 --quiet
+          fi
 
       - name: Rollback automatico de produccion
         if: failure()
@@ -1509,7 +1516,9 @@ jobs:
           if [[ "$DEV_STOP_OUTCOME" == "success" || "$DEV_STOP_OUTCOME" == "failure" ]] && [ ! -s /tmp/revisiones-kubernetes.txt ]; then
             kubectl -n "$KUBE_NAMESPACE" delete hpa --all --ignore-not-found
             kubectl -n "$KUBE_NAMESPACE" scale deployment --all --replicas=0
-            kubectl -n "$KUBE_NAMESPACE" wait --for=delete pod --all --timeout=180s || exit 1
+            for app in rabbitmq api-gateway customer-service account-service payment-service transaction-service notification-audit-service frontend interbank-scenarios; do
+              kubectl -n "$KUBE_NAMESPACE" wait --for=delete pod -l "app=$app" --timeout=180s || exit 1
+            done
             kubectl -n "$KUBE_NAMESPACE" delete service frontend --ignore-not-found
             if [ -s /tmp/servicio-dev.json ]; then
               jq 'del(.status,.metadata.uid,.metadata.resourceVersion,.metadata.creationTimestamp,.metadata.managedFields)' /tmp/servicio-dev.json | kubectl apply -f - || exit 1

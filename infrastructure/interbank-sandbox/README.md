@@ -7,7 +7,9 @@ abre en el portal HTTPS habitual, entrando como ADMIN y seleccionando
 **Pruebas interbancarias**. No requiere laptop encendida, túnel ni login de demo.
 
 - Servicio privado `interbank-scenarios` en GKE, con Gateway, Cuentas,
-  Transacciones, Pagos, RabbitMQ y mock en un pod. No crea IP pública ni balanceador.
+  Transacciones, Pagos, Clientes, RabbitMQ y mock en un pod. No crea IP pública ni balanceador.
+  Clientes usa un cliente ficticio KYC VERIFIED en su esquema aislado: se ejecuta
+  la validación real por RabbitMQ, sin omitirla ni consultar clientes bancarios.
 - PostgreSQL permanece **fuera de Kubernetes**: usa el servidor existente, con
   esquema y rol `bank_scenarios`, credenciales generadas y almacenadas en Secret.
   Las conexiones de los servicios apuntan únicamente a ese esquema, nunca a `public`.
@@ -20,9 +22,9 @@ abre en el portal HTTPS habitual, entrando como ADMIN y seleccionando
 - El pod recibe telemetría OTLP del proyecto con entorno `interbank-cloud-tests`.
   En Grafana Explore filtrar ese entorno y buscar el ID de la prueba. No usar
   únicamente los paneles filtrados a `dev` para demostrar pruebas del laboratorio.
-- Perfil compacto para demostraciones secuenciales: solicitudes de 35m CPU /
-  352 MiB RAM; límites agregados 1.7 CPU /
-  1,248 MiB RAM. PVC 2 GiB. Revisar capacidad antes de ampliar escenarios.
+- Perfil compacto para demostraciones secuenciales: solicitudes de 40m CPU /
+  400 MiB RAM; límites agregados 2 CPU /
+  1,440 MiB RAM. PVC 2 GiB. Revisar capacidad antes de ampliar escenarios.
 - El escenario seleccionado es compartido entre administradores; coordinar la
   demostración para no cambiarlo antes de que el mock reciba una solicitud.
 - No adapta el contrato a las incompatibilidades de BANK14. La conciliación real
