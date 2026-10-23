@@ -38,7 +38,7 @@ Cada CDU se documenta con su diagrama de caso de uso, flujo expandido, actores, 
 
 El catálogo consolida **29 CDU: 22 existentes y 7 incorporados para Fase 3**. Los cuatro CDU del final del documento original ya existían aunque no figuraban en su catálogo inicial.
 
-**Trazabilidad:** se conservan los RF históricos. La numeración RF-53 a RF-71 propuesta anteriormente no fue verificada y no se adopta como oficial. Los CDU nuevos deben vincularse con los identificadores correspondientes de `matriz-cumplimiento-fase3.md`, sin asumir equivalencia automática entre numeraciones.
+**Trazabilidad:** se conservan los RF históricos. La numeración RF-53 a RF-71 propuesta anteriormente no fue verificada y no se adopta como oficial. Los CDU nuevos deben contrastarse con los requerimientos del enunciado, sin asumir equivalencia automática entre numeraciones. La matriz de seguimiento se conserva únicamente en el chat de trabajo, fuera del repositorio.
 
 **Alcance documental:** los CDU nuevos son especificaciones del comportamiento esperado, no certificaciones de implementación o pruebas. Sus notas señalan contratos y capacidades pendientes de contrastar. Los PNG se referencian por ruta: no están incrustados ni se generan con este archivo.
 

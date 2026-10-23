@@ -1,0 +1,57 @@
+{
+  "runId": "carga-20261023-154613-111706",
+  "baseUrl": "https://bank-usac-frontend-prod-2atv2f4ufq-uc.a.run.app",
+  "profiles": [
+    {
+      "start": "2026-10-23T15:50:42.269568+00:00",
+      "end": "2026-10-23T15:51:28.281982+00:00",
+      "exitCode": 99,
+      "profile": "smoke"
+    },
+    {
+      "start": "2026-10-23T15:51:30.299518+00:00",
+      "end": "2026-10-23T15:57:46.358874+00:00",
+      "exitCode": 99,
+      "profile": "load"
+    }
+  ],
+  "revision": "38ac4fb6ef0993b802e1d8e3be7dc500d454ac8e",
+  "k6Version": "1.6.0",
+  "amountCentavos": 1,
+  "pairs": 8,
+  "before": {
+    "timestamp": "2026-10-23T15:50:42.269568+00:00",
+    "accountCount": 16,
+    "totalCentavos": 1600000,
+    "initialTotalCentavos": 1600000,
+    "reservedCentavos": 0,
+    "transfers": 0,
+    "states": {},
+    "consistent": true
+  },
+  "afterSmoke": {
+    "timestamp": "2026-10-23T15:51:30.298513+00:00",
+    "accountCount": 16,
+    "totalCentavos": 1600000,
+    "initialTotalCentavos": 1600000,
+    "reservedCentavos": 0,
+    "transfers": 3,
+    "states": {
+      "COMPLETADA": 3
+    },
+    "consistent": true
+  },
+  "after": {
+    "timestamp": "2026-10-23T15:57:50.322696+00:00",
+    "accountCount": 16,
+    "totalCentavos": 1600000,
+    "initialTotalCentavos": 1600000,
+    "reservedCentavos": 0,
+    "transfers": 156,
+    "states": {
+      "COMPLETADA": 156
+    },
+    "consistent": true
+  },
+  "observerWarnings": []
+}

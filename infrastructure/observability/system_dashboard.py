@@ -26,10 +26,16 @@ def ratio(numerator, denominator):
 def dashboard():
     panels = []
     y = 0
+    panel_id = 0
+
+    def next_id():
+        nonlocal panel_id
+        panel_id += 1
+        return panel_id
 
     def row(title):
         nonlocal y
-        panels.append(dict(id=len(panels)+1, type='row', title=title, collapsed=False, panels=[],
+        panels.append(dict(id=next_id(), type='row', title=title, collapsed=False, panels=[],
                            gridPos=dict(x=0, y=y, w=24, h=1)))
         y += 1
 
@@ -39,7 +45,7 @@ def dashboard():
         if kind == 'timeseries':
             defaults['custom'] = dict(drawStyle='line', lineInterpolation='linear', lineWidth=2,
                                       fillOpacity=8, showPoints='auto', spanNulls=False)
-        item = dict(id=len(panels)+1, title=title, description=description, type=kind,
+        item = dict(id=next_id(), title=title, description=description, type=kind,
                     gridPos=dict(x=x, y=y, w=width, h=height), datasource=datasource,
                     targets=[dict(refId=chr(65+i), expr=expr, legendFormat=legend,
                                   instant=kind in ('stat', 'table'), range=kind not in ('stat', 'table'))
@@ -58,12 +64,11 @@ def dashboard():
     row('01 / Estado del sistema')
     panel('Disponibilidad Gateway · 30 días · objetivo 99.5%',
           [(f'100 * ({ratio(f"{total('30d')} - {bad('30d')}", total("30d"))})', 'No 5xx')],
-          'percent', 'stat', 8, 0, 'Respuestas no 5xx; incluye 4xx. Excluye salud/readiness/métricas. Sin tráfico: sin datos. Ventana móvil con la historia disponible.', 5)
+          'percent', 'stat', 12, 0, 'Obligatorio: disponibilidad. Respuestas no 5xx; incluye 4xx. Excluye salud/readiness/métricas. Sin tráfico: sin datos. Ventana móvil con la historia disponible. Puede permanecer estable durante operaciones exitosas.', 5)
     panel('Error budget restante · SLO 99.5%',
           [(f'100 * (1 - ({ratio(bad("30d"), "0.005 * " + total("30d"))}))', 'Presupuesto restante')],
-          'percent', 'stat', 8, 8, '100% = presupuesto intacto; 0% = agotado; puede ser negativo. Fallos permitidos = 0.005 × solicitudes observadas.', 5)
-    panel('Recolección de métricas', [('up{job=~"bank-otel|bank-infra|bank-system"}', '{{job}}')],
-          'short', 'stat', 8, 16, '1 = scrape disponible; no acredita disponibilidad de operaciones bancarias.', 5)
+          'percent', 'stat', 12, 12, 'Obligatorio: error budget. 100% = presupuesto intacto; 0% = agotado; puede ser negativo. Fallos permitidos = 0.005 × solicitudes observadas. No debe variar artificialmente si no hay errores.', 5)
+    next_id()  # Retired scrape-status card; preserve existing panel links/IDs.
     panel('Réplicas disponibles por despliegue', [(f'k8s_deployment_available{{{INFRA}}}', '{{k8s_deployment_name}}')])
     panel('Solicitudes elegibles y errores · 30 días', [(total('30d'), 'Solicitudes observadas'), (bad('30d'), 'Respuestas 5xx')],
           kind='stat', x=12, description='Prometheus estima incrementos entre scrapes; no es un registro contable exacto. No certifica cobertura completa de 30 días.')
@@ -75,18 +80,18 @@ def dashboard():
           description='Histograma desde creación hasta resultado terminal de la transferencia, incluidas esperas y compensaciones. No es promedio. Sin resultados recientes no hay percentil.')
     panel('Errores HTTP del Gateway · 5xx', [(f'100 * ({ratio(bad("5m"), total("5m"))})', 'Errores técnicos HTTP (%)')], 'percent')
     transfer = 'bank_transfer_results_total{service="transaction-service",environment="dev"}'
-    den = f'sum(rate({transfer}[$__rate_interval]))'
-    panel('Resultados de transferencias · éxito y fallo',
-          [(f'100 * ({ratio(f"(sum(rate({transfer[:-1]},outcome=\"{outcome}\"}}[$__rate_interval])) or (0 * {den}))", den)})', label)
-           for outcome, label in [('success', 'Completadas'), ('failure', 'Fallidas / compensadas')]], 'percent', x=12,
-          description='Resultados de negocio terminales; un rechazo o una compensación no equivale necesariamente a error técnico ni incumplimiento del SLO.')
+    den = f'sum(increase({transfer}[$__range]))'
+    panel('Transferencias terminadas · por resultado en el intervalo',
+          [(f'(sum(increase({transfer[:-1]},outcome="{outcome}"}}[$__range])) or (0 * {den}))', label)
+           for outcome, label in [('success', 'Completadas'), ('failure', 'Fallidas / compensadas')]], 'short', kind='stat', x=12,
+          description='Resultados terminales acumulados en el intervalo seleccionado; cambia al completar transferencias, incluso si todas tienen éxito. Prometheus estima incrementos, no es el historial contable exacto. Un rechazo/compensación no equivale a fallo técnico; la tasa HTTP 5xx se muestra aparte. Sin la serie base no se inventa cero.')
     panel('Throughput · eventos por segundo por servicio',
           [('sum by(service,action)(rate(bank_messages_total{environment="dev"}[$__rate_interval]))', '{{service}} · {{action}}')], 'ops',
           description='Intentos de publicación/procesamiento. Se separan por acción: no sumar productor y consumidor como eventos únicos.')
     panel('Throughput · eventos por segundo por routing key',
           [('sum by(service,event_type,action)(rate(bank_messages_total{environment="dev"}[$__rate_interval]))', '{{service}} · {{event_type}} · {{action}}')], 'ops', x=12,
           description='event_type es la routing key del catálogo permitido. Claves no reconocidas se agrupan en other para limitar cardinalidad.')
-    row('03 / RabbitMQ · actividad, pendientes y consumidores')
+    row('03 / RabbitMQ · actividad y consumer lag')
     broker_throughput = panel('Throughput RabbitMQ · por cola',
           [(f'sum by(rabbitmq_queue_name)(rate(rabbitmq_message_{metric}_total{{job="bank-infra"}}[$__rate_interval]))', '{{rabbitmq_queue_name}} · ' + label)
            for metric, label in [('published', 'publicados'), ('delivered', 'entregados'), ('acknowledged', 'confirmados')]], 'ops', width=24,
@@ -95,32 +100,17 @@ def dashboard():
 
     queue = 'rabbitmq_message_current{job="bank-infra",state="ready"}'
     consumers = 'rabbitmq_consumer_count{job="bank-infra"}'
-    queue_panels = [
-        panel('Mensajes pendientes por cola · pico de ready',
-              [(f'max_over_time({queue}[$__interval])', '{{rabbitmq_queue_name}}')],
-              description='Máximo observado de ready por intervalo de la gráfica. Conserva picos breves al ampliar el rango; no es el valor instantáneo actual. No puede detectar mensajes que entran y salen entre recolecciones de 30 s.'),
-        panel('Mensajes sin confirmar · pico de unacked',
-              [('max_over_time(rabbitmq_message_current{job="bank-infra",state="unacknowledged"}[$__interval])', '{{rabbitmq_queue_name}}')], x=12,
-              description='Máximo observado de mensajes entregados sin ACK por intervalo. Al confirmar todos, las muestras nuevas vuelven a cero; el pico previo permanece en su intervalo.'),
-        panel('Consumidores activos por cola · máximo observado',
-              [(f'max_over_time({consumers}[$__interval])', '{{rabbitmq_queue_name}}')],
-              description='Máximo de consumidores conectados por intervalo; permite observar cambios breves durante un despliegue.'),
-        panel('Pendientes por consumidor activo · pico del promedio',
-              [(f'max_over_time(({queue} / on(rabbitmq_queue_name,rabbitmq_vhost_name,rabbitmq_node_name) ({consumers} > 0))[$__interval:15s])', '{{rabbitmq_queue_name}}')], x=12,
-              description='Primero calcula ready / consumidores activos y luego conserva su máximo por intervalo. Es un promedio por cola, no mensajes asignados a cada consumidor. No divide entre cero; las colas sin consumidores se cuentan aparte.'),
-    ]
+    for _ in range(3):
+        next_id()  # Retired ready/unacked/consumer-count panels; preserve IDs.
+    queue_panels = [panel('Pendientes por consumidor activo · pico del promedio',
+          [(f'max_over_time(({queue} / on(rabbitmq_queue_name,rabbitmq_vhost_name,rabbitmq_node_name) ({consumers} > 0))[$__interval:15s])', '{{rabbitmq_queue_name}}')], width=24,
+          description='Obligatorio: consumer lag del broker. Calcula ready / consumidores activos y conserva su máximo observado por intervalo. Es un promedio por cola, no mensajes asignados individualmente. Un cero es normal si el flujo procesa los mensajes entre recolecciones; no se crea acumulación artificial. No divide entre cero: una cola sin consumidores no tiene un promedio definido y queda fuera de esta razón. No certifica salud de todas las colas ni detecta picos no recolectados.')]
     for queue_panel in queue_panels:
         queue_panel['interval'] = '30s'
         queue_panel['fieldConfig']['defaults'].update(min=0, decimals=0)
         queue_panel['fieldConfig']['defaults']['custom']['lineInterpolation'] = 'stepAfter'
         queue_panel['options']['legend']['calcs'] = ['lastNotNull', 'max']
-    blocked_queues = panel('Colas con pendientes y sin consumidores',
-          [(f'(count(({queue} > 0) and on(rabbitmq_queue_name,rabbitmq_vhost_name,rabbitmq_node_name) ({consumers} == 0)) or (0 * count({queue}))) and on() (count({consumers}) > 0) and on() (up{{job="bank-infra"}} == 1)', 'Colas afectadas')],
-          kind='stat', width=24, height=5,
-          description='Número de colas con ready > 0 y cero consumidores. 0 = ninguna cola afectada entre las observadas. Sin datos = falta la métrica de colas/consumidores o falla la recolección; no se rellena una ausencia con cero.')
-    blocked_queues['fieldConfig']['defaults'].update(
-        decimals=0, min=0, color=dict(mode='thresholds'),
-        thresholds=dict(mode='absolute', steps=[dict(color='green', value=None), dict(color='red', value=1)]))
+    next_id()  # Retired blocked-queue card. Broker alerts/collection remain enabled.
 
     row('04 / SLO y error budget · ventana móvil de 30 días')
     panel('SLO-01 · errores permitidos y presupuesto restante',
@@ -142,11 +132,11 @@ def dashboard():
     panel('Cobertura de medición · muestras HTTP y minutos Ready',
           [(count, 'Respuestas del histograma HTTP'), (f'count_over_time({ready}[30d:1m])', '{{k8s_deployment_name}} · minutos observados')], width=24,
           description='Una ventana parcial no demuestra cumplimiento mensual. Retención máxima 30 días o 2 GB; revisar huecos y despliegues antes de certificar.')
-    panels.append(dict(id=len(panels)+1, type='text', title='Alcance de los SLO medidos', gridPos=dict(x=0,y=y,w=24,h=5),
+    panels.append(dict(id=next_id(), type='text', title='Alcance de los SLO medidos', gridPos=dict(x=0,y=y,w=24,h=5),
                        options=dict(mode='markdown', content='SLO-01, SLO-02 y SLO-03 muestran medición y presupuesto con las fuentes actuales. **Los restantes SLO no se declaran cumplidos:** requieren denominadores de operaciones iniciadas, distinción de fallo técnico, deduplicación, entrega/DLQ, trazas completas y notificaciones enviadas. El p95 del consumidor no sustituye la duración completa del negocio. Consulte la matriz de cobertura versionada en `Documentacion/observabilidad/metricas-sistema.md`.')))
     y += 5
 
-    panels.append(dict(id=len(panels)+1, type='alertlist', title='Alertas del sistema',
+    panels.append(dict(id=next_id(), type='alertlist', title='Alertas del sistema',
                        gridPos=dict(x=0,y=y,w=24,h=6), options=dict(viewMode='list', groupMode='default',
                        maxItems=12, sortOrder=1, dashboardAlerts=False, alertName='',
                        alertInstanceLabelFilter='{team="bank-usac",environment="dev"}',
@@ -158,11 +148,11 @@ def dashboard():
     panel('CPU utilizada por pod', [(f'sum by(pod)(bank_pod_cpu_usage_cores{{{selector}}})', '{{pod}}')], 'cores', description='Consumo real informado por Metrics Server; no son requests ni límites.')
     panel('Memoria utilizada por pod', [(f'sum by(pod)(bank_pod_memory_usage_bytes{{{selector}}})', '{{pod}}')], 'bytes', x=12,
           description='Working set de Metrics Server. Muestras con antigüedad superior a 120 s se omiten.')
-    panel('HPA · réplicas actuales y deseadas', [(f'{{__name__=~"k8s_hpa_(current|desired)_replicas",{INFRA}}}', '{{k8s_hpa_name}} · {{__name__}}')])
+    panel('HPA · réplicas actuales y deseadas', [(f'{{__name__=~"k8s_hpa_(current|desired)_replicas",{INFRA}}}', '{{k8s_hpa_name}} · {{__name__}}')],
+          description='Obligatorio: evidenciar autoescalado bajo carga. Es normal conservar una réplica si no se supera el objetivo de CPU; no se exige que cambie en cada operación ni se modifica el HPA para mover la gráfica.')
     panel('Número de pods observados por fase', [(f'count_values("fase",k8s_pod_phase{{{INFRA}}})', 'Fase {{fase}}')], x=12,
           description='Fases del receiver: 1 Pending, 2 Running, 3 Succeeded, 4 Failed, 5 Unknown. No equivale a Ready.')
-    panel('Fuentes de uso de recursos y revisiones', [(f'bank_system_source_up{{{selector}}}', '{{source}}')], width=24,
-          description='1 disponible, 0 error de API/permisos. Si resources=0 revisar Metrics Server y el permiso list sobre metrics.k8s.io/pods en el namespace.')
+    next_id()  # Retired source-health graph; source-health alerts are retained.
 
     row('06 / Errores en tiempo real y trazas distribuidas')
     logs = panel('Errores y advertencias del sistema', [], kind='logs', width=24, height=10, datasource={'type':'loki','uid':'loki'},
@@ -190,8 +180,8 @@ def dashboard():
             else:
                 defaults['custom']['thresholdsStyle'] = dict(mode='line')
 
-    return dict(uid='bank-system-metrics', title='Métricas sistema', schemaVersion=39, version=3, editable=False,
-                timezone='browser', refresh='30s', time=dict(**{'from':'now-6h','to':'now'}), tags=['bank-usac','SLI','SLO','dev'],
+    return dict(uid='bank-system-metrics', title='Métricas sistema', schemaVersion=39, version=4, editable=False,
+                timezone='browser', refresh='30s', time=dict(**{'from':'now-30m','to':'now'}), tags=['bank-usac','SLI','SLO','dev'],
                 description='SLI base y SLO medibles con datos reales de dev. Sin muestras no se presume éxito. Despliegues nuevos se detectan por cambios de revisión Kubernetes.',
                 links=[dict(title='Servicios y búsqueda de logs',type='link',url='/d/bank-usac-prueba1'),
                        dict(title='Alertas y runbooks',type='link',url='/alerting/list')],

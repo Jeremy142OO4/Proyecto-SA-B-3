@@ -2,12 +2,12 @@
   "uid": "bank-system-metrics",
   "title": "Métricas sistema",
   "schemaVersion": 39,
-  "version": 3,
+  "version": 4,
   "editable": false,
   "timezone": "browser",
   "refresh": "30s",
   "time": {
-    "from": "now-6h",
+    "from": "now-30m",
     "to": "now"
   },
   "tags": [
@@ -66,12 +66,12 @@
     {
       "id": 2,
       "title": "Disponibilidad Gateway · 30 días · objetivo 99.5%",
-      "description": "Respuestas no 5xx; incluye 4xx. Excluye salud/readiness/métricas. Sin tráfico: sin datos. Ventana móvil con la historia disponible.",
+      "description": "Obligatorio: disponibilidad. Respuestas no 5xx; incluye 4xx. Excluye salud/readiness/métricas. Sin tráfico: sin datos. Ventana móvil con la historia disponible. Puede permanecer estable durante operaciones exitosas.",
       "type": "stat",
       "gridPos": {
         "x": 0,
         "y": 1,
-        "w": 8,
+        "w": 12,
         "h": 5
       },
       "datasource": {
@@ -127,12 +127,12 @@
     {
       "id": 3,
       "title": "Error budget restante · SLO 99.5%",
-      "description": "100% = presupuesto intacto; 0% = agotado; puede ser negativo. Fallos permitidos = 0.005 × solicitudes observadas.",
+      "description": "Obligatorio: error budget. 100% = presupuesto intacto; 0% = agotado; puede ser negativo. Fallos permitidos = 0.005 × solicitudes observadas. No debe variar artificialmente si no hay errores.",
       "type": "stat",
       "gridPos": {
-        "x": 8,
+        "x": 12,
         "y": 1,
-        "w": 8,
+        "w": 12,
         "h": 5
       },
       "datasource": {
@@ -151,54 +151,6 @@
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
-          "noValue": "Sin datos",
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      },
-      "maxDataPoints": 300,
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "graphMode": "none",
-        "colorMode": "value",
-        "textMode": "value_and_name"
-      }
-    },
-    {
-      "id": 4,
-      "title": "Recolección de métricas",
-      "description": "1 = scrape disponible; no acredita disponibilidad de operaciones bancarias.",
-      "type": "stat",
-      "gridPos": {
-        "x": 16,
-        "y": 1,
-        "w": 8,
-        "h": 5
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "up{job=~\"bank-otel|bank-infra|bank-system\"}",
-          "legendFormat": "{{job}}",
-          "instant": true,
-          "range": false
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
           "noValue": "Sin datos",
           "color": {
             "mode": "palette-classic"
@@ -475,9 +427,9 @@
     },
     {
       "id": 10,
-      "title": "Resultados de transferencias · éxito y fallo",
-      "description": "Resultados de negocio terminales; un rechazo o una compensación no equivale necesariamente a error técnico ni incumplimiento del SLO.",
-      "type": "timeseries",
+      "title": "Transferencias terminadas · por resultado en el intervalo",
+      "description": "Resultados terminales acumulados en el intervalo seleccionado; cambia al completar transferencias, incluso si todas tienen éxito. Prometheus estima incrementos, no es el historial contable exacto. Un rechazo/compensación no equivale a fallo técnico; la tasa HTTP 5xx se muestra aparte. Sin la serie base no se inventa cero.",
+      "type": "stat",
       "gridPos": {
         "x": 12,
         "y": 23,
@@ -491,50 +443,41 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "100 * ((((sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"dev\",outcome=\"success\"}[$__rate_interval])) or (0 * sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"dev\"}[$__rate_interval]))))) / (sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"dev\"}[$__rate_interval])))) and ((sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"dev\"}[$__rate_interval]))) > 0))",
+          "expr": "(sum(increase(bank_transfer_results_total{service=\"transaction-service\",environment=\"dev\",outcome=\"success\"}[$__range])) or (0 * sum(increase(bank_transfer_results_total{service=\"transaction-service\",environment=\"dev\"}[$__range]))))",
           "legendFormat": "Completadas",
-          "instant": false,
-          "range": true
+          "instant": true,
+          "range": false
         },
         {
           "refId": "B",
-          "expr": "100 * ((((sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"dev\",outcome=\"failure\"}[$__rate_interval])) or (0 * sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"dev\"}[$__rate_interval]))))) / (sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"dev\"}[$__rate_interval])))) and ((sum(rate(bank_transfer_results_total{service=\"transaction-service\",environment=\"dev\"}[$__rate_interval]))) > 0))",
+          "expr": "(sum(increase(bank_transfer_results_total{service=\"transaction-service\",environment=\"dev\",outcome=\"failure\"}[$__range])) or (0 * sum(increase(bank_transfer_results_total{service=\"transaction-service\",environment=\"dev\"}[$__range]))))",
           "legendFormat": "Fallidas / compensadas",
-          "instant": false,
-          "range": true
+          "instant": true,
+          "range": false
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
+          "unit": "short",
           "noValue": "Sin datos",
           "color": {
             "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "fillOpacity": 8,
-            "showPoints": "auto",
-            "spanNulls": false
           }
         },
         "overrides": []
       },
       "maxDataPoints": 300,
       "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
+        "reduceOptions": {
+          "values": false,
           "calcs": [
             "lastNotNull"
-          ]
+          ],
+          "fields": ""
         },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value_and_name"
       }
     },
     {
@@ -654,7 +597,7 @@
     {
       "id": 13,
       "type": "row",
-      "title": "03 / RabbitMQ · actividad, pendientes y consumidores",
+      "title": "03 / RabbitMQ · actividad y consumer lag",
       "collapsed": false,
       "panels": [],
       "gridPos": {
@@ -737,197 +680,14 @@
       }
     },
     {
-      "id": 15,
-      "title": "Mensajes pendientes por cola · pico de ready",
-      "description": "Máximo observado de ready por intervalo de la gráfica. Conserva picos breves al ampliar el rango; no es el valor instantáneo actual. No puede detectar mensajes que entran y salen entre recolecciones de 30 s.",
-      "type": "timeseries",
-      "gridPos": {
-        "x": 0,
-        "y": 48,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "max_over_time(rabbitmq_message_current{job=\"bank-infra\",state=\"ready\"}[$__interval])",
-          "legendFormat": "{{rabbitmq_queue_name}}",
-          "instant": false,
-          "range": true
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "noValue": "Sin datos",
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "stepAfter",
-            "lineWidth": 2,
-            "fillOpacity": 8,
-            "showPoints": "auto",
-            "spanNulls": false
-          },
-          "min": 0,
-          "decimals": 0
-        },
-        "overrides": []
-      },
-      "maxDataPoints": 300,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "interval": "30s"
-    },
-    {
-      "id": 16,
-      "title": "Mensajes sin confirmar · pico de unacked",
-      "description": "Máximo observado de mensajes entregados sin ACK por intervalo. Al confirmar todos, las muestras nuevas vuelven a cero; el pico previo permanece en su intervalo.",
-      "type": "timeseries",
-      "gridPos": {
-        "x": 12,
-        "y": 48,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "max_over_time(rabbitmq_message_current{job=\"bank-infra\",state=\"unacknowledged\"}[$__interval])",
-          "legendFormat": "{{rabbitmq_queue_name}}",
-          "instant": false,
-          "range": true
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "noValue": "Sin datos",
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "stepAfter",
-            "lineWidth": 2,
-            "fillOpacity": 8,
-            "showPoints": "auto",
-            "spanNulls": false
-          },
-          "min": 0,
-          "decimals": 0
-        },
-        "overrides": []
-      },
-      "maxDataPoints": 300,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "interval": "30s"
-    },
-    {
-      "id": 17,
-      "title": "Consumidores activos por cola · máximo observado",
-      "description": "Máximo de consumidores conectados por intervalo; permite observar cambios breves durante un despliegue.",
-      "type": "timeseries",
-      "gridPos": {
-        "x": 0,
-        "y": 56,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "max_over_time(rabbitmq_consumer_count{job=\"bank-infra\"}[$__interval])",
-          "legendFormat": "{{rabbitmq_queue_name}}",
-          "instant": false,
-          "range": true
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "noValue": "Sin datos",
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "stepAfter",
-            "lineWidth": 2,
-            "fillOpacity": 8,
-            "showPoints": "auto",
-            "spanNulls": false
-          },
-          "min": 0,
-          "decimals": 0
-        },
-        "overrides": []
-      },
-      "maxDataPoints": 300,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "interval": "30s"
-    },
-    {
       "id": 18,
       "title": "Pendientes por consumidor activo · pico del promedio",
-      "description": "Primero calcula ready / consumidores activos y luego conserva su máximo por intervalo. Es un promedio por cola, no mensajes asignados a cada consumidor. No divide entre cero; las colas sin consumidores se cuentan aparte.",
+      "description": "Obligatorio: consumer lag del broker. Calcula ready / consumidores activos y conserva su máximo observado por intervalo. Es un promedio por cola, no mensajes asignados individualmente. Un cero es normal si el flujo procesa los mensajes entre recolecciones; no se crea acumulación artificial. No divide entre cero: una cola sin consumidores no tiene un promedio definido y queda fuera de esta razón. No certifica salud de todas las colas ni detecta picos no recolectados.",
       "type": "timeseries",
       "gridPos": {
-        "x": 12,
-        "y": 56,
-        "w": 12,
+        "x": 0,
+        "y": 48,
+        "w": 24,
         "h": 8
       },
       "datasource": {
@@ -981,69 +741,6 @@
       "interval": "30s"
     },
     {
-      "id": 19,
-      "title": "Colas con pendientes y sin consumidores",
-      "description": "Número de colas con ready > 0 y cero consumidores. 0 = ninguna cola afectada entre las observadas. Sin datos = falta la métrica de colas/consumidores o falla la recolección; no se rellena una ausencia con cero.",
-      "type": "stat",
-      "gridPos": {
-        "x": 0,
-        "y": 64,
-        "w": 24,
-        "h": 5
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "(count((rabbitmq_message_current{job=\"bank-infra\",state=\"ready\"} > 0) and on(rabbitmq_queue_name,rabbitmq_vhost_name,rabbitmq_node_name) (rabbitmq_consumer_count{job=\"bank-infra\"} == 0)) or (0 * count(rabbitmq_message_current{job=\"bank-infra\",state=\"ready\"}))) and on() (count(rabbitmq_consumer_count{job=\"bank-infra\"}) > 0) and on() (up{job=\"bank-infra\"} == 1)",
-          "legendFormat": "Colas afectadas",
-          "instant": true,
-          "range": false
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "noValue": "Sin datos",
-          "color": {
-            "mode": "thresholds"
-          },
-          "decimals": 0,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "maxDataPoints": 300,
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "graphMode": "none",
-        "colorMode": "value",
-        "textMode": "value_and_name"
-      }
-    },
-    {
       "id": 20,
       "type": "row",
       "title": "04 / SLO y error budget · ventana móvil de 30 días",
@@ -1051,7 +748,7 @@
       "panels": [],
       "gridPos": {
         "x": 0,
-        "y": 69,
+        "y": 56,
         "w": 24,
         "h": 1
       }
@@ -1063,7 +760,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 70,
+        "y": 57,
         "w": 24,
         "h": 8
       },
@@ -1127,7 +824,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 78,
+        "y": 65,
         "w": 12,
         "h": 8
       },
@@ -1200,7 +897,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 12,
-        "y": 78,
+        "y": 65,
         "w": 12,
         "h": 8
       },
@@ -1273,7 +970,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 86,
+        "y": 73,
         "w": 12,
         "h": 8
       },
@@ -1346,7 +1043,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 12,
-        "y": 86,
+        "y": 73,
         "w": 12,
         "h": 8
       },
@@ -1419,7 +1116,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 94,
+        "y": 81,
         "w": 24,
         "h": 8
       },
@@ -1490,7 +1187,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 102,
+        "y": 89,
         "w": 24,
         "h": 8
       },
@@ -1553,7 +1250,7 @@
       "title": "Alcance de los SLO medidos",
       "gridPos": {
         "x": 0,
-        "y": 110,
+        "y": 97,
         "w": 24,
         "h": 5
       },
@@ -1568,7 +1265,7 @@
       "title": "Alertas del sistema",
       "gridPos": {
         "x": 0,
-        "y": 115,
+        "y": 102,
         "w": 24,
         "h": 6
       },
@@ -1597,7 +1294,7 @@
       "panels": [],
       "gridPos": {
         "x": 0,
-        "y": 121,
+        "y": 108,
         "w": 24,
         "h": 1
       }
@@ -1609,7 +1306,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 122,
+        "y": 109,
         "w": 12,
         "h": 8
       },
@@ -1666,7 +1363,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 12,
-        "y": 122,
+        "y": 109,
         "w": 12,
         "h": 8
       },
@@ -1719,11 +1416,11 @@
     {
       "id": 33,
       "title": "HPA · réplicas actuales y deseadas",
-      "description": "",
+      "description": "Obligatorio: evidenciar autoescalado bajo carga. Es normal conservar una réplica si no se supera el objetivo de CPU; no se exige que cambie en cada operación ni se modifica el HPA para mover la gráfica.",
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 130,
+        "y": 117,
         "w": 12,
         "h": 8
       },
@@ -1780,7 +1477,7 @@
       "type": "timeseries",
       "gridPos": {
         "x": 12,
-        "y": 130,
+        "y": 117,
         "w": 12,
         "h": 8
       },
@@ -1831,63 +1528,6 @@
       }
     },
     {
-      "id": 35,
-      "title": "Fuentes de uso de recursos y revisiones",
-      "description": "1 disponible, 0 error de API/permisos. Si resources=0 revisar Metrics Server y el permiso list sobre metrics.k8s.io/pods en el namespace.",
-      "type": "timeseries",
-      "gridPos": {
-        "x": 0,
-        "y": 138,
-        "w": 24,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "bank_system_source_up{namespace=\"bank-usac-dev\",environment=\"dev\"}",
-          "legendFormat": "{{source}}",
-          "instant": false,
-          "range": true
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "noValue": "Sin datos",
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "fillOpacity": 8,
-            "showPoints": "auto",
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "maxDataPoints": 300,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
       "id": 36,
       "type": "row",
       "title": "06 / Errores en tiempo real y trazas distribuidas",
@@ -1895,7 +1535,7 @@
       "panels": [],
       "gridPos": {
         "x": 0,
-        "y": 146,
+        "y": 125,
         "w": 24,
         "h": 1
       }
@@ -1907,7 +1547,7 @@
       "type": "logs",
       "gridPos": {
         "x": 0,
-        "y": 147,
+        "y": 126,
         "w": 24,
         "h": 10
       },
@@ -1950,7 +1590,7 @@
       "type": "table",
       "gridPos": {
         "x": 0,
-        "y": 157,
+        "y": 136,
         "w": 24,
         "h": 10
       },

@@ -1,6 +1,7 @@
 # Métricas sistema
 
-Dashboard independiente, UID `bank-system-metrics`, carpeta Bank USAC, entorno dev.
+Dashboard independiente, UID `bank-system-metrics`, carpeta Bank USAC. El perfil
+Helm adapta el entorno y el namespace a dev o producción.
 Fuente versionada: `infrastructure/observability/system_dashboard.py`; JSON generado:
 `chart/dashboards/sistema.json`. No sustituye los paneles por servicio.
 
@@ -8,11 +9,11 @@ Fuente versionada: `infrastructure/observability/system_dashboard.py`; JSON gene
 
 | Sección | Fuente / interpretación |
 |---|---|
-| Estado | Réplicas disponibles, scrape de Collector e infraestructura, disponibilidad HTTP y presupuesto de solicitudes. |
+| Estado | Réplicas disponibles, disponibilidad HTTP y presupuesto de solicitudes. La salud del recolector se vigila mediante alertas, sin tarjetas repetitivas de scrape. |
 | Latencia | Histograma `bank_transfer_flow_duration_seconds_bucket`: p50, p95, p99; creación hasta resultado terminal, incluidas compensaciones. Sin terminales recientes no hay percentil. |
-| Errores | 5xx HTTP separados de resultados de negocio fallidos/compensados. Un rechazo válido no es automáticamente un error técnico. |
+| Errores | Tasa de 5xx HTTP separada del conteo de resultados terminales completados/fallidos/compensados en el intervalo seleccionado. Un rechazo válido no es automáticamente un error técnico. |
 | Throughput | `bank_messages_total` por servicio, acción y routing key del catálogo (`event_type`); publicaciones, entregas y ACK por cola desde RabbitMQ. Intentos, no movimientos financieros únicos. |
-| Consumer lag | `rabbitmq_message_current`: ready y unacknowledged; consumidores por cola; ready/consumidores activos como promedio. RabbitMQ comparte pendientes entre consumidores: no se inventa una asignación individual. Colas sin consumidores se muestran aparte. |
+| Consumer lag | `ready / consumidores activos` por cola, conservando el máximo observado por intervalo. Es un promedio, no asignación individual. Un cero es normal si los mensajes se procesan entre recolecciones. Una cola sin consumidores no tiene un promedio definido: queda fuera de la razón, no se presenta como sana ni se rellena con cero. |
 | Infraestructura | Réplicas y HPA del receiver k8s_cluster. CPU en cores y memoria en bytes desde Metrics Server. |
 | Errores en tiempo real | Loki, JSON original, WARNING/WARN/ERROR. Enlace de traceId a Tempo mediante derived field existente. |
 | Trazas | Tempo, solicitudes de negocio del Gateway; abrir Trace ID permite recorrer los servicios y compensaciones. |
@@ -22,6 +23,47 @@ El dashboard consulta métricas en Prometheus. Loki almacena logs y Tempo almace
 no se convierten sus UUID en etiquetas de métricas. Se conserva el contador agregado `other`
 para routing keys ajenas al catálogo. Publicación y consumo se muestran separados para evitar
 contabilizar ambos como eventos únicos.
+
+## Paneles seleccionados para los flujos de evaluación
+
+El intervalo visible inicial es de **30 minutos**, para distinguir las operaciones
+recientes. Esto no modifica las ventanas de 30 días de los SLO ni la retención.
+Se muestran conteos terminales de transferencias, en vez de un porcentaje de éxito
+que permanecería en 100% durante un flujo exitoso. Los conteos son estimaciones
+de incrementos de Prometheus, no el libro contable exacto.
+
+Se retiraron seis paneles del dashboard Métricas sistema:
+
+- Recolección de métricas.
+- Mensajes pendientes por cola (ready), duplicados en el cálculo de consumer lag.
+- Mensajes sin confirmar (unacked).
+- Consumidores activos por cola.
+- Colas con pendientes y sin consumidores.
+- Fuentes de uso de recursos y revisiones.
+
+La selección elimina tarjetas de salud técnica y vistas redundantes que aportan
+poco al flujo de cliente o al panel de escenarios. **No se borraron métricas,
+recolectores ni alertas**; esos datos siguen consultables desde Explore.
+Los demás dashboards, incluido el de escenarios, no se modificaron.
+
+El contraste se hizo con las páginas 9 y 10 del enunciado de Fase 3:
+
+| Requisito obligatorio | Paneles que se conservan |
+|---|---|
+| Estado y disponibilidad | Disponibilidad Gateway y réplicas disponibles. |
+| Latencia, errores y throughput | Percentiles p50/p95/p99, tasa 5xx, eventos por servicio/routing key/cola. |
+| SLO y error budget | Disponibilidad, p95 HTTP, presupuestos y burn rate, sin ocultar incumplimientos. |
+| Consumer lag | Pendientes por consumidor activo. |
+| CPU, memoria y pods/HPA | Consumo real por pod, réplicas actuales/deseadas y cantidad de pods. |
+| Errores y trazas | Logs de Loki y trazas de Tempo. |
+| Despliegues | Anotaciones por cambio de revisión. |
+
+Un panel obligatorio **no se elimina por estar estable**: disponibilidad, error
+budget, consumer lag y HPA pueden no variar en operaciones normales. La rúbrica
+penaliza dashboards sin valor diagnóstico, no establece una penalización automática
+por cada gráfica plana. No se inyecta carga, retrasos ni valores ficticios para
+obligar a las gráficas a cambiar. La evidencia real de escalamiento bajo carga está
+en [pruebas-carga.md](../sre/pruebas-carga.md).
 
 ## SLO y presupuesto: cobertura real
 
@@ -111,12 +153,14 @@ rellenan con movimientos ficticios. Estos incrementos son estimaciones de Promet
 no cantidades contables de operaciones únicas. Las consultas de throughput de aplicación
 por servicio/routing key son otra fuente, separada de los contadores del broker.
 
-El panel «Colas con pendientes y sin consumidores» ahora cuenta las colas afectadas:
+En la versión anterior, el panel «Colas con pendientes y sin consumidores» contaba las colas afectadas:
 **0** indica que ninguna cola observada cumple ready > 0 y consumidores = 0.
 Si faltan métricas de colas/consumidores o falla el scrape bank-infra, conserva **Sin datos**.
 No confunde una DLQ vacía sin consumidor con una cola bloqueada.
 Siete escenarios de esa consulta se ejecutaron con promtool, sin publicar mensajes,
-detener consumidores ni modificar operaciones del banco; quedan incluidos en el CI.
+detener consumidores ni modificar operaciones del banco. Ese panel se retiró de la
+vista de evaluación; las pruebas actuales verifican la consulta de consumer lag
+que se conserva, incluyendo ausencia de datos y consumidores igual a cero.
 
 El receiver mide el estado del broker cada 30 s y Prometheus recolecta cada 15 s.
 Los gauges ready/unacked pueden permanecer en cero cuando los mensajes se procesan
@@ -148,14 +192,15 @@ también fue eliminada: únicamente estableció contadores, sin transacciones de
 
 Se identificó un problema de presentación: con pocas muestras gráficas en rangos
 de varias horas, una consulta instantánea puede omitir picos cortos que sí quedaron
-almacenados. Los cuatro gráficos de estado ahora conservan el máximo observado
+almacenados. Los cuatro gráficos de estado de aquella versión conservaban el máximo observado
 por intervalo (`max_over_time`) y lo indican en el título/descripción; las leyendas
 muestran último intervalo y máximo del rango. El promedio por consumidor se calcula
 antes de obtener su pico. No se inventa el estado entre recolecciones ni se rellenan
-ausencias con cero. El contador de colas bloqueadas continúa siendo instantáneo.
+ausencias con cero. En la vista actual se conserva únicamente el gráfico de
+consumer lag, con ese mismo criterio de máximo observado.
 
 El throughput por cola está agrupado dentro de RabbitMQ para distinguir actividad
-de acumulación. Quince escenarios de PromQL verifican colas vacías, bloqueadas,
+de acumulación. Las pruebas actuales de PromQL verifican el promedio por consumidor,
 ausencia de telemetría y conservación de picos cuando el intervalo de gráfica es
 mayor que la duración de un pico. La prueba de mensajes se realizó contra los servicios
 reales; las pruebas de regresión del CI utilizan series sintéticas.

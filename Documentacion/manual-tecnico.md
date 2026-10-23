@@ -339,7 +339,7 @@ La evidencia visual se concentra en `sre/evidencia-dashboards.md`, con diez capt
 
 - La historia de métricas disponible al momento de la captura era de **4 días**, frente a ventanas de SLO de 30 días móviles. Los valores de «30 días» son parciales.
 - El **p95 de latencia del Gateway** observado (≈ 1.8 s) está por encima del objetivo de 500 ms indicado en el dashboard. El SLO de latencia no se cumple con los datos actuales.
-- El HPA muestra **1 réplica** por servicio, por lo que las capturas no evidencian escalamiento. Esa evidencia debe provenir de las pruebas de carga.
+- Aquellas capturas mostraban **1 réplica** por servicio. La ejecución de carga documentada sí observó Notification & Audit **1→2**, con pod nuevo disponible; ver [evidencia de carga](sre/pruebas-carga.md). No se afirma escalamiento de Transaction o Payment.
 - El dashboard no incluye paneles de Loki ni de Tempo; la consulta de logs y trazas se hace desde Grafana Explore.
 
 ---
@@ -432,11 +432,13 @@ Las pruebas de carga se ejecutan con k6 y se documentan en `sre/pruebas-carga.md
 - Capturas de CPU y memoria por pod durante la prueba.
 - Captura del HPA mostrando el incremento de réplicas al superar el 80 % de CPU.
 
-> Al momento de esta versión, `pruebas-carga.md` está pendiente de generación y ejecución. Las capturas de dashboards existentes no sustituyen esta evidencia.
+> Ejecutado en producción: 156 transferencias completadas (3 iniciales + 153 de carga), cero fallos y saldo conciliado. Notification & Audit escaló automáticamente de 1 a 2 réplicas; Transaction y Payment permanecieron en 1. El p95 HTTP de aceptación fue 3.216 s y **no cumple** el objetivo de 500 ms. Ver [resultados y capturas](sre/pruebas-carga.md) y [procedimiento reproducible](../tools/load/README.md).
 
 ### 11.6. Matriz de cumplimiento
 
-El cumplimiento de los requerimientos de la fase se rastrea en `matriz-cumplimiento-fase3.md`, con 36 requerimientos (R01 a R36). La columna de estado se completa únicamente cuando existe evidencia verificable; los estados posibles son Cumplido, Parcial y Pendiente.
+La matriz de seguimiento se mantiene fuera del repositorio, en el chat de trabajo.
+Las afirmaciones de cumplimiento deben contrastarse con los artefactos y resultados
+verificables de esta documentación; no se publica una matriz adicional.
 
 ---
 
@@ -503,7 +505,7 @@ kubectl rollout undo deployment/payment-service -n bank-usac
 | **Bases de datos** | Contenedores en host local | 5 instancias aisladas de **Cloud SQL (PostgreSQL 16)** | Sin cambios |
 | **Pipeline de integración** | Sin automatización completa | **CI/CD con GitHub Actions** en 4 ramas (`feature`, `develop`, `release`, `main`) | Sin cambios |
 | **Versionamiento de imágenes** | `latest` o local | Versionado semántico (`vX.X.X`) escaneado con **Trivy** en Docker Hub | Sin cambios |
-| **Autoescalado** | Ninguno (estático) | **HPA** configurado al 80 % de CPU en servicios críticos | Configuración sin cambios; la evidencia de escalamiento queda pendiente de las pruebas de carga |
+| **Autoescalado** | Ninguno (estático) | **HPA** configurado al 80 % de CPU en servicios críticos | Configuración sin cambios; evidencia real: Notification & Audit 1→2 durante carga; Transaction y Payment permanecieron en 1 |
 | **Frontend** | Contenedor local en Minikube | Servicio serverless en **Google Cloud Run** sobre HTTPS | Sin cambios |
 | **SRE y Confiabilidad** | Sin métricas formales | Definición y monitorización formal de **SLI, SLO, SLA y Error Budget** | Stack de observabilidad desplegado, 8 alertas con runbooks, postmortems y evidencia de dashboards |
 | **Lógica de negocio** | Transferencias simples | KYC (`VERIFIED`), tipos de cuenta (`AHORRO`/`CORRIENTE`), simulación de pagos externos y auditoría con severidad | Transferencias interbancarias con BANK14, observabilidad con alertas y runbooks, laboratorio aislado de fallos controlados |

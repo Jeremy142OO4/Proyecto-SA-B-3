@@ -1,0 +1,469 @@
+{
+  "timestamp": "2026-10-23T16:01:52.679371+00:00",
+  "production": [
+    {
+      "name": "account-service",
+      "desired": 1,
+      "available": 1
+    },
+    {
+      "name": "api-gateway",
+      "desired": 1,
+      "available": 1
+    },
+    {
+      "name": "customer-service",
+      "desired": 1,
+      "available": 1
+    },
+    {
+      "name": "frontend",
+      "desired": 1,
+      "available": 1
+    },
+    {
+      "name": "interbank-scenarios",
+      "desired": 1,
+      "available": 1
+    },
+    {
+      "name": "notification-audit-service",
+      "desired": 1,
+      "available": 1
+    },
+    {
+      "name": "payment-service",
+      "desired": 1,
+      "available": 1
+    },
+    {
+      "name": "rabbitmq",
+      "desired": 1,
+      "available": 1
+    },
+    {
+      "name": "transaction-service",
+      "desired": 1,
+      "available": 1
+    }
+  ],
+  "dev": [
+    {
+      "name": "account-service",
+      "desired": 0,
+      "available": 0
+    },
+    {
+      "name": "api-gateway",
+      "desired": 0,
+      "available": 0
+    },
+    {
+      "name": "customer-service",
+      "desired": 0,
+      "available": 0
+    },
+    {
+      "name": "frontend",
+      "desired": 0,
+      "available": 0
+    },
+    {
+      "name": "interbank-scenarios",
+      "desired": 0,
+      "available": 0
+    },
+    {
+      "name": "notification-audit-service",
+      "desired": 0,
+      "available": 0
+    },
+    {
+      "name": "payment-service",
+      "desired": 0,
+      "available": 0
+    },
+    {
+      "name": "rabbitmq",
+      "desired": 0,
+      "available": 0
+    },
+    {
+      "name": "transaction-service",
+      "desired": 0,
+      "available": 0
+    }
+  ],
+  "healthHTTP": 200,
+  "hpas": [
+    {
+      "name": "account-service",
+      "spec": {
+        "scaleTargetRef": {
+          "kind": "Deployment",
+          "name": "account-service",
+          "apiVersion": "apps/v1"
+        },
+        "minReplicas": 1,
+        "maxReplicas": 4,
+        "metrics": [
+          {
+            "type": "Resource",
+            "resource": {
+              "name": "cpu",
+              "target": {
+                "type": "Utilization",
+                "averageUtilization": 80
+              }
+            }
+          }
+        ]
+      },
+      "status": {
+        "currentReplicas": 1,
+        "desiredReplicas": 1,
+        "currentMetrics": [
+          {
+            "type": "Resource",
+            "resource": {
+              "name": "cpu",
+              "current": {
+                "value": "3m",
+                "averageValue": "3m",
+                "averageUtilization": 5
+              }
+            }
+          }
+        ],
+        "conditions": [
+          {
+            "type": "AbleToScale",
+            "status": "True",
+            "lastTransitionTime": "2026-10-23T02:21:20Z",
+            "reason": "ReadyForNewScale",
+            "message": "recommended size matches current size"
+          },
+          {
+            "type": "ScalingActive",
+            "status": "True",
+            "lastTransitionTime": "2026-10-23T02:42:21Z",
+            "reason": "ValidMetricFound",
+            "message": "the HPA was able to successfully calculate a replica count from cpu resource utilization (percentage of request)"
+          },
+          {
+            "type": "ScalingLimited",
+            "status": "False",
+            "lastTransitionTime": "2026-10-23T02:21:20Z",
+            "reason": "DesiredWithinRange",
+            "message": "the desired count is within the acceptable range"
+          }
+        ]
+      }
+    },
+    {
+      "name": "customer-service",
+      "spec": {
+        "scaleTargetRef": {
+          "kind": "Deployment",
+          "name": "customer-service",
+          "apiVersion": "apps/v1"
+        },
+        "minReplicas": 1,
+        "maxReplicas": 4,
+        "metrics": [
+          {
+            "type": "Resource",
+            "resource": {
+              "name": "cpu",
+              "target": {
+                "type": "Utilization",
+                "averageUtilization": 80
+              }
+            }
+          }
+        ]
+      },
+      "status": {
+        "currentReplicas": 1,
+        "desiredReplicas": 1,
+        "currentMetrics": [
+          {
+            "type": "Resource",
+            "resource": {
+              "name": "cpu",
+              "current": {
+                "value": "4m",
+                "averageValue": "4m",
+                "averageUtilization": 8
+              }
+            }
+          }
+        ],
+        "conditions": [
+          {
+            "type": "AbleToScale",
+            "status": "True",
+            "lastTransitionTime": "2026-10-23T02:21:21Z",
+            "reason": "ReadyForNewScale",
+            "message": "recommended size matches current size"
+          },
+          {
+            "type": "ScalingActive",
+            "status": "True",
+            "lastTransitionTime": "2026-10-23T02:22:33Z",
+            "reason": "ValidMetricFound",
+            "message": "the HPA was able to successfully calculate a replica count from cpu resource utilization (percentage of request)"
+          },
+          {
+            "type": "ScalingLimited",
+            "status": "False",
+            "lastTransitionTime": "2026-10-23T02:21:21Z",
+            "reason": "DesiredWithinRange",
+            "message": "the desired count is within the acceptable range"
+          }
+        ]
+      }
+    },
+    {
+      "name": "notification-audit-service",
+      "spec": {
+        "scaleTargetRef": {
+          "kind": "Deployment",
+          "name": "notification-audit-service",
+          "apiVersion": "apps/v1"
+        },
+        "minReplicas": 1,
+        "maxReplicas": 4,
+        "metrics": [
+          {
+            "type": "Resource",
+            "resource": {
+              "name": "cpu",
+              "target": {
+                "type": "Utilization",
+                "averageUtilization": 80
+              }
+            }
+          }
+        ]
+      },
+      "status": {
+        "lastScaleTime": "2026-10-23T16:00:33Z",
+        "currentReplicas": 1,
+        "desiredReplicas": 1,
+        "currentMetrics": [
+          {
+            "type": "Resource",
+            "resource": {
+              "name": "cpu",
+              "current": {
+                "value": "22m",
+                "averageValue": "22m",
+                "averageUtilization": 45
+              }
+            }
+          }
+        ],
+        "conditions": [
+          {
+            "type": "AbleToScale",
+            "status": "True",
+            "lastTransitionTime": "2026-10-23T16:00:48Z",
+            "reason": "ReadyForNewScale",
+            "message": "recommended size matches current size"
+          },
+          {
+            "type": "ScalingActive",
+            "status": "True",
+            "lastTransitionTime": "2026-10-23T02:42:21Z",
+            "reason": "ValidMetricFound",
+            "message": "the HPA was able to successfully calculate a replica count from cpu resource utilization (percentage of request)"
+          },
+          {
+            "type": "ScalingLimited",
+            "status": "False",
+            "lastTransitionTime": "2026-10-23T02:21:21Z",
+            "reason": "DesiredWithinRange",
+            "message": "the desired count is within the acceptable range"
+          }
+        ]
+      }
+    },
+    {
+      "name": "payment-service",
+      "spec": {
+        "scaleTargetRef": {
+          "kind": "Deployment",
+          "name": "payment-service",
+          "apiVersion": "apps/v1"
+        },
+        "minReplicas": 1,
+        "maxReplicas": 4,
+        "metrics": [
+          {
+            "type": "Resource",
+            "resource": {
+              "name": "cpu",
+              "target": {
+                "type": "Utilization",
+                "averageUtilization": 80
+              }
+            }
+          }
+        ],
+        "behavior": {
+          "scaleUp": {
+            "stabilizationWindowSeconds": 0,
+            "selectPolicy": "Max",
+            "policies": [
+              {
+                "type": "Percent",
+                "value": 100,
+                "periodSeconds": 60
+              }
+            ]
+          },
+          "scaleDown": {
+            "stabilizationWindowSeconds": 300,
+            "selectPolicy": "Max",
+            "policies": [
+              {
+                "type": "Percent",
+                "value": 25,
+                "periodSeconds": 60
+              }
+            ]
+          }
+        }
+      },
+      "status": {
+        "currentReplicas": 1,
+        "desiredReplicas": 1,
+        "currentMetrics": [
+          {
+            "type": "Resource",
+            "resource": {
+              "name": "cpu",
+              "current": {
+                "value": "5m",
+                "averageValue": "5m",
+                "averageUtilization": 9
+              }
+            }
+          }
+        ],
+        "conditions": [
+          {
+            "type": "AbleToScale",
+            "status": "True",
+            "lastTransitionTime": "2026-10-23T02:21:21Z",
+            "reason": "ReadyForNewScale",
+            "message": "recommended size matches current size"
+          },
+          {
+            "type": "ScalingActive",
+            "status": "True",
+            "lastTransitionTime": "2026-10-23T02:22:51Z",
+            "reason": "ValidMetricFound",
+            "message": "the HPA was able to successfully calculate a replica count from cpu resource utilization (percentage of request)"
+          },
+          {
+            "type": "ScalingLimited",
+            "status": "False",
+            "lastTransitionTime": "2026-10-23T02:21:21Z",
+            "reason": "DesiredWithinRange",
+            "message": "the desired count is within the acceptable range"
+          }
+        ]
+      }
+    },
+    {
+      "name": "transaction-service",
+      "spec": {
+        "scaleTargetRef": {
+          "kind": "Deployment",
+          "name": "transaction-service",
+          "apiVersion": "apps/v1"
+        },
+        "minReplicas": 1,
+        "maxReplicas": 4,
+        "metrics": [
+          {
+            "type": "Resource",
+            "resource": {
+              "name": "cpu",
+              "target": {
+                "type": "Utilization",
+                "averageUtilization": 80
+              }
+            }
+          }
+        ],
+        "behavior": {
+          "scaleUp": {
+            "stabilizationWindowSeconds": 0,
+            "selectPolicy": "Max",
+            "policies": [
+              {
+                "type": "Percent",
+                "value": 100,
+                "periodSeconds": 60
+              }
+            ]
+          },
+          "scaleDown": {
+            "stabilizationWindowSeconds": 300,
+            "selectPolicy": "Max",
+            "policies": [
+              {
+                "type": "Percent",
+                "value": 25,
+                "periodSeconds": 60
+              }
+            ]
+          }
+        }
+      },
+      "status": {
+        "currentReplicas": 1,
+        "desiredReplicas": 1,
+        "currentMetrics": [
+          {
+            "type": "Resource",
+            "resource": {
+              "name": "cpu",
+              "current": {
+                "value": "6m",
+                "averageValue": "6m",
+                "averageUtilization": 11
+              }
+            }
+          }
+        ],
+        "conditions": [
+          {
+            "type": "AbleToScale",
+            "status": "True",
+            "lastTransitionTime": "2026-10-23T02:21:21Z",
+            "reason": "ReadyForNewScale",
+            "message": "recommended size matches current size"
+          },
+          {
+            "type": "ScalingActive",
+            "status": "True",
+            "lastTransitionTime": "2026-10-23T02:23:05Z",
+            "reason": "ValidMetricFound",
+            "message": "the HPA was able to successfully calculate a replica count from cpu resource utilization (percentage of request)"
+          },
+          {
+            "type": "ScalingLimited",
+            "status": "False",
+            "lastTransitionTime": "2026-10-23T02:21:21Z",
+            "reason": "DesiredWithinRange",
+            "message": "the desired count is within the acceptable range"
+          }
+        ]
+      }
+    }
+  ]
+}

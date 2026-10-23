@@ -6,6 +6,7 @@
 bin/
 tmp/
 coverage.out
+Documentacion/matriz-cumplimiento-fase3.md
 node_modules/
 dist/
 .env
