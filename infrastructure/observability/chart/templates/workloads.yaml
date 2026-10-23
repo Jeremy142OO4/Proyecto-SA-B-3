@@ -18,6 +18,7 @@ spec:
     metadata:
       labels: {app.kubernetes.io/name: {{ $name }}}
       annotations:
+        bank.usac/monitoring-profile: {{ printf "%s/%s" $.Values.applicationNamespace $.Values.environment | quote }}
         checksum/config: {{ tpl ($.Files.Get (printf "config/%s" $component.config)) $ | sha256sum }}
         {{- if eq $name "otel-collector" }}
         checksum/system-exporter: {{ $.Files.Get "config/system_exporter.py" | sha256sum }}

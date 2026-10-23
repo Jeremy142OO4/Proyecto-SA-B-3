@@ -65,7 +65,7 @@ jobs:
 
           # Una version de release debe contener todas las imagenes con la misma
           # etiqueta. El despacho manual tambien ejecuta una validacion completa.
-          if [[ "$EVENTO" == "workflow_dispatch" || "$REF" == refs/heads/release/* || "$REF" == refs/tags/v* ]]; then
+          if [[ "$EVENTO" == "workflow_dispatch" || "$REF" == refs/heads/main || "$REF" == refs/heads/master || "$REF" == refs/heads/release/* || "$REF" == refs/tags/v* ]]; then
             todos=true
           else
             if [[ "$EVENTO" == "pull_request" ]]; then
@@ -981,6 +981,32 @@ jobs:
           cache-from: type=gha,scope=bank-usac-frontend
           cache-to: type=gha,mode=max,scope=bank-usac-frontend
 
+  publicar-mock-release:
+    name: Publicar - Mock de escenarios release
+    runs-on: ubuntu-latest
+    needs: validacion-sistema
+    if: >-
+      github.event_name == 'push' &&
+      (startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/v'))
+    steps:
+      - uses: actions/checkout@v4
+      - name: Determinar version
+        id: version
+        run: echo "tag=${GITHUB_REF_NAME#release/}" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: tools/interbank_mock/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/bank-usac-interbank-mock:${{ steps.version.outputs.tag }}
+          cache-from: type=gha,scope=bank-usac-interbank-mock
+          cache-to: type=gha,mode=max,scope=bank-usac-interbank-mock
+
   desplegar-desarrollo:
     name: Desplegar en Kubernetes dev
     runs-on: ubuntu-latest
@@ -1272,9 +1298,9 @@ jobs:
         id: version
         shell: bash
         run: |
-          VERSION="$(git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' --abbrev=0 2>/dev/null || true)"
+          VERSION="$(git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' --exact-match HEAD 2>/dev/null || true)"
           if [ -z "$VERSION" ]; then
-            echo "No existe una version publicada. Cree un tag vX.Y.Z antes de promover a main."
+            echo "HEAD debe ser exactamente la release publicada y etiquetada vX.Y.Z; no se desplegara una imagen antigua."
             exit 1
           fi
           echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
@@ -1304,6 +1330,8 @@ jobs:
             --service bank-usac-frontend-prod --region us-central1 --state /tmp/cloud-run-prod.json
 
           : > /tmp/revisiones-kubernetes.txt
+          kubectl -n bank-usac-dev get deployments -o json > /tmp/despliegues-dev.json
+          kubectl -n bank-usac-dev get service frontend --ignore-not-found -o json > /tmp/servicio-dev.json
           for despliegue in rabbitmq api-gateway customer-service account-service payment-service transaction-service notification-audit-service frontend; do
             revision="$(kubectl -n "$KUBE_NAMESPACE" get deployment "$despliegue" \
               -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}' 2>/dev/null || true)"
@@ -1347,7 +1375,16 @@ jobs:
             --from-literal=SMTP_FROM="$SMTP_FROM" \
             --dry-run=client -o yaml | kubectl apply -f -
 
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.19.0
+      - name: Comprobar permiso lector de observabilidad antes de detener dev
+        run: |
+          python3 -m pip install --disable-pip-version-check PyYAML==6.0.3
+          python3 infrastructure/observability/rbac_preflight.py
+
       - name: Evitar competencia de Outbox con desarrollo
+        id: detener-dev
         run: |
           kubectl -n bank-usac-dev delete hpa customer-service account-service payment-service transaction-service notification-audit-service --ignore-not-found
           kubectl -n bank-usac-dev scale \
@@ -1359,15 +1396,13 @@ jobs:
             deployment/transaction-service \
             deployment/notification-audit-service \
             deployment/frontend \
-            --replicas=0 --timeout=60s || true
+            deployment/interbank-scenarios \
+            --replicas=0 --timeout=120s
+          for app in rabbitmq api-gateway customer-service account-service payment-service transaction-service notification-audit-service frontend interbank-scenarios; do
+            kubectl -n bank-usac-dev wait --for=delete pod -l "app=$app" --timeout=180s
+          done
           # El Service de desarrollo retenia la IP estatica que ahora usara produccion.
           kubectl -n bank-usac-dev delete service frontend --ignore-not-found
-
-      - name: Desactivar frontend dev en Cloud Run
-        run: |
-          gcloud run services delete bank-usac-frontend-dev \
-            --region us-central1 \
-            --quiet || true
 
       - name: Preparar esquemas de telemetria y funcionalidades
         run: bash infrastructure/scripts/prepare-telemetry-schema.sh
@@ -1424,11 +1459,30 @@ jobs:
           test "$EXTERNAL_IP" = "$PUBLIC_HOST"
           kubectl -n "$KUBE_NAMESPACE" get deployments,services,hpa
 
+      - name: Cambiar observabilidad a produccion conservando datos y accesos
+        run: bash infrastructure/observability/deploy.sh
+
+      - name: Desplegar laboratorio aislado de produccion
+        env:
+          MOCK_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/bank-usac-interbank-mock:${{ steps.version.outputs.tag }}
+        run: python3 infrastructure/interbank-sandbox/deploy-cloud.py
+
+      - name: Verificar HTTPS y disponibilidad de produccion
+        env:
+          FRONTEND_URL: ${{ steps.frontend-cloud-run.outputs.url }}
+        run: |
+          curl --fail --retry 12 --retry-delay 5 --retry-all-errors "$FRONTEND_URL/health/ready"
+          curl --fail --retry 5 --retry-delay 5 "$FRONTEND_URL/swagger/" > /dev/null
+
+      - name: Desactivar frontend dev solo tras validar produccion
+        run: gcloud run services delete bank-usac-frontend-dev --region us-central1 --quiet
+
       - name: Rollback automatico de produccion
         if: failure()
         env:
           FRONTEND_OUTCOME: ${{ steps.frontend-cloud-run.outcome }}
           KUBERNETES_OUTCOME: ${{ steps.manifiestos-prod.outcome }}
+          DEV_STOP_OUTCOME: ${{ steps.detener-dev.outcome }}
         shell: bash
         run: |
           set +e
@@ -1448,6 +1502,22 @@ jobs:
           if [[ "$FRONTEND_OUTCOME" == "success" || "$FRONTEND_OUTCOME" == "failure" ]]; then
             python3 infrastructure/scripts/cloud-run-rollback.py restore \
               --service bank-usac-frontend-prod --region us-central1 --state /tmp/cloud-run-prod.json || resultado=1
+          fi
+
+          # Primera promocion: si prod no existia, devolver el servicio a dev.
+          # Nunca activar ambos conjuntos de consumidores sobre las mismas DB.
+          if [[ "$DEV_STOP_OUTCOME" == "success" || "$DEV_STOP_OUTCOME" == "failure" ]] && [ ! -s /tmp/revisiones-kubernetes.txt ]; then
+            kubectl -n "$KUBE_NAMESPACE" delete hpa --all --ignore-not-found
+            kubectl -n "$KUBE_NAMESPACE" scale deployment --all --replicas=0
+            kubectl -n "$KUBE_NAMESPACE" wait --for=delete pod --all --timeout=180s || exit 1
+            kubectl -n "$KUBE_NAMESPACE" delete service frontend --ignore-not-found
+            if [ -s /tmp/servicio-dev.json ]; then
+              jq 'del(.status,.metadata.uid,.metadata.resourceVersion,.metadata.creationTimestamp,.metadata.managedFields)' /tmp/servicio-dev.json | kubectl apply -f - || exit 1
+            fi
+            jq -r '.items[] | [.metadata.name, (.spec.replicas|tostring)] | @tsv' /tmp/despliegues-dev.json | while read -r name replicas; do
+              kubectl -n bank-usac-dev scale "deployment/$name" --replicas="$replicas" || exit 1
+            done
+            KUBE_NAMESPACE=bank-usac-dev bash infrastructure/observability/deploy.sh || resultado=1
           fi
 
           exit "$resultado"

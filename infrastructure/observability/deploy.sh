@@ -2,10 +2,11 @@
 set -euo pipefail
 export OBSERVABILITY_NAMESPACE="${OBSERVABILITY_NAMESPACE:-bank-usac-observability}"
 : "${KUBE_NAMESPACE:=bank-usac-dev}"
-if [[ "$KUBE_NAMESPACE" != bank-usac-dev ]]; then
-  echo "This profile is for dev only; production remains disabled" >&2
-  exit 1
-fi
+case "$KUBE_NAMESPACE" in
+  bank-usac-dev) environment=dev ;;
+  bank-usac) environment=prod ;;
+  *) echo "Unsupported application namespace" >&2; exit 1 ;;
+esac
 directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 python3 "$directory/preflight.py"
 python3 "$directory/rbac_preflight.py"
@@ -26,12 +27,13 @@ fi
 helm upgrade --install bank-observability "$directory/chart" \
   --namespace "$OBSERVABILITY_NAMESPACE" \
   --set "applicationNamespace=$KUBE_NAMESPACE" \
+  --set "environment=$environment" \
   "${access_arguments[@]}" \
   --atomic --wait --timeout 8m --history-max 5
 
 # The same desired value is in the cloud-dev overlay. Only restart if it changed.
 if ! kubectl -n "$KUBE_NAMESPACE" get configmap bank-usac-config >/dev/null 2>&1; then
-  echo "Application configuration will be created by the cloud-dev overlay"
+  echo "Application configuration will be created by its overlay"
   exit 0
 fi
 endpoint="http://otel-collector.${OBSERVABILITY_NAMESPACE}.svc.cluster.local:4318"

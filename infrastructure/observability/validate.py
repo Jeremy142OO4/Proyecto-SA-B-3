@@ -16,6 +16,7 @@ subprocess.run([sys.executable,str(directory/'test_promql.py')],check=True)
 subprocess.run([sys.executable,str(directory/'test_grafana.py')],check=True)
 subprocess.run([sys.executable,str(directory/'test_scripts.py')],check=True)
 subprocess.run([sys.executable,str(directory/'test_scenarios.py')],check=True)
+subprocess.run([sys.executable,str(directory/'test_production.py')],check=True)
 subprocess.run(['helm','lint',str(directory/'chart')],check=True)
 rendered=subprocess.check_output(['helm','template','bank-observability',str(directory/'chart'),'--namespace','bank-usac-observability'],text=True)
 objects=list(yaml.safe_load_all(rendered))
@@ -34,6 +35,25 @@ for obj in objects:
         assert all(set(rule['verbs']) <= {'get', 'list', 'watch'} and 'secrets' not in rule['resources'] for rule in obj['rules'])
     assert obj['kind'] not in ['ClusterRole', 'ClusterRoleBinding'], 'Monitoring must stay namespace scoped'
 configmaps={o['metadata']['name']:o['data'] for o in objects if o['kind']=='ConfigMap'}
+production = subprocess.check_output([
+    'helm', 'template', 'bank-observability', str(directory/'chart'), '--namespace', 'bank-usac-observability',
+    '--set', 'applicationNamespace=bank-usac', '--set', 'environment=prod'], text=True)
+prod_objects = list(yaml.safe_load_all(production))
+prod_configs = {o['metadata']['name']:o['data'] for o in prod_objects if o['kind']=='ConfigMap'}
+for filename, raw in prod_configs['grafana-dashboards'].items():
+    if filename.endswith('.json'):
+        current = json.loads(raw)
+        original = json.loads(configmaps['grafana-dashboards'][filename])
+        assert current['uid'] == original['uid'], 'Promotion must preserve dashboard links'
+        assert 'bank-usac-dev' not in raw and '\\\"dev\\\"' not in raw, filename
+assert 'interbank-cloud-tests' in prod_configs['grafana-dashboards']['scenarios.json']
+assert '\\\"prod\\\"' in prod_configs['grafana-dashboards']['sistema.json']
+assert 'bank-usac.svc.cluster.local' in prod_configs['otel-collector-config']['config.yaml']
+assert '/var/log/pods/bank-usac_' in prod_configs['otel-logs-config']['config.yaml']
+prod_rules = json.loads(prod_configs['grafana-alerting']['bank.json'])['groups'][0]['rules']
+assert all(r['labels']['environment'] == 'prod' for r in prod_rules)
+assert {o['metadata']['namespace'] for o in prod_objects if o['kind']=='Role'} == {'bank-usac-dev','bank-usac'}
+assert all(o['kind'] not in ('ClusterRole','ClusterRoleBinding') for o in prod_objects)
 access_rendered = subprocess.check_output([
     'helm', 'template', 'bank-observability', str(directory/'chart'), '--namespace', 'bank-usac-observability',
     '--set', 'access.enabled=true', '--set-string', 'access.internalIP=10.20.0.200',

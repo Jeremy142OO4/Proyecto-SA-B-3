@@ -1,9 +1,13 @@
 """Restart dev exporters without surge pods triggering the node autoscaler."""
 import json
+import os
 import subprocess
 
+namespace = os.environ.get('KUBE_NAMESPACE', 'bank-usac-dev')
+if namespace not in ('bank-usac-dev', 'bank-usac'):
+    raise SystemExit('Unsupported application namespace')
 for name in ['api-gateway','customer-service','account-service','transaction-service','payment-service','notification-audit-service']:
-    command=['kubectl','-n','bank-usac-dev']
+    command=['kubectl','-n',namespace]
     deployment=json.loads(subprocess.check_output(command+['get','deployment',name,'-o','json']))
     previous=deployment['spec']['strategy']
     def strategy(value):

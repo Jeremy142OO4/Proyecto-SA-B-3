@@ -3,12 +3,19 @@ kind: ServiceAccount
 metadata:
   name: bank-observability
 automountServiceAccountToken: false
+{{- /* Retain the existing dev reader when promoting this persistent Helm release.
+The collector watches only applicationNamespace; no cluster-wide grants. */}}
+{{- $namespaces := list "bank-usac-dev" }}
+{{- if ne .Values.applicationNamespace "bank-usac-dev" }}
+{{- $namespaces = append $namespaces .Values.applicationNamespace }}
+{{- end }}
+{{- range $namespace := $namespaces }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: bank-observability
-  namespace: {{ .Values.applicationNamespace }}
+  namespace: {{ $namespace }}
 rules:
   - apiGroups: [""]
     resources: [events, persistentvolumeclaims, pods, pods/status, replicationcontrollers, replicationcontrollers/status, resourcequotas, services]
@@ -33,7 +40,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: bank-observability
-  namespace: {{ .Values.applicationNamespace }}
+  namespace: {{ $namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -41,4 +48,5 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: bank-observability
-    namespace: {{ .Release.Namespace }}
+    namespace: {{ $.Release.Namespace }}
+{{- end }}

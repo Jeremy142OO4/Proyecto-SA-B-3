@@ -44,6 +44,7 @@ class FilterTests(unittest.TestCase):
     def test_global_and_release_validate_everything(self):
         self.assertEqual(len(self.selected(['.github/workflows/ci-cd.yml'])), 9)
         self.assertEqual(len(self.selected(['README.md'], 'refs/heads/release/v3')), 9)
+        self.assertEqual(len(self.selected(['README.md'], 'refs/heads/main')), 9)
 
     def test_failed_contract_prevents_publication_gate(self):
         gate = self.workflow['jobs']['validacion-sistema']

@@ -33,13 +33,13 @@ data:
         options:
           path: /etc/grafana/bank-dashboards
   overview.json: |
-{{ .Files.Get "dashboards/overview.json" | indent 4 }}
+{{ include "bank.profile" (dict "root" . "content" (.Files.Get "dashboards/overview.json")) | indent 4 }}
   slo.json: |
-{{ .Files.Get "dashboards/slo.json" | indent 4 }}
+{{ include "bank.profile" (dict "root" . "content" (.Files.Get "dashboards/slo.json")) | indent 4 }}
   prueba1.json: |
-{{ .Files.Get "dashboards/prueba1.json" | indent 4 }}
+{{ include "bank.profile" (dict "root" . "content" (.Files.Get "dashboards/prueba1.json")) | indent 4 }}
   sistema.json: |
-{{ .Files.Get "dashboards/sistema.json" | indent 4 }}
+{{ include "bank.profile" (dict "root" . "content" (.Files.Get "dashboards/sistema.json")) | indent 4 }}
   scenarios.json: |
 {{ .Files.Get "dashboards/scenarios.json" | indent 4 }}
 ---
@@ -49,7 +49,7 @@ metadata:
   name: grafana-alerting
 data:
   bank.json: |
-{{ .Files.Get "alerting/bank.json" | indent 4 }}
+{{ include "bank.profile" (dict "root" . "content" (.Files.Get "alerting/bank.json")) | indent 4 }}
 
 ---
 apiVersion: v1

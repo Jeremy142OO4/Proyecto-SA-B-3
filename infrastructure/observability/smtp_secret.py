@@ -9,8 +9,8 @@ import subprocess
 def main():
     source = os.environ.get('KUBE_NAMESPACE', 'bank-usac-dev')
     target = os.environ.get('OBSERVABILITY_NAMESPACE', 'bank-usac-observability')
-    if source != 'bank-usac-dev' or target != 'bank-usac-observability':
-        raise SystemExit('SMTP copy is restricted to development observability')
+    if source not in ('bank-usac-dev', 'bank-usac') or target != 'bank-usac-observability':
+        raise SystemExit('SMTP copy is restricted to the bank application namespaces')
     raw = subprocess.check_output(['kubectl', '-n', source, 'get', 'secret', 'bank-usac-secrets', '-o', 'json'])
     data = json.loads(raw)['data']
     keys = {'USER': 'SMTP_USERNAME', 'PASSWORD': 'SMTP_APP_PASSWORD', 'FROM_ADDRESS': 'SMTP_FROM'}

@@ -24,8 +24,8 @@ def check_role(current, desired, may_patch):
 def main():
     namespace = os.environ.get('KUBE_NAMESPACE', 'bank-usac-dev')
     observability = os.environ.get('OBSERVABILITY_NAMESPACE', 'bank-usac-observability')
-    if namespace != 'bank-usac-dev' or observability != 'bank-usac-observability':
-        raise SystemExit('RBAC preflight is restricted to the development profile')
+    if namespace not in ('bank-usac-dev', 'bank-usac') or observability != 'bank-usac-observability':
+        raise SystemExit('Unsupported observability profile')
     chart = Path(__file__).resolve().parent / 'chart'
     rendered = subprocess.check_output([
         'helm', 'template', 'bank-observability', str(chart), '--namespace', observability,

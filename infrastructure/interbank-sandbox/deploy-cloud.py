@@ -12,7 +12,9 @@ import secrets
 import subprocess
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-NS = 'bank-usac-dev'
+NS = os.environ.get('KUBE_NAMESPACE', 'bank-usac-dev')
+if NS not in ('bank-usac-dev', 'bank-usac'):
+    raise ValueError('Unsupported application namespace')
 NAME = 'interbank-scenarios'
 SCHEMA = 'bank_scenarios'
 ROOT = Path(__file__).resolve().parents[2]
@@ -79,6 +81,10 @@ def main():
     bank = json.loads(kubectl('get', 'secret', 'bank-usac-secrets', '-o', 'json'))['data']
     bank = {k: base64.b64decode(v).decode() for k, v in bank.items()}
     previous = kubectl('get', 'secret', NAME, '--ignore-not-found', '-o', 'json')
+    if not previous.strip() and NS == 'bank-usac':
+        # Keep the existing isolated schema credentials; never reset its data.
+        previous = subprocess.check_output(['kubectl', '-n', 'bank-usac-dev', 'get', 'secret', NAME,
+                                            '--ignore-not-found', '-o', 'json'], text=True)
     old = json.loads(previous)['data'] if previous.strip() else {}
     values = {k: base64.b64decode(v).decode() for k, v in old.items()}
     for key in ('TEST_DB_PASSWORD', 'MOCK_CONTROL_KEY', 'INTERBANK_API_KEY', 'INTERBANK_PARTNER_API_KEY'):

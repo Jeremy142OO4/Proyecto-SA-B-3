@@ -62,8 +62,8 @@ class AlertingTests(unittest.TestCase):
         copied = json.loads(run.call_args_list[0].kwargs['input'])['data']
         self.assertEqual(base64.b64decode(copied['FROM_ADDRESS']).decode(), 'test@example.invalid')
 
-    def test_production_secret_copy_forbidden(self):
-        with patch.dict(os.environ, {'KUBE_NAMESPACE': 'bank-usac'}), patch('subprocess.check_output') as read:
+    def test_unrelated_namespace_secret_copy_forbidden(self):
+        with patch.dict(os.environ, {'KUBE_NAMESPACE': 'unrelated'}), patch('subprocess.check_output') as read:
             with self.assertRaises(SystemExit):
                 smtp_secret.main()
             read.assert_not_called()
